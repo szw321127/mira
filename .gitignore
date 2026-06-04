@@ -1,8 +1,6 @@
 # Dependencies
 node_modules/
 .pnpm-store/
-/backend/
-/frontend/
 
 # Logs
 logs
