@@ -1,25 +1,30 @@
 {
   "name": "rednote-workspace",
-  "version": "1.0.0",
-  "description": "RedNote AI Studio - Full Stack Workspace",
+  "version": "0.0.0",
+  "description": "RedNote TypeScript monorepo",
   "private": true,
+  "packageManager": "pnpm@10.7.0",
+  "engines": {
+    "node": ">=22.14.0",
+    "pnpm": ">=10.7.0"
+  },
   "scripts": {
-    "dev": "concurrently -n \"backend,frontend\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "cd rednote-backend && npm run start:dev",
-    "dev:frontend": "cd rednote-ai-studio && npm run dev",
-    "install:all": "npm install && cd rednote-backend && npm install && cd ../rednote-ai-studio && npm install",
-    "build:backend": "cd rednote-backend && npm run build",
-    "build:frontend": "cd rednote-ai-studio && npm run build",
-    "build:all": "npm run build:backend && npm run build:frontend",
-    "start:backend": "cd rednote-backend && npm run start:prod",
-    "start:frontend": "cd rednote-ai-studio && npm run preview"
+    "dev": "concurrently -n \"backend,frontend\" -c \"bgBlue.bold,bgMagenta.bold\" \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "dev:backend": "pnpm --filter @rednote/backend start:dev",
+    "dev:frontend": "pnpm --filter @rednote/web-frontend dev",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "build:backend": "pnpm --filter @rednote/backend build",
+    "build:frontend": "pnpm --filter @rednote/web-frontend build",
+    "build:agent": "pnpm --filter @rednote/agent build"
   },
   "keywords": [
     "rednote",
     "ai",
     "nestjs",
     "react",
-    "langchain"
+    "typescript",
+    "monorepo"
   ],
   "author": "",
   "license": "MIT",

@@ -7,14 +7,14 @@
 ### 1. build-backend.yml
 - **功能**: 构建并推送后端 Docker 镜像
 - **触发条件**:
-  - `rednote-backend/` 目录有变化时
+  - `packages/backend/` 目录有变化时
   - 可手动触发
 - **镜像名称**: `ghcr.io/你的用户名/rednote_backend`
 
 ### 2. build-frontend.yml
 - **功能**: 构建并推送前端 Docker 镜像
 - **触发条件**:
-  - `rednote-ai-studio/` 目录有变化时
+  - `packages/web-frontend/` 目录有变化时
   - 可手动触发
 - **镜像名称**: `ghcr.io/你的用户名/rednote_frontend`
 
@@ -96,8 +96,8 @@ mkdir -p /home/user/app
 ### 自动触发
 
 1. **只构建镜像**：修改对应目录的代码并推送
-   - 修改 `rednote-backend/` → 触发 `build-backend.yml`
-   - 修改 `rednote-ai-studio/` → 触发 `build-frontend.yml`
+   - 修改 `packages/backend/` → 触发 `build-backend.yml`
+   - 修改 `packages/web-frontend/` → 触发 `build-frontend.yml`
 
 2. **构建并部署**：推送到 main/master 分支
    - 触发 `deploy.yml`
@@ -176,10 +176,10 @@ sudo usermod -aG docker $USER
 
 ```bash
 # 测试后端构建
-docker build -t test-backend ./rednote-backend
+docker build -f packages/backend/Dockerfile -t test-backend .
 
 # 测试前端构建
-docker build -t test-frontend ./rednote-ai-studio
+docker build -f packages/web-frontend/Dockerfile -t test-frontend .
 
 # 测试 docker-compose
 docker-compose up
