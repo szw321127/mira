@@ -8,13 +8,13 @@
 rednote/
 ├── docker-compose.yml           # Docker Compose 配置文件
 ├── .env.example                 # 环境变量示例文件
-├── rednote-ai-studio/          # 前端项目
-│   ├── Dockerfile              # 前端 Docker 镜像
-│   ├── nginx.conf              # Nginx 配置
-│   └── .dockerignore           # Docker 忽略文件
-└── rednote-backend/            # 后端项目
-    ├── Dockerfile              # 后端 Docker 镜像
-    └── .dockerignore           # Docker 忽略文件
+├── packages/
+│   ├── web-frontend/            # 前端项目
+│   │   └── Dockerfile           # 前端 Docker 镜像
+│   └── backend/                 # 后端项目
+│       └── Dockerfile           # 后端 Docker 镜像
+├── packages/agent/              # Agent 库包
+└── .dockerignore                # Docker 忽略文件
 ```
 
 ## 前置要求
@@ -176,21 +176,23 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./rednote-backend
+      context: .
+      dockerfile: packages/backend/Dockerfile
       target: builder
     command: npm run start:dev
     volumes:
-      - ./rednote-backend/src:/app/src
+      - ./packages/backend/src:/app/src
     ports:
       - "3000:3000"
 
   frontend:
     build:
-      context: ./rednote-ai-studio
+      context: .
+      dockerfile: packages/web-frontend/Dockerfile
       target: builder
     command: npm run dev
     volumes:
-      - ./rednote-ai-studio/src:/app/src
+      - ./packages/web-frontend/src:/app/src
     ports:
       - "5173:5173"
 ```

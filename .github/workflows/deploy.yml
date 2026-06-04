@@ -47,8 +47,8 @@ jobs:
       - name: Build and push Backend Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./rednote-backend
-          file: ./rednote-backend/Dockerfile
+          context: .
+          file: ./packages/backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -87,8 +87,8 @@ jobs:
       - name: Build and push Frontend Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./rednote-ai-studio
-          file: ./rednote-ai-studio/Dockerfile
+          context: .
+          file: ./packages/web-frontend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
