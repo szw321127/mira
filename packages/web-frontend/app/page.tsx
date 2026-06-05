@@ -52,6 +52,13 @@ type PostDraftPatch = Partial<
   >
 >;
 
+type PostDraftPatchInFlight = {
+  draftId: string;
+  patch: PostDraftPatch;
+  promise: Promise<void>;
+  sequence: number;
+};
+
 const AUTH_STORAGE_KEY = "rednote:auth-session";
 const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
 
@@ -81,13 +88,13 @@ export default function Home() {
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
   const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
+  const currentPostDraftIdRef = useRef<string | null>(null);
   const pendingPostDraftIdRef = useRef<string | null>(null);
   const pendingPostDraftPatchRef = useRef<PostDraftPatch | null>(null);
   const postDraftPatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const postDraftPatchInFlightErrorRef = useRef<unknown>(null);
-  const postDraftPatchInFlightRef = useRef<Promise<void> | null>(null);
+  const postDraftPatchInFlightRef = useRef<PostDraftPatchInFlight | null>(null);
   const postDraftPatchSequenceRef = useRef(0);
 
   useEffect(() => {
@@ -114,10 +121,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    currentPostDraftIdRef.current = postDraft?.id ?? null;
     clearPostDraftPatchTimeout();
     pendingPostDraftIdRef.current = null;
     pendingPostDraftPatchRef.current = null;
-    postDraftPatchInFlightErrorRef.current = null;
     postDraftPatchSequenceRef.current += 1;
   }, [postDraft?.id]);
 
@@ -605,14 +612,33 @@ export default function Home() {
   async function flushPostDraftPatch(): Promise<void> {
     clearPostDraftPatchTimeout();
 
-    if (postDraftPatchInFlightRef.current) {
-      await postDraftPatchInFlightRef.current;
+    const inFlight = postDraftPatchInFlightRef.current;
+    if (inFlight) {
+      await inFlight.promise.catch((error: unknown) => {
+        const isCurrentDraft = currentPostDraftIdRef.current === inFlight.draftId;
 
-      const inFlightError = postDraftPatchInFlightErrorRef.current;
-      postDraftPatchInFlightErrorRef.current = null;
+        if (isCurrentDraft) {
+          const existingPendingPatch = pendingPostDraftPatchRef.current;
+          pendingPostDraftIdRef.current = inFlight.draftId;
+          pendingPostDraftPatchRef.current = {
+            ...inFlight.patch,
+            ...existingPendingPatch,
+          };
 
-      if (!pendingPostDraftPatchRef.current && inFlightError) {
-        throw inFlightError;
+          if (postDraftPatchSequenceRef.current === inFlight.sequence) {
+            setStatusMessage("草稿同步失败，本地编辑已保留。");
+          }
+
+          if (postDraftPatchInFlightRef.current === inFlight) {
+            postDraftPatchInFlightRef.current = null;
+          }
+
+          throw error;
+        }
+      });
+
+      if (postDraftPatchInFlightRef.current === inFlight) {
+        postDraftPatchInFlightRef.current = null;
       }
 
       return flushPostDraftPatch();
@@ -627,39 +653,31 @@ export default function Home() {
     if (!accessToken || !draftId || !nextPatch) return;
 
     const requestSequence = postDraftPatchSequenceRef.current;
-    let requestError: unknown;
-    postDraftPatchInFlightErrorRef.current = null;
     const request = api.postDrafts
       .update(accessToken, draftId, nextPatch)
-      .then(() => undefined)
-      .catch((error: unknown) => {
-        requestError = error;
-        postDraftPatchInFlightErrorRef.current = error;
+      .then(() => undefined);
 
-        if (postDraftPatchSequenceRef.current === requestSequence) {
-          setStatusMessage("草稿同步失败，本地编辑已保留。");
-        }
-      });
-
-    postDraftPatchInFlightRef.current = request;
+    const inFlightRequest: PostDraftPatchInFlight = {
+      draftId,
+      patch: nextPatch,
+      promise: request,
+      sequence: requestSequence,
+    };
+    postDraftPatchInFlightRef.current = inFlightRequest;
 
     try {
-      await request;
+      await flushPostDraftPatch();
     } finally {
-      if (postDraftPatchInFlightRef.current === request) {
+      if (postDraftPatchInFlightRef.current === inFlightRequest) {
         postDraftPatchInFlightRef.current = null;
       }
     }
 
-    if (pendingPostDraftPatchRef.current) {
+    if (
+      pendingPostDraftPatchRef.current &&
+      pendingPostDraftIdRef.current === currentPostDraftIdRef.current
+    ) {
       await flushPostDraftPatch();
-      return;
-    }
-
-    postDraftPatchInFlightErrorRef.current = null;
-
-    if (requestError) {
-      throw requestError;
     }
   }
 
@@ -695,7 +713,7 @@ export default function Home() {
     clearPostDraftPatchTimeout();
     pendingPostDraftIdRef.current = null;
     pendingPostDraftPatchRef.current = null;
-    postDraftPatchInFlightErrorRef.current = null;
+    currentPostDraftIdRef.current = draft.id;
     postDraftPatchSequenceRef.current += 1;
     setPostDraft(draft);
     setDraftStale(false);

@@ -50,18 +50,12 @@ export function PostEditor({
   const copyTagsText = postDraft?.tags.map((tag) => `#${tag}`).join(" ") ?? "";
 
   useEffect(() => {
-    let isCurrent = true;
-
-    queueMicrotask(() => {
-      if (!isCurrent) return;
-
+    const syncDraftText = window.setTimeout(() => {
       setSectionsText(sourceSectionsText);
       setTagsText(sourceTagsText);
-    });
+    }, 0);
 
-    return () => {
-      isCurrent = false;
-    };
+    return () => window.clearTimeout(syncDraftText);
   }, [sourceSectionsText, sourceTagsText]);
 
   return (
