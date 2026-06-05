@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   apiClient,
@@ -45,7 +45,15 @@ type AuthSession = {
   user: AuthUser;
 };
 
+type PostDraftPatch = Partial<
+  Pick<
+    PostDraft,
+    "caption" | "coverLine" | "imagePrompt" | "sections" | "tags" | "title"
+  >
+>;
+
 const AUTH_STORAGE_KEY = "rednote:auth-session";
+const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
 
 export default function Home() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -73,6 +81,12 @@ export default function Home() {
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
   const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
+  const pendingPostDraftIdRef = useRef<string | null>(null);
+  const pendingPostDraftPatchRef = useRef<PostDraftPatch | null>(null);
+  const postDraftPatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const postDraftPatchSequenceRef = useRef(0);
 
   useEffect(() => {
     return apiClient.interceptors.error.use((error) => {
@@ -90,6 +104,25 @@ export default function Home() {
       }
     });
   }, [accessToken, authUser]);
+
+  useEffect(() => {
+    return () => {
+      if (postDraftPatchTimeoutRef.current) {
+        clearTimeout(postDraftPatchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (postDraftPatchTimeoutRef.current) {
+      clearTimeout(postDraftPatchTimeoutRef.current);
+      postDraftPatchTimeoutRef.current = null;
+    }
+
+    pendingPostDraftIdRef.current = null;
+    pendingPostDraftPatchRef.current = null;
+    postDraftPatchSequenceRef.current += 1;
+  }, [postDraft?.id]);
 
   const latestBatch = useMemo(
     () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
@@ -564,16 +597,62 @@ export default function Home() {
     }
   }
 
-  function updatePostDraft(patch: Partial<PostDraft>) {
+  function updatePostDraft(patch: PostDraftPatch) {
     setPostDraft((draft) => (draft ? { ...draft, ...patch } : draft));
     setDraftStale(false);
 
     if (!accessToken || !postDraft) return;
 
-    void api.postDrafts.update(accessToken, postDraft.id, patch).catch(() => {});
+    postDraftPatchSequenceRef.current += 1;
+
+    if (
+      pendingPostDraftIdRef.current &&
+      pendingPostDraftIdRef.current !== postDraft.id
+    ) {
+      pendingPostDraftPatchRef.current = null;
+    }
+
+    pendingPostDraftIdRef.current = postDraft.id;
+    pendingPostDraftPatchRef.current = {
+      ...pendingPostDraftPatchRef.current,
+      ...patch,
+    };
+
+    if (postDraftPatchTimeoutRef.current) {
+      clearTimeout(postDraftPatchTimeoutRef.current);
+    }
+
+    postDraftPatchTimeoutRef.current = setTimeout(() => {
+      const draftId = pendingPostDraftIdRef.current;
+      const nextPatch = pendingPostDraftPatchRef.current;
+
+      postDraftPatchTimeoutRef.current = null;
+      pendingPostDraftIdRef.current = null;
+      pendingPostDraftPatchRef.current = null;
+
+      if (!draftId || !nextPatch) return;
+
+      const requestSequence = postDraftPatchSequenceRef.current;
+
+      void api.postDrafts
+        .update(accessToken, draftId, nextPatch)
+        .catch(() => {
+          if (postDraftPatchSequenceRef.current !== requestSequence) return;
+
+          setStatusMessage("草稿同步失败，本地编辑已保留。");
+        });
+    }, POST_DRAFT_UPDATE_DEBOUNCE_MS);
   }
 
   function openSavedDraft(draft: SavedDraft) {
+    if (postDraftPatchTimeoutRef.current) {
+      clearTimeout(postDraftPatchTimeoutRef.current);
+      postDraftPatchTimeoutRef.current = null;
+    }
+
+    pendingPostDraftIdRef.current = null;
+    pendingPostDraftPatchRef.current = null;
+    postDraftPatchSequenceRef.current += 1;
     setPostDraft(draft);
     setDraftStale(false);
     setStatusMessage(`已打开 ${draft.savedAt} 保存的草稿。`);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { PostDraft, SavedDraft } from "./types";
 import { getFullPostText, getPostBodyText } from "./workspace-utils";
 
@@ -35,7 +36,23 @@ export function PostEditor({
   savedDrafts,
   selectedTitle,
 }: PostEditorProps) {
-  const tagsText = postDraft?.tags.map((tag) => `#${tag}`).join(" ") ?? "";
+  const sourceSectionsText = postDraft?.sections.join("\n") ?? "";
+  const sourceTagsText = postDraft?.tags.join(" ") ?? "";
+  const sourceTextKey = `${postDraft?.id ?? ""}\n${sourceSectionsText}\n${sourceTagsText}`;
+  const [draftText, setDraftText] = useState({
+    key: sourceTextKey,
+    sectionsText: sourceSectionsText,
+    tagsText: sourceTagsText,
+  });
+  const copyTagsText = postDraft?.tags.map((tag) => `#${tag}`).join(" ") ?? "";
+
+  if (draftText.key !== sourceTextKey) {
+    setDraftText({
+      key: sourceTextKey,
+      sectionsText: sourceSectionsText,
+      tagsText: sourceTagsText,
+    });
+  }
 
   return (
     <aside
@@ -99,7 +116,7 @@ export function PostEditor({
             <span>正文结构</span>
             <textarea
               className={`${fieldClass} min-h-[132px] resize-y`}
-              onChange={(event) =>
+              onBlur={(event) =>
                 onDraftChange({
                   sections: event.target.value
                     .split("\n")
@@ -107,8 +124,14 @@ export function PostEditor({
                     .filter(Boolean),
                 })
               }
+              onChange={(event) =>
+                setDraftText((text) => ({
+                  ...text,
+                  sectionsText: event.target.value,
+                }))
+              }
               rows={6}
-              value={postDraft.sections.join("\n")}
+              value={draftText.sectionsText}
             />
           </label>
 
@@ -116,7 +139,7 @@ export function PostEditor({
             <span>标签</span>
             <input
               className={fieldClass}
-              onChange={(event) =>
+              onBlur={(event) =>
                 onDraftChange({
                   tags: event.target.value
                     .split(/\s+/)
@@ -124,7 +147,13 @@ export function PostEditor({
                     .filter(Boolean),
                 })
               }
-              value={postDraft.tags.join(" ")}
+              onChange={(event) =>
+                setDraftText((text) => ({
+                  ...text,
+                  tagsText: event.target.value,
+                }))
+              }
+              value={draftText.tagsText}
             />
           </label>
 
@@ -151,7 +180,10 @@ export function PostEditor({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2" aria-label="图文操作">
+      <div
+        className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2"
+        aria-label="图文操作"
+      >
         <button
           className="quiet-action compact"
           disabled={!postDraft}
@@ -187,7 +219,7 @@ export function PostEditor({
         <button
           className="quiet-action compact"
           disabled={!postDraft}
-          onClick={() => onCopy(tagsText, "标签")}
+          onClick={() => onCopy(copyTagsText, "标签")}
           type="button"
         >
           复制标签
