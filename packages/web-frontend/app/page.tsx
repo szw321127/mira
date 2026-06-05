@@ -35,6 +35,8 @@ import {
 } from "./workbench/workspace-utils";
 import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
 import { ConversationRail } from "./workbench/conversation-rail";
+import { IdeaComposer } from "./workbench/idea-composer";
+import { OutlineWorkspace } from "./workbench/outline-workspace";
 
 type AuthMode = "login" | "register";
 
@@ -949,169 +951,43 @@ export default function Home() {
           onRestoreConversation={(record) => void restoreConversationRecord(record)}
           onSaveConversation={() => void saveConversationRecord()}
         />
-        <aside className="brief-panel" aria-labelledby="brief-title">
-          <div>
-            <p className="section-kicker">灵感输入</p>
-            <h2 id="brief-title">先写一句话</h2>
-          </div>
-          <label className="brief-field">
-            <span>主题</span>
-            <textarea
-              value={seed}
-              aria-describedby={briefError ? "brief-error" : undefined}
-              aria-invalid={Boolean(briefError)}
-              onChange={(event) => {
-                setSeed(event.target.value);
-                if (event.target.value.trim()) setBriefError("");
-                if (postDraft) setDraftStale(true);
-                setStatusMessage("主题已更新，重新生成大纲后生效。");
-              }}
-              rows={5}
-              placeholder="例如：新手如何把出租屋阳台改成早餐角"
-            />
-            {briefError ? (
-              <small className="brief-error" id="brief-error">
-                {briefError}
-              </small>
-            ) : null}
-          </label>
-          <div className="brief-actions">
-            <button
-              className="primary-action"
-              disabled={isGenerating || isStartingConversation}
-              onClick={() => void appendOutlineBatch()}
-            >
-              {isGenerating ? "生成中" : "生成大纲"}
-            </button>
-          </div>
-          <div className="signal-board" aria-label="生成偏好">
-            {["收藏率", "图文节奏", "生活感", "可执行"].map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-        </aside>
+        <IdeaComposer
+          briefError={briefError}
+          isGenerating={isGenerating}
+          isStartingConversation={isStartingConversation}
+          onGenerate={() => void appendOutlineBatch()}
+          onSeedChange={(value) => {
+            setSeed(value);
+            if (value.trim()) setBriefError("");
+            if (postDraft) setDraftStale(true);
+            setStatusMessage("主题已更新，重新生成大纲后生效。");
+          }}
+          seed={seed}
+        />
 
-        <section className="outline-panel" aria-labelledby="outline-title">
-          <div className="panel-heading">
-            <div>
-              <p className="section-kicker">方向选择</p>
-              <h2 id="outline-title">先比较，再编辑一个</h2>
-            </div>
-            <button
-              className="quiet-action compact"
-              disabled={isGenerating || isStartingConversation}
-              onClick={regenerateOutlines}
-            >
-              {isGenerating ? "生成中" : "换一批"}
-            </button>
-          </div>
-
-          <div className="outline-batches" aria-label="大纲方向">
-            {outlineGroups.map((group) => (
-              <section className="outline-batch" key={group.batch}>
-                <div className="batch-heading">
-                  <span>
-                    {group.batch === latestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
-                  </span>
-                  <small>{group.outlines.length} 个方向</small>
-                </div>
-                <div className="outline-options">
-                  {group.outlines.map((outline) => {
-                    const meta = toneMeta[outline.tone];
-                    const isSelected = outline.id === selectedId;
-
-                    return (
-                      <button
-                        aria-pressed={isSelected}
-                        className={`option-card ${isSelected ? "is-selected" : ""}`}
-                        key={outline.id}
-                        onClick={() => {
-                          setSelectedId(outline.id);
-                          if (postDraft) setDraftStale(true);
-                          setStatusMessage(`已选择「${meta.name}」。`);
-                          if (accessToken && conversationId) {
-                            void api.conversations
-                              .update(accessToken, conversationId, {
-                                selectedOutlineId: outline.id,
-                              })
-                              .catch(() => {});
-                          }
-                        }}
-                      >
-                        <span className="option-meta">
-                          <strong>{meta.mark}</strong>
-                          <em>{outline.label}</em>
-                        </span>
-                        <span className="option-title">{outline.title}</span>
-                        <span className="option-hook">{outline.hook}</span>
-                        <span className="mini-points">
-                          {outline.points.slice(0, 3).map((point) => (
-                            <i key={point}>{point}</i>
-                          ))}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-
-          {selectedOutline ? (
-            <article className="outline-editor">
-              <div className="editor-heading">
-                <div>
-                  <span>正在编辑</span>
-                  <strong>{toneMeta[selectedOutline.tone].name}</strong>
-                </div>
-                <button
-                  className="primary-action compact"
-                  disabled={isGenerating}
-                  onClick={() => void confirmOutline()}
-                >
-                  {isGenerating ? "生成中" : postDraft ? "刷新图文" : "生成图文"}
-                </button>
-              </div>
-
-              <label>
-                <span>标题</span>
-                <input
-                  value={selectedOutline.title}
-                  onChange={(event) =>
-                    updateOutline(selectedOutline.id, { title: event.target.value })
-                  }
-                />
-              </label>
-
-              <label>
-                <span>开场钩子</span>
-                <textarea
-                  value={selectedOutline.hook}
-                  onChange={(event) =>
-                    updateOutline(selectedOutline.id, { hook: event.target.value })
-                  }
-                  rows={2}
-                />
-              </label>
-
-              <label>
-                <span>内容结构</span>
-                <textarea
-                  value={selectedOutline.points.join("\n")}
-                  onChange={(event) =>
-                    updateOutline(selectedOutline.id, {
-                      points: event.target.value
-                        .split("\n")
-                        .map((point) => point.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  rows={5}
-                />
-              </label>
-            </article>
-          ) : null}
-        </section>
+        <OutlineWorkspace
+          draftStale={draftStale}
+          isGenerating={isGenerating}
+          latestBatch={latestBatch}
+          onConfirmOutline={() => void confirmOutline()}
+          onRegenerate={regenerateOutlines}
+          onSelectOutline={(outline) => {
+            setSelectedId(outline.id);
+            if (postDraft) setDraftStale(true);
+            setStatusMessage(`已选择「${toneMeta[outline.tone].name}」。`);
+            if (accessToken && conversationId) {
+              void api.conversations
+                .update(accessToken, conversationId, {
+                  selectedOutlineId: outline.id,
+                })
+                .catch(() => {});
+            }
+          }}
+          onUpdateOutline={updateOutline}
+          outlineGroups={outlineGroups}
+          selectedId={selectedId}
+          selectedOutline={selectedOutline}
+        />
 
         <aside className="post-panel" aria-labelledby="post-title">
           <div className="panel-heading">
