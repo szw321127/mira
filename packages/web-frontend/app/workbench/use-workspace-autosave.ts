@@ -11,7 +11,6 @@ import type {
   WorkspaceSnapshot,
 } from "./types";
 import {
-  DEFAULT_SEED,
   createAutoSaveKey,
   formatAutoSaveTime,
   formatRecordTime,
@@ -92,9 +91,8 @@ export function useWorkspaceAutosave({
         selectedOutlineId: selectedId,
         statusMessage,
         title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
+        topic,
       };
-
-      if (topic) updateBody.topic = topic;
 
       void (async () => {
         await api.conversations.update(accessToken, conversationId, updateBody);
@@ -117,7 +115,7 @@ export function useWorkspaceAutosave({
             savedAt: formatRecordTime(savedSnapshot.createdAt),
             snapshot,
             title: updateBody.title ?? "新对话",
-            topic: topic || snapshot.seed || DEFAULT_SEED,
+            topic: topic || snapshot.seed || "",
           };
 
           return [

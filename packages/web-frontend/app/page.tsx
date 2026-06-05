@@ -19,7 +19,6 @@ import type {
   WorkspaceSnapshot,
 } from "./workbench/types";
 import {
-  DEFAULT_SEED,
   createAutoSaveKey,
   dedupeSavedDrafts,
   formatAutoSaveTime,
@@ -73,7 +72,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [registerName, setRegisterName] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [seed, setSeed] = useState(DEFAULT_SEED);
+  const [seed, setSeed] = useState("");
   const [batch, setBatch] = useState(-1);
   const [outlines, setOutlines] = useState<Outline[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -240,7 +239,7 @@ export default function Home() {
     setOutlines(nextOutlines);
     setPostDraft(nextPostDraft);
     setSavedDrafts(nextSavedDrafts);
-    setSeed(conversation.topic || DEFAULT_SEED);
+    setSeed(conversation.topic ?? "");
     setSelectedId(conversation.selectedOutlineId ?? nextOutlines[0]?.id ?? "");
     setStatusMessage(
       options.message ??
@@ -280,7 +279,7 @@ export default function Home() {
   async function createInitialWorkspace(token: string) {
     const conversation = await api.conversations.create(token, {
       title: "新对话",
-      topic: DEFAULT_SEED,
+      topic: "",
     });
 
     applyConversation(conversation, {
@@ -360,7 +359,7 @@ export default function Home() {
     if (conversationId) return conversationId;
 
     const conversation = await api.conversations.create(token, {
-      topic: seed.trim() || DEFAULT_SEED,
+      topic: seed.trim(),
     });
 
     setConversationId(conversation.id);
@@ -392,9 +391,8 @@ export default function Home() {
           selectedOutlineId: selectedId,
           statusMessage,
           title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
+          topic,
         };
-
-        if (topic) updateBody.topic = topic;
 
         const savedSnapshot = await api.conversations.createSnapshot(
           accessToken,
@@ -409,7 +407,7 @@ export default function Home() {
 
       const conversation = await api.conversations.create(accessToken, {
         title: "新对话",
-        topic: DEFAULT_SEED,
+        topic: "",
       });
 
       setBatch(-1);
@@ -729,8 +727,8 @@ export default function Home() {
       return;
     }
 
-    const topic = seed.trim() || DEFAULT_SEED;
-    const title = postDraft?.title ?? selectedOutline?.title ?? topic;
+    const topic = seed.trim();
+    const title = (postDraft?.title ?? selectedOutline?.title ?? topic) || "新对话";
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
