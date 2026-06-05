@@ -29,6 +29,10 @@ const fieldClass =
   "rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[0.9rem] font-semibold leading-relaxed text-[var(--ink)] outline-none transition placeholder:text-[var(--muted)] focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]";
 
 const labelClass = "grid gap-2 text-[0.82rem] font-extrabold text-[var(--muted)]";
+const primaryActionClass =
+  "min-h-9 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-2.5 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
+const quietActionClass =
+  "min-h-9 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-2.5 font-black text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function PostEditor({
   draftStale,
@@ -65,7 +69,9 @@ export function PostEditor({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="section-kicker">图文</p>
+          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+            图文
+          </p>
           <h2
             className="text-[1.08rem] font-black leading-tight text-[var(--ink)]"
             id="post-title"
@@ -183,7 +189,7 @@ export function PostEditor({
         aria-label="图文操作"
       >
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => postDraft && onCopy(getFullPostText(postDraft), "完整笔记")}
           type="button"
@@ -191,7 +197,7 @@ export function PostEditor({
           复制完整笔记
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => postDraft && onCopy(postDraft.title, "标题")}
           type="button"
@@ -199,7 +205,7 @@ export function PostEditor({
           复制标题
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => postDraft && onCopy(postDraft.coverLine, "封面文案")}
           type="button"
@@ -207,7 +213,7 @@ export function PostEditor({
           复制封面文案
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => postDraft && onCopy(getPostBodyText(postDraft), "正文")}
           type="button"
@@ -215,7 +221,7 @@ export function PostEditor({
           复制正文
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => onCopy(copyTagsText, "标签")}
           type="button"
@@ -223,7 +229,7 @@ export function PostEditor({
           复制标签
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft}
           onClick={() => postDraft && onCopy(postDraft.imagePrompt, "封面提示")}
           type="button"
@@ -231,7 +237,7 @@ export function PostEditor({
           复制封面提示
         </button>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={!postDraft || isSavingDraft}
           onClick={onSaveDraft}
           type="button"
@@ -240,7 +246,7 @@ export function PostEditor({
         </button>
         {draftStale ? (
           <button
-            className="primary-action compact"
+            className={primaryActionClass}
             disabled={isGenerating}
             onClick={onRefresh}
             type="button"

@@ -33,6 +33,13 @@ export function ConversationRail({
   const newConversationTitle = isStartingConversation ? "新建中" : "新增对话";
   const headerButtonClass =
     "grid size-9 place-items-center rounded-md border border-[var(--line)] bg-[var(--surface-tint)] text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] hover:text-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--line)] disabled:hover:bg-[var(--surface-tint)] disabled:hover:text-[var(--ink)]";
+  const autoSaveClassByState: Record<AutoSaveState, string> = {
+    error: "border-[oklch(82%_0.08_88)] bg-[var(--yellow)] text-[var(--ink)]",
+    idle: "border-[var(--line)] bg-[var(--surface-tint)] text-[var(--ink-soft)]",
+    saved: "border-[oklch(82%_0.05_158)] bg-[var(--mint)] text-[var(--mint-ink)]",
+    saving:
+      "border-[oklch(79%_0.08_24)] bg-[var(--red-soft)] text-[var(--red-strong)]",
+  };
 
   return (
     <aside
@@ -41,7 +48,9 @@ export function ConversationRail({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="section-kicker">对话</p>
+          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+            对话
+          </p>
           <h2
             className="text-[1rem] font-black leading-tight text-[var(--ink)]"
             id="conversation-rail-title"
@@ -50,7 +59,7 @@ export function ConversationRail({
           </h2>
         </div>
         <span
-          className={`autosave-pill is-${autoSaveState} max-w-[104px] truncate`}
+          className={`grid min-h-[30px] max-w-[104px] place-items-center truncate whitespace-nowrap rounded-md border px-2 text-xs font-black ${autoSaveClassByState[autoSaveState]}`}
           aria-live="polite"
           title={autoSaveLabel}
         >

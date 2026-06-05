@@ -140,8 +140,6 @@ export default function Home() {
     [outlines, selectedId],
   );
 
-  const currentStep = postDraft ? 3 : selectedOutline ? 2 : 1;
-
   const workspaceSnapshot = useMemo<WorkspaceSnapshot>(
     () => ({
       batch,
@@ -281,15 +279,16 @@ export default function Home() {
 
   async function createInitialWorkspace(token: string) {
     const conversation = await api.conversations.create(token, {
+      title: "新对话",
       topic: DEFAULT_SEED,
     });
-    const result = await api.conversations.createOutlineBatch(token, conversation.id, {
-      prompt: DEFAULT_SEED,
-    });
 
-    applyConversation(result.conversation, {
-      message: "已连接后端，并准备好第一批方向。",
+    applyConversation(conversation, {
+      message: "写下一句想法后生成大纲。",
     });
+    setSeed("");
+    setOutlines([]);
+    setSelectedId("");
     await refreshConversationRecords(token);
   }
 
@@ -944,7 +943,7 @@ export default function Home() {
             }}
           >
             <div className="login-copy">
-              <p className="section-kicker">
+              <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
                 {authMode === "login" ? "账号登录" : "创建账号"}
               </p>
               <h1 id="login-title">
@@ -1017,7 +1016,7 @@ export default function Home() {
 
             <div className="login-actions">
               <button
-                className="primary-action"
+                className="min-h-[42px] rounded-md border border-transparent bg-[var(--red)] px-3 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)]"
                 disabled={isAuthSubmitting}
                 type="submit"
               >
@@ -1029,7 +1028,7 @@ export default function Home() {
               </button>
               {authMode === "login" ? (
                 <button
-                  className="quiet-action"
+                  className="min-h-[42px] rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-black text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)]"
                   disabled={isAuthSubmitting}
                   onClick={() => void loginWithDemoAccount()}
                   type="button"
@@ -1045,121 +1044,133 @@ export default function Home() {
   }
 
   return (
-    <main className="studio-shell">
-      <section className="studio-top" aria-labelledby="page-title">
-        <div className="brand-lockup" aria-label="RedNote 内容工坊">
-          <span className="brand-stamp">R</span>
-          <div>
-            <strong>RedNote 内容工坊</strong>
-            <small>大纲到图文</small>
+    <main className="min-h-screen bg-[var(--canvas)] p-4 text-[var(--ink)]">
+      <section className="mx-auto grid max-w-[1480px] gap-4">
+        <header className="grid gap-3 rounded-lg border border-[var(--red-soft)] bg-[var(--surface)] p-4 md:grid-cols-[248px_minmax(0,1fr)_auto] md:items-center">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-[var(--red)] font-mono font-black text-[var(--surface)]">
+              R
+            </span>
+            <div className="min-w-0">
+              <strong className="block truncate font-black">
+                RedNote 内容工坊
+              </strong>
+              <small className="font-bold text-[var(--red-strong)]">
+                大纲到图文
+              </small>
+            </div>
           </div>
-        </div>
-        <div className="studio-title-block">
-          <p className="section-kicker">创作台</p>
-          <h1 id="page-title">一句话生成可编辑图文笔记</h1>
-        </div>
-        <ol className="step-rail" aria-label="创作流程">
-          {["输入灵感", "选大纲", "出图文"].map((step, index) => {
-            const stepNumber = index + 1;
-            return (
-              <li
-                className={currentStep === stepNumber ? "is-current" : ""}
-                key={step}
-              >
-                <span>{stepNumber}</span>
-                {step}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+          <div className="min-w-0">
+            <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+              创作台
+            </p>
+            <h1 className="m-0 text-2xl font-black leading-tight text-[var(--ink)]">
+              一句话生成可发布图文笔记
+            </h1>
+          </div>
+          <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-2 py-1">
+            <span className="grid size-6 place-items-center rounded bg-[var(--red)] text-xs font-black text-[var(--surface)]">
+              {authUser.name.slice(0, 1).toUpperCase()}
+            </span>
+            <strong className="max-w-32 truncate text-sm font-black">
+              {authUser.name}
+            </strong>
+            <button
+              className="rounded bg-[var(--surface)] px-2 py-1 text-xs font-black text-[var(--red-strong)]"
+              onClick={logout}
+              type="button"
+            >
+              退出
+            </button>
+          </div>
+        </header>
 
-      <div className="status-strip" role="status">
-        <span>{statusMessage}</span>
-        <div className="status-actions">
+        <div
+          className="flex min-h-10 flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm font-bold text-[var(--ink-soft)]"
+          role="status"
+        >
+          <span className="min-w-0 truncate">{statusMessage}</span>
           {lastSnapshot ? (
-            <button className="text-action" onClick={undoBatch}>
+            <button
+              className="rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 py-1 font-black text-[var(--red-strong)]"
+              onClick={undoBatch}
+              type="button"
+            >
               撤销新增
             </button>
           ) : null}
-          <span className={`autosave-pill is-${autoSaveState}`} aria-live="polite">
-            {autoSaveLabel}
-          </span>
-          <div className="account-chip" aria-label="当前登录账号">
-            <span>{authUser.name.slice(0, 1).toUpperCase()}</span>
-            <strong>{authUser.name}</strong>
-            <button onClick={logout}>退出</button>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[248px_minmax(0,1fr)]">
+          <ConversationRail
+            activeConversationId={conversationId}
+            autoSaveLabel={autoSaveLabel}
+            autoSaveState={autoSaveState}
+            conversations={conversationRecords}
+            isGenerating={isGenerating}
+            isHistoryReady={isHistoryReady}
+            isStartingConversation={isStartingConversation}
+            onCreateConversation={() => void startNewConversation()}
+            onDeleteConversation={(record) => void deleteConversationRecord(record)}
+            onRestoreConversation={(record) => void restoreConversationRecord(record)}
+            onSaveConversation={() => void saveConversationRecord()}
+          />
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="grid gap-4">
+              <IdeaComposer
+                briefError={briefError}
+                isGenerating={isGenerating}
+                isStartingConversation={isStartingConversation}
+                onGenerate={() => void appendOutlineBatch()}
+                onSeedChange={(value) => {
+                  setSeed(value);
+                  if (value.trim()) setBriefError("");
+                  if (postDraft) setDraftStale(true);
+                  setStatusMessage("主题已更新，重新生成大纲后生效。");
+                }}
+                seed={seed}
+              />
+              <OutlineWorkspace
+                hasPostDraft={Boolean(postDraft)}
+                isGenerating={isGenerating}
+                isStartingConversation={isStartingConversation}
+                latestBatch={latestBatch}
+                onConfirmOutline={() => void confirmOutline()}
+                onRegenerate={regenerateOutlines}
+                onSelectOutline={(outline) => {
+                  setSelectedId(outline.id);
+                  if (postDraft) setDraftStale(true);
+                  setStatusMessage(`已选择「${toneMeta[outline.tone].name}」。`);
+                  if (accessToken && conversationId) {
+                    void api.conversations
+                      .update(accessToken, conversationId, {
+                        selectedOutlineId: outline.id,
+                      })
+                      .catch(() => {});
+                  }
+                }}
+                onUpdateOutline={updateOutline}
+                outlineGroups={outlineGroups}
+                selectedId={selectedId}
+                selectedOutline={selectedOutline}
+                workspaceKey={conversationId ?? "local"}
+              />
+            </div>
+            <PostEditor
+              draftStale={draftStale}
+              isGenerating={isGenerating}
+              isSavingDraft={isSavingDraft}
+              onCopy={(text, label) => void copyText(text, label)}
+              onDraftChange={updatePostDraft}
+              onOpenSavedDraft={openSavedDraft}
+              onRefresh={() => void confirmOutline()}
+              onSaveDraft={() => void saveDraft()}
+              postDraft={postDraft}
+              savedDrafts={savedDrafts}
+              selectedTitle={selectedOutline?.title}
+            />
           </div>
         </div>
-      </div>
-
-      <section className="workspace-grid">
-        <ConversationRail
-          activeConversationId={conversationId}
-          autoSaveLabel={autoSaveLabel}
-          autoSaveState={autoSaveState}
-          conversations={conversationRecords}
-          isGenerating={isGenerating}
-          isHistoryReady={isHistoryReady}
-          isStartingConversation={isStartingConversation}
-          onCreateConversation={() => void startNewConversation()}
-          onDeleteConversation={(record) => void deleteConversationRecord(record)}
-          onRestoreConversation={(record) => void restoreConversationRecord(record)}
-          onSaveConversation={() => void saveConversationRecord()}
-        />
-        <IdeaComposer
-          briefError={briefError}
-          isGenerating={isGenerating}
-          isStartingConversation={isStartingConversation}
-          onGenerate={() => void appendOutlineBatch()}
-          onSeedChange={(value) => {
-            setSeed(value);
-            if (value.trim()) setBriefError("");
-            if (postDraft) setDraftStale(true);
-            setStatusMessage("主题已更新，重新生成大纲后生效。");
-          }}
-          seed={seed}
-        />
-
-        <OutlineWorkspace
-          hasPostDraft={Boolean(postDraft)}
-          isGenerating={isGenerating}
-          isStartingConversation={isStartingConversation}
-          latestBatch={latestBatch}
-          onConfirmOutline={() => void confirmOutline()}
-          onRegenerate={regenerateOutlines}
-          onSelectOutline={(outline) => {
-            setSelectedId(outline.id);
-            if (postDraft) setDraftStale(true);
-            setStatusMessage(`已选择「${toneMeta[outline.tone].name}」。`);
-            if (accessToken && conversationId) {
-              void api.conversations
-                .update(accessToken, conversationId, {
-                  selectedOutlineId: outline.id,
-                })
-                .catch(() => {});
-            }
-          }}
-          onUpdateOutline={updateOutline}
-          outlineGroups={outlineGroups}
-          selectedId={selectedId}
-          selectedOutline={selectedOutline}
-          workspaceKey={conversationId ?? "local"}
-        />
-
-        <PostEditor
-          draftStale={draftStale}
-          isGenerating={isGenerating}
-          isSavingDraft={isSavingDraft}
-          onCopy={(text, label) => void copyText(text, label)}
-          onDraftChange={updatePostDraft}
-          onOpenSavedDraft={openSavedDraft}
-          onRefresh={() => void confirmOutline()}
-          onSaveDraft={() => void saveDraft()}
-          postDraft={postDraft}
-          savedDrafts={savedDrafts}
-          selectedTitle={selectedOutline?.title}
-        />
       </section>
     </main>
   );

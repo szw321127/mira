@@ -23,7 +23,9 @@ export function IdeaComposer({
       aria-labelledby="brief-title"
     >
       <div className="grid gap-1">
-        <p className="section-kicker">想法</p>
+        <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+          想法
+        </p>
         <h2
           className="text-[1.08rem] font-black leading-tight text-[var(--ink)]"
           id="brief-title"
@@ -54,7 +56,7 @@ export function IdeaComposer({
       </label>
 
       <button
-        className="primary-action justify-self-start"
+        className="min-h-[42px] justify-self-start rounded-md border border-transparent bg-[var(--red)] px-3 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)]"
         disabled={isGenerating || isStartingConversation}
         onClick={onGenerate}
         type="button"

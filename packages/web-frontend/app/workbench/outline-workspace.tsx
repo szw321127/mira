@@ -37,6 +37,10 @@ export function OutlineWorkspace({
   const [touchedBatchById, setTouchedBatchById] = useState<
     Record<string, boolean>
   >({});
+  const primaryActionClass =
+    "min-h-9 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-2.5 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
+  const quietActionClass =
+    "min-h-9 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-2.5 font-black text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
   const effectiveOpenBatchById = useMemo(() => {
     const nextOpenBatchById: Record<string, boolean> = {};
@@ -59,7 +63,9 @@ export function OutlineWorkspace({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="section-kicker">大纲</p>
+          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+            大纲
+          </p>
           <h2
             className="text-[1.08rem] font-black leading-tight text-[var(--ink)]"
             id="outline-title"
@@ -68,7 +74,7 @@ export function OutlineWorkspace({
           </h2>
         </div>
         <button
-          className="quiet-action compact"
+          className={quietActionClass}
           disabled={isGenerating || isStartingConversation}
           onClick={onRegenerate}
           type="button"
@@ -155,7 +161,7 @@ export function OutlineWorkspace({
               </strong>
             </div>
             <button
-              className="primary-action compact"
+              className={primaryActionClass}
               disabled={isGenerating}
               onClick={onConfirmOutline}
               type="button"
