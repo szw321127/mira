@@ -1,5 +1,7 @@
 export type OutlineTone = "guide" | "story" | "checklist";
 
+export type ImageStatus = "idle" | "generating" | "ready" | "failed";
+
 export type Outline = {
   id: string;
   batch: number;
@@ -15,7 +17,12 @@ export type PostDraft = {
   title: string;
   coverLine: string;
   caption: string;
+  imageError: string | null;
+  imageGeneratedAt: string | null;
+  imageProvider: string | null;
   imagePrompt: string;
+  imageStatus: ImageStatus;
+  imageUrl: string | null;
   sections: string[];
   tags: string[];
   stale?: boolean;

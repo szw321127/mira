@@ -61,7 +61,12 @@ export type BackendPostDraft = {
   coverLine: string;
   createdAt: string;
   id: string;
+  imageError: string | null;
+  imageGeneratedAt: string | null;
+  imageProvider: string | null;
   imagePrompt: string;
+  imageStatus: "idle" | "generating" | "ready" | "failed";
+  imageUrl: string | null;
   outlineId: string | null;
   sections: string[];
   stale: boolean;
@@ -380,6 +385,18 @@ export const api = {
       }),
   },
   postDrafts: {
+    get: (token: string, postDraftId: string) =>
+      request<BackendPostDraft>(`/post-drafts/${postDraftId}`, { token }),
+    generateImage: (
+      token: string,
+      postDraftId: string,
+      body: { imagePrompt?: string },
+    ) =>
+      request<BackendPostDraft>(`/post-drafts/${postDraftId}/image`, {
+        body,
+        method: "POST",
+        token,
+      }),
     update: (
       token: string,
       postDraftId: string,

@@ -64,7 +64,12 @@ export function mapBackendPostDraft(draft: BackendPostDraft): PostDraft {
     caption: draft.caption,
     coverLine: draft.coverLine,
     id: draft.id,
+    imageError: draft.imageError,
+    imageGeneratedAt: draft.imageGeneratedAt,
+    imageProvider: draft.imageProvider,
     imagePrompt: draft.imagePrompt,
+    imageStatus: draft.imageStatus,
+    imageUrl: draft.imageUrl,
     sections: draft.sections,
     stale: draft.stale,
     tags: draft.tags,
@@ -80,11 +85,26 @@ export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function imageStatus(value: unknown): PostDraft["imageStatus"] {
+  return value === "generating" || value === "ready" || value === "failed"
+    ? value
+    : "idle";
+}
+
 export function getDraftSignature(draft: PostDraft) {
   return JSON.stringify({
     caption: draft.caption.trim(),
     coverLine: draft.coverLine.trim(),
+    imageError: draft.imageError?.trim() ?? null,
+    imageGeneratedAt: draft.imageGeneratedAt?.trim() ?? null,
+    imageProvider: draft.imageProvider?.trim() ?? null,
     imagePrompt: draft.imagePrompt.trim(),
+    imageStatus: draft.imageStatus,
+    imageUrl: draft.imageUrl?.trim() ?? null,
     sections: draft.sections.map((section) => section.trim()),
     tags: draft.tags.map((tag) => tag.trim()),
     title: draft.title.trim(),
@@ -124,7 +144,12 @@ export function mapSavedDraft(savedDraft: BackendSavedDraft): SavedDraft | null 
     caption: snapshot.caption,
     coverLine: snapshot.coverLine,
     id: snapshot.id,
+    imageError: optionalString(snapshot.imageError),
+    imageGeneratedAt: optionalString(snapshot.imageGeneratedAt),
+    imageProvider: optionalString(snapshot.imageProvider),
     imagePrompt: snapshot.imagePrompt,
+    imageStatus: imageStatus(snapshot.imageStatus),
+    imageUrl: optionalString(snapshot.imageUrl),
     savedAt: formatRecordTime(savedDraft.createdAt),
     savedDraftId: savedDraft.id,
     sections: snapshot.sections,
@@ -177,7 +202,12 @@ export function mapSnapshotPostDraft(value: unknown): PostDraft | null {
     caption: value.caption,
     coverLine: value.coverLine,
     id: value.id,
+    imageError: optionalString(value.imageError),
+    imageGeneratedAt: optionalString(value.imageGeneratedAt),
+    imageProvider: optionalString(value.imageProvider),
     imagePrompt: value.imagePrompt,
+    imageStatus: imageStatus(value.imageStatus),
+    imageUrl: optionalString(value.imageUrl),
     sections: value.sections,
     stale: typeof value.stale === "boolean" ? value.stale : false,
     tags: value.tags,

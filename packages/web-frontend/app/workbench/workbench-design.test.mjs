@@ -58,3 +58,25 @@ test("successful primary actions refresh history as best effort", () => {
   assert.match(source, /async function refreshConversationRecordsSafely/);
   assert.doesNotMatch(source, /await refreshConversationRecords\(accessToken\);/);
 });
+
+test("publish package image fields are mapped and restored", () => {
+  const types = readWorkbenchFile("types.ts");
+  const utils = readWorkbenchFile("workspace-utils.ts");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+
+  for (const field of [
+    "imageUrl",
+    "imageStatus",
+    "imageProvider",
+    "imageError",
+    "imageGeneratedAt",
+  ]) {
+    assert.match(api, new RegExp(`${field}[?:]`));
+    assert.match(types, new RegExp(`${field}[?:]`));
+    assert.match(utils, new RegExp(`${field}:`));
+  }
+
+  assert.match(api, /generateImage:/);
+  assert.match(api, /\/post-drafts\/\$\{postDraftId\}\/image/);
+  assert.match(api, /get: \(token: string, postDraftId: string\)/);
+});
