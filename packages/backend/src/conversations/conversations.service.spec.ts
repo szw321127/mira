@@ -125,6 +125,53 @@ describe('ConversationsService post draft images', () => {
     });
   });
 
+  it('does not rewrite imagePrompt when the prompt override is blank', async () => {
+    const { images, prisma, service } = createService();
+    const generatedAt = new Date('2026-06-06T00:04:00.000Z');
+    const imageUrl = 'data:image/svg+xml;base64,ready';
+    const autosavedPrompt = '自动保存后的封面';
+
+    prisma.postDraft.findFirst.mockResolvedValue(baseDraft);
+    prisma.postDraft.update
+      .mockResolvedValueOnce({
+        ...baseDraft,
+        imageError: null,
+        imagePrompt: autosavedPrompt,
+        imageStatus: 'generating',
+      })
+      .mockResolvedValueOnce({
+        ...baseDraft,
+        imageError: null,
+        imageGeneratedAt: generatedAt,
+        imagePrompt: autosavedPrompt,
+        imageProvider: 'mock',
+        imageStatus: 'ready',
+        imageUrl,
+      });
+    images.generateCover.mockResolvedValue({
+      generatedAt,
+      imageUrl,
+      provider: 'mock',
+    });
+
+    await service.generatePostDraftImage('user-1', 'draft-1', {
+      imagePrompt: '   ',
+    });
+
+    expect(prisma.postDraft.update).toHaveBeenNthCalledWith(1, {
+      data: {
+        imageError: null,
+        imageStatus: 'generating',
+      },
+      where: { id: 'draft-1' },
+    });
+    expect(images.generateCover).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imagePrompt: autosavedPrompt,
+      }),
+    );
+  });
+
   it('marks the draft failed when provider generation fails', async () => {
     const { images, prisma, service } = createService();
 
@@ -144,7 +191,44 @@ describe('ConversationsService post draft images', () => {
     expect(prisma.postDraft.update).toHaveBeenLastCalledWith({
       data: {
         imageError: 'provider unavailable',
+        imageGeneratedAt: null,
+        imageProvider: null,
         imageStatus: 'failed',
+        imageUrl: null,
+      },
+      where: { id: 'draft-1' },
+    });
+  });
+
+  it('clears old ready image fields when provider generation fails', async () => {
+    const { images, prisma, service } = createService();
+    const readyDraft = {
+      ...baseDraft,
+      imageGeneratedAt: new Date('2026-06-06T00:05:00.000Z'),
+      imageProvider: 'mock',
+      imageStatus: 'ready',
+      imageUrl: 'data:image/svg+xml;base64,old',
+    };
+
+    prisma.postDraft.findFirst.mockResolvedValue(readyDraft);
+    prisma.postDraft.update.mockResolvedValueOnce({
+      ...readyDraft,
+      imageError: null,
+      imageStatus: 'generating',
+    });
+    images.generateCover.mockRejectedValue(new Error('provider unavailable'));
+
+    await expect(
+      service.generatePostDraftImage('user-1', 'draft-1', {}),
+    ).rejects.toThrow('provider unavailable');
+
+    expect(prisma.postDraft.update).toHaveBeenLastCalledWith({
+      data: {
+        imageError: 'provider unavailable',
+        imageGeneratedAt: null,
+        imageProvider: null,
+        imageStatus: 'failed',
+        imageUrl: null,
       },
       where: { id: 'draft-1' },
     });

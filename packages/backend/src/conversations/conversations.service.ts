@@ -346,16 +346,21 @@ export class ConversationsService {
     dto: GeneratePostDraftImageDto,
   ) {
     const draft = await this.findOwnedPostDraft(userId, postDraftId);
-    const imagePrompt = dto.imagePrompt?.trim() || draft.imagePrompt;
+    const imagePromptOverride = dto.imagePrompt?.trim();
+    const generatingData: Prisma.PostDraftUpdateInput = {
+      imageError: null,
+      imageStatus: 'generating',
+    };
 
-    await this.prisma.postDraft.update({
-      data: {
-        imageError: null,
-        imagePrompt,
-        imageStatus: 'generating',
-      },
+    if (imagePromptOverride) {
+      generatingData.imagePrompt = imagePromptOverride;
+    }
+
+    const generatingDraft = await this.prisma.postDraft.update({
+      data: generatingData,
       where: { id: postDraftId },
     });
+    const imagePrompt = imagePromptOverride || generatingDraft.imagePrompt;
 
     try {
       const result = await this.images.generateCover({
@@ -384,7 +389,10 @@ export class ConversationsService {
       await this.prisma.postDraft.update({
         data: {
           imageError,
+          imageGeneratedAt: null,
+          imageProvider: null,
           imageStatus: 'failed',
+          imageUrl: null,
         },
         where: { id: postDraftId },
       });
