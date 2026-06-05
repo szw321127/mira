@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useRef, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import type { Outline, OutlineGroup } from "./types";
 import { toneMeta } from "./workspace-utils";
 
 type OutlineWorkspaceProps = {
-  draftStale: boolean;
   hasPostDraft: boolean;
   isGenerating: boolean;
   isStartingConversation: boolean;
@@ -18,36 +17,6 @@ type OutlineWorkspaceProps = {
   selectedId: string;
   selectedOutline: Outline | undefined;
 };
-
-type OutlineBatchDetailsProps = {
-  children: ReactNode;
-  initialOpen: boolean;
-};
-
-function OutlineBatchDetails({
-  children,
-  initialOpen,
-}: OutlineBatchDetailsProps) {
-  const hasInitializedRef = useRef(false);
-  const detailsRef = useCallback(
-    (node: HTMLDetailsElement | null) => {
-      if (!node || hasInitializedRef.current) return;
-
-      node.open = initialOpen;
-      hasInitializedRef.current = true;
-    },
-    [initialOpen],
-  );
-
-  return (
-    <details
-      className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
-      ref={detailsRef}
-    >
-      {children}
-    </details>
-  );
-}
 
 export function OutlineWorkspace({
   hasPostDraft,
@@ -62,6 +31,23 @@ export function OutlineWorkspace({
   selectedId,
   selectedOutline,
 }: OutlineWorkspaceProps) {
+  const [openBatchById, setOpenBatchById] = useState<Record<number, boolean>>({});
+  const [touchedBatchById, setTouchedBatchById] = useState<
+    Record<number, boolean>
+  >({});
+
+  const effectiveOpenBatchById = useMemo(() => {
+    const nextOpenBatchById: Record<number, boolean> = {};
+
+    outlineGroups.forEach((group) => {
+      nextOpenBatchById[group.batch] = touchedBatchById[group.batch]
+        ? Boolean(openBatchById[group.batch])
+        : group.batch === latestBatch;
+    });
+
+    return nextOpenBatchById;
+  }, [latestBatch, openBatchById, outlineGroups, touchedBatchById]);
+
   return (
     <section
       className="grid gap-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4"
@@ -92,7 +78,23 @@ export function OutlineWorkspace({
           const isLatestBatch = group.batch === latestBatch;
 
           return (
-            <OutlineBatchDetails initialOpen={isLatestBatch} key={group.batch}>
+            <details
+              className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
+              key={group.batch}
+              onToggle={(event) => {
+                if (!event.nativeEvent.isTrusted) return;
+
+                setTouchedBatchById((previousTouchedBatchById) => ({
+                  ...previousTouchedBatchById,
+                  [group.batch]: true,
+                }));
+                setOpenBatchById((previousOpenBatchById) => ({
+                  ...previousOpenBatchById,
+                  [group.batch]: event.currentTarget.open,
+                }));
+              }}
+              open={Boolean(effectiveOpenBatchById[group.batch])}
+            >
               <summary className="cursor-pointer text-[0.82rem] font-black text-[var(--ink)] marker:text-[var(--red)]">
                 {isLatestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
                 ，{group.outlines.length} 个方向
@@ -130,7 +132,7 @@ export function OutlineWorkspace({
                   );
                 })}
               </div>
-            </OutlineBatchDetails>
+            </details>
           );
         })}
       </div>
