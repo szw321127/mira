@@ -15,8 +15,11 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return backend health', () => {
+      expect(appController.getHealth()).toEqual({
+        name: '@rednote/backend',
+        ok: true,
+      });
     });
   });
 });

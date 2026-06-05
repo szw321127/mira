@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  account      String   @unique
+  displayName  String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  conversations Conversation[]
+}
+
+model Conversation {
+  id                String    @id @default(cuid())
+  userId            String
+  title             String
+  topic             String
+  selectedOutlineId String?
+  statusMessage     String?
+  lastOpenedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outlineBatches OutlineBatch[]
+  postDrafts     PostDraft[]
+  savedDrafts    SavedDraft[]
+  snapshots      ConversationSnapshot[]
+
+  @@index([userId, updatedAt])
+}
+
+model OutlineBatch {
+  id             String   @id @default(cuid())
+  conversationId String
+  batchNo        Int
+  prompt         String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  outlines     Outline[]
+
+  @@unique([conversationId, batchNo])
+}
+
+model Outline {
+  id        String   @id @default(cuid())
+  batchId   String
+  tone      String
+  label     String
+  title     String
+  hook      String
+  points    String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch      OutlineBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  postDrafts PostDraft[]
+
+  @@index([batchId, position])
+}
+
+model PostDraft {
+  id             String   @id @default(cuid())
+  conversationId String
+  outlineId      String?
+  title          String
+  coverLine      String
+  caption        String
+  imagePrompt    String
+  sections       String
+  tags           String
+  stale          Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  outline      Outline?     @relation(fields: [outlineId], references: [id], onDelete: SetNull)
+  savedDrafts  SavedDraft[]
+
+  @@index([conversationId, updatedAt])
+}
+
+model SavedDraft {
+  id             String   @id @default(cuid())
+  conversationId String
+  postDraftId    String?
+  snapshot       String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  postDraft    PostDraft?   @relation(fields: [postDraftId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+model ConversationSnapshot {
+  id             String   @id @default(cuid())
+  conversationId String
+  snapshot       String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
