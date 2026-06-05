@@ -24,4 +24,28 @@ describe('MockImageProvider', () => {
     expect(svg).not.toContain('<script>');
     expect(svg).toContain('&lt;script&gt;');
   });
+
+  it('wraps long cover titles inside the vertical canvas', async () => {
+    const provider = new MockImageProvider();
+
+    const result = await provider.generate({
+      coverLine: '实用攻略 高保存率',
+      imagePrompt: '封面有红色贴纸和生活道具',
+      postDraftId: 'draft-2',
+      tags: ['小红书图文', '实用攻略', '高保存率', '可直接发布'],
+      title: '周末备餐做得好看又省心｜把一句灵感拆成可执行的 5 步',
+      topic: '小红书新手如何把周末备餐做得好看又省心',
+    });
+
+    const encoded = result.imageUrl.replace('data:image/svg+xml;base64,', '');
+    const svg = Buffer.from(encoded, 'base64').toString('utf8');
+
+    expect(svg).toContain('data-role="title-line"');
+    expect(svg.match(/data-role="title-line"/g)).toHaveLength(2);
+    expect(svg).not.toContain('省心｜');
+    expect(svg).toContain('>周末备餐做得好看又省心<');
+    expect(svg).not.toContain(
+      '>周末备餐做得好看又省心｜把一句灵感拆成可执行的 5 步<',
+    );
+  });
 });

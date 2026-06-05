@@ -103,7 +103,7 @@ export class GenerationService {
     return source.map((outline) => ({
       ...outline,
       points: [...outline.points],
-      title: `${outline.title}：${normalizedTopic.slice(0, 18)}`,
+      title: `${outline.title}：${this.shortenTopic(normalizedTopic, 18)}`,
     }));
   }
 
@@ -141,16 +141,23 @@ export class GenerationService {
   }
 
   private createPostTitle(topic: string, outlineTitle: string): string {
+    const outlineBase = this.getOutlineTitleBase(outlineTitle);
     const normalizedTitle = outlineTitle.replace('：', ' | ');
+    const topicHeadline = this.createTopicHeadline(topic);
     const topicStem = topic.slice(0, 18);
-    const compactTopic = topic.length > 18 ? `${topic.slice(0, 18)}...` : topic;
+    const headlineStem = topicHeadline.slice(0, 8);
     const titleAlreadyIncludesTopic =
       normalizedTitle.includes(topic) ||
-      (topicStem.length > 0 && normalizedTitle.includes(topicStem));
+      (topicStem.length > 0 && normalizedTitle.includes(topicStem)) ||
+      (headlineStem.length > 0 && normalizedTitle.includes(headlineStem));
+
+    if (this.outlineTitleCarriesGeneratedTopic(outlineTitle, topic)) {
+      return `${topicHeadline}｜${outlineBase}`;
+    }
 
     return titleAlreadyIncludesTopic
       ? normalizedTitle
-      : `${normalizedTitle}｜${compactTopic}`;
+      : `${normalizedTitle}｜${this.shortenTopic(topic, 22)}`;
   }
 
   private normalizeDraftPoints(points: string[]): string[] {
@@ -172,10 +179,28 @@ export class GenerationService {
   ): string {
     const sectionNo = index + 1;
     const readerPoint = this.createReaderPointLabel(point);
-    const toneLead: Record<OutlineTone, string> = {
-      checklist: '这一项适合收藏后逐条核对',
-      guide: '这一点可以马上用起来',
-      story: '这一幕会很有生活感',
+    const toneLead: Record<OutlineTone, string[]> = {
+      checklist: [
+        '先判断自己适不适合',
+        '照着准备会更省心',
+        '执行时只看这几步',
+        '遇到卡点就换轻量版',
+        '保存后按顺序复用',
+      ],
+      guide: [
+        '先把问题落到眼前',
+        '准备阶段越具体越稳',
+        '照做时抓住一个标准',
+        '容易翻车的地方提前避开',
+        '最后留一个轻动作',
+      ],
+      story: [
+        '从一个真实瞬间进入',
+        '把在意的原因写出来',
+        '关键决定要有画面',
+        '变化前后形成对照',
+        '结尾留一点继续感',
+      ],
     };
     const sectionCopy = [
       `刚开始做「${topic}」时，最容易卡在不知道从哪里下手。把「${readerPoint}」当成起点，先处理眼前最具体的一件小事，整个过程会轻很多。`,
@@ -185,7 +210,47 @@ export class GenerationService {
       `最后回到「${readerPoint}」：保存这份顺序，今天只挑一个最轻的动作开始。做完再补一张照片或一句复盘，下一次会更顺手。`,
     ];
 
-    return `${sectionNo}. ${readerPoint}：${toneLead[tone]}。${sectionCopy[index % sectionCopy.length]}`;
+    return `${sectionNo}. ${readerPoint}：${toneLead[tone][index % toneLead[tone].length]}。${sectionCopy[index % sectionCopy.length]}`;
+  }
+
+  private createTopicHeadline(topic: string): string {
+    const cleanedTopic =
+      topic
+        .replace(/^小红书新手如何把/, '')
+        .replace(/^小红书新手如何/, '')
+        .replace(/^如何把/, '')
+        .replace(/^如何/, '')
+        .replace(/，适合发小红书$/, '')
+        .trim() || topic;
+
+    return this.shortenTopic(cleanedTopic, 24);
+  }
+
+  private getOutlineTitleBase(outlineTitle: string): string {
+    return outlineTitle.split(/[：｜|]/)[0]?.trim() || outlineTitle.trim();
+  }
+
+  private outlineTitleCarriesGeneratedTopic(
+    outlineTitle: string,
+    topic: string,
+  ): boolean {
+    const [, suffix] = outlineTitle.split('：');
+
+    if (!suffix) return false;
+
+    const compactSuffix = suffix.trim().replace(/\.\.\.$/, '');
+
+    return (
+      suffix.includes('...') ||
+      topic.startsWith(compactSuffix) ||
+      this.shortenTopic(topic, 18).startsWith(compactSuffix)
+    );
+  }
+
+  private shortenTopic(topic: string, maxLength: number): string {
+    if (topic.length <= maxLength) return topic;
+
+    return `${topic.slice(0, Math.max(1, maxLength - 3))}...`;
   }
 
   private createReaderPointLabel(point: string): string {

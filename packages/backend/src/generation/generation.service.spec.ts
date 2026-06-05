@@ -4,17 +4,16 @@ import type { OutlineForDraft } from './generation.types';
 describe('GenerationService post drafts', () => {
   const service = new GenerationService();
   const generatedTopic = '租房厨房改造省钱清单';
-  const generatedOutlineCases: Array<[string, number, number]> = [0, 1, 2].flatMap(
-    (batchNo) =>
-      service
-        .createOutlines(generatedTopic, batchNo)
-        .map(
-          (_, outlineIndex): [string, number, number] => [
-            generatedTopic,
-            batchNo,
-            outlineIndex,
-          ],
-        ),
+  const generatedOutlineCases: Array<[string, number, number]> = [
+    0, 1, 2,
+  ].flatMap((batchNo) =>
+    service
+      .createOutlines(generatedTopic, batchNo)
+      .map((_, outlineIndex): [string, number, number] => [
+        generatedTopic,
+        batchNo,
+        outlineIndex,
+      ]),
   );
   const writerFacingPattern =
     /写 2 到 3 句|用定调的方式|避免空泛形容|直接写出|不要堆概念|第一屏|结尾把行动收回来|提醒读者|给读者|讲清楚|第一屏直接展示|用一句话定义|每一页只解决|定义这篇内容|拆开/;
@@ -77,9 +76,46 @@ describe('GenerationService post drafts', () => {
     },
   );
 
+  it('does not carry a hard-cut outline title into the publish-ready title', () => {
+    const topic = '小红书新手如何把周末备餐做得好看又省心';
+    const generatedOutline = service.createOutlines(topic, 0)[0];
+
+    const draft = service.createPostDraft(topic, {
+      ...generatedOutline,
+      id: 'generated-outline-1',
+    });
+
+    expect(generatedOutline.title).toContain('...');
+    expect(draft.title).toContain('周末备餐');
+    expect(draft.title).toContain('省心');
+    expect(draft.title).not.toMatch(/好看又省($|｜)/);
+  });
+
+  it('varies section lead-ins so the final copy does not read like a template', () => {
+    const draft = service.createPostDraft(
+      '小红书新手如何把周末备餐做得好看又省心',
+      outline,
+    );
+
+    const leadIns = draft.sections.map(
+      (section) => section.split('：')[1]?.split('。')[0],
+    );
+
+    expect(new Set(leadIns).size).toBe(draft.sections.length);
+    expect(draft.sections.join('\n')).not.toMatch(
+      /这一点可以马上用起来.*这一点可以马上用起来/s,
+    );
+  });
+
   it.each([
     {
-      expectedPoints: ['一个点', '准备好材料', '照着做步骤', '少踩坑做法', '保存后开做'],
+      expectedPoints: [
+        '一个点',
+        '准备好材料',
+        '照着做步骤',
+        '少踩坑做法',
+        '保存后开做',
+      ],
       points: ['一个点'],
     },
     {
