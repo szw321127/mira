@@ -61,6 +61,15 @@ type PostDraftPatchInFlight = {
 const AUTH_STORAGE_KEY = "rednote:auth-session";
 const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
 
+function getWorkspaceErrorMessage(error: unknown, fallback: string) {
+  const detail = getApiErrorMessage(error);
+
+  if (!detail || detail === "请求失败，请稍后重试。") return fallback;
+  if (detail === fallback) return fallback;
+
+  return `${fallback}（${detail}）`;
+}
+
 export default function Home() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -276,6 +285,17 @@ export default function Home() {
     return records;
   }
 
+  async function refreshConversationRecordsSafely(
+    fallbackMessage: string,
+    token = accessToken,
+  ) {
+    try {
+      await refreshConversationRecords(token);
+    } catch (error) {
+      setStatusMessage(getWorkspaceErrorMessage(error, fallbackMessage));
+    }
+  }
+
   async function createInitialWorkspace(token: string) {
     const conversation = await api.conversations.create(token, {
       title: "新对话",
@@ -337,9 +357,11 @@ export default function Home() {
         setAuthUser(nextSession.user);
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
         await bootstrapWorkspace(nextSession.accessToken);
-      } catch {
+      } catch (error) {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        setLoginError("登录状态已失效，请重新登录。");
+        setLoginError(
+          getWorkspaceErrorMessage(error, "登录状态已失效，请重新登录。"),
+        );
         setStatusMessage("请登录后开始创作。");
       } finally {
         if (!shouldIgnore) setIsAuthReady(true);
@@ -424,8 +446,18 @@ export default function Home() {
       setLastAutoSavedAt("");
       lastAutoSavedKeyRef.current = "";
       setStatusMessage("已新建对话，写下主题后生成大纲。");
-      await refreshConversationRecords(accessToken);
-    } catch {
+      await refreshConversationRecordsSafely(
+        "已新建对话，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setAutoSaveState("error");
+      setStatusMessage(
+        getWorkspaceErrorMessage(
+          error,
+          "新建对话失败，当前内容已保留，请稍后重试。",
+        ),
+      );
     } finally {
       setIsStartingConversation(false);
     }
@@ -480,8 +512,14 @@ export default function Home() {
         keepLastSnapshot: true,
         message: "已追加新一批大纲，之前生成的仍保留。",
       });
-      await refreshConversationRecords(accessToken);
-    } catch {
+      await refreshConversationRecordsSafely(
+        "大纲已生成，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "大纲生成失败，请稍后重试。"),
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -511,7 +549,14 @@ export default function Home() {
 
     if (!accessToken) return;
 
-    void api.outlines.update(accessToken, id, patch).catch(() => {});
+    void api.outlines.update(accessToken, id, patch).catch((error) => {
+      setStatusMessage(
+        getWorkspaceErrorMessage(
+          error,
+          "大纲已在本地更新，但同步到后端失败。",
+        ),
+      );
+    });
   }
 
   async function confirmOutline() {
@@ -539,8 +584,14 @@ export default function Home() {
       setPostDraft(mapBackendPostDraft(draft));
       setDraftStale(false);
       setStatusMessage("图文草稿已生成，可以复制或继续微调大纲。");
-      await refreshConversationRecords(accessToken);
-    } catch {
+      await refreshConversationRecordsSafely(
+        "图文已生成，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "图文草稿生成失败，已保留当前大纲。"),
+      );
     } finally {
       setIsGenerating(false);
     }
@@ -592,8 +643,14 @@ export default function Home() {
       }
 
       setStatusMessage("已保存草稿，后端会保留这次创作状态。");
-      await refreshConversationRecords(accessToken);
-    } catch {
+      await refreshConversationRecordsSafely(
+        "草稿已保存，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "保存草稿失败，本地编辑已保留。"),
+      );
     } finally {
       setIsSavingDraft(false);
     }
@@ -749,9 +806,19 @@ export default function Home() {
       lastAutoSavedKeyRef.current = createAutoSaveKey(snapshot);
       setAutoSaveState("saved");
       setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
-      await refreshConversationRecords(accessToken);
       setStatusMessage("已保存对话记录，可从记录中恢复完整工作状态。");
-    } catch {
+      await refreshConversationRecordsSafely(
+        "对话记录已保存，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setAutoSaveState("error");
+      setStatusMessage(
+        getWorkspaceErrorMessage(
+          error,
+          "保存对话记录失败，本地内容已保留。",
+        ),
+      );
     }
   }
 
@@ -776,13 +843,24 @@ export default function Home() {
         message: `已恢复 ${record.savedAt} 的对话记录。`,
         preferSnapshot: true,
       });
-      await refreshConversationRecords(accessToken);
-    } catch {
+      await refreshConversationRecordsSafely(
+        "已恢复对话记录，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "恢复对话记录失败，请稍后重试。"),
+      );
     }
   }
 
   async function deleteConversationRecord(record: ConversationRecord) {
     if (!accessToken) return;
+    const shouldDelete = window.confirm(
+      `删除「${record.title}」后，这条历史记录将无法恢复。`,
+    );
+
+    if (!shouldDelete) return;
 
     try {
       await api.conversations.delete(accessToken, record.conversationId);
@@ -790,14 +868,22 @@ export default function Home() {
         records.filter((item) => item.id !== record.id),
       );
       if (record.conversationId === conversationId) {
+        setBatch(-1);
+        setBriefError("");
         setConversationId(null);
+        setDraftStale(false);
+        setLastSnapshot(null);
         setOutlines([]);
         setPostDraft(null);
         setSavedDrafts([]);
+        setSeed("");
         setSelectedId("");
       }
       setStatusMessage("已删除一条对话记录。");
-    } catch {
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "删除对话记录失败，请稍后重试。"),
+      );
     }
   }
 
@@ -1100,20 +1186,7 @@ export default function Home() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[248px_minmax(0,1fr)]">
-          <ConversationRail
-            activeConversationId={conversationId}
-            autoSaveLabel={autoSaveLabel}
-            autoSaveState={autoSaveState}
-            conversations={conversationRecords}
-            isGenerating={isGenerating}
-            isHistoryReady={isHistoryReady}
-            isStartingConversation={isStartingConversation}
-            onCreateConversation={() => void startNewConversation()}
-            onDeleteConversation={(record) => void deleteConversationRecord(record)}
-            onRestoreConversation={(record) => void restoreConversationRecord(record)}
-            onSaveConversation={() => void saveConversationRecord()}
-          />
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="order-1 grid min-w-0 gap-4 lg:order-2 xl:grid-cols-[minmax(0,1fr)_420px]">
             <div className="grid gap-4">
               <IdeaComposer
                 briefError={briefError}
@@ -1156,16 +1229,31 @@ export default function Home() {
             </div>
             <PostEditor
               draftStale={draftStale}
-              isGenerating={isGenerating}
               isSavingDraft={isSavingDraft}
               onCopy={(text, label) => void copyText(text, label)}
               onDraftChange={updatePostDraft}
               onOpenSavedDraft={openSavedDraft}
-              onRefresh={() => void confirmOutline()}
               onSaveDraft={() => void saveDraft()}
               postDraft={postDraft}
               savedDrafts={savedDrafts}
               selectedTitle={selectedOutline?.title}
+            />
+          </div>
+          <div className="order-2 lg:order-1">
+            <ConversationRail
+              activeConversationId={conversationId}
+              autoSaveLabel={autoSaveLabel}
+              autoSaveState={autoSaveState}
+              conversations={conversationRecords}
+              isGenerating={isGenerating}
+              isHistoryReady={isHistoryReady}
+              isStartingConversation={isStartingConversation}
+              onCreateConversation={() => void startNewConversation()}
+              onDeleteConversation={(record) => void deleteConversationRecord(record)}
+              onRestoreConversation={(record) =>
+                void restoreConversationRecord(record)
+              }
+              onSaveConversation={() => void saveConversationRecord()}
             />
           </div>
         </div>

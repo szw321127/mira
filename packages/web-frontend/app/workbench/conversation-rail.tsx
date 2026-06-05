@@ -43,23 +43,23 @@ export function ConversationRail({
 
   return (
     <aside
-      className="grid w-full shrink-0 gap-3.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3.5 xl:sticky xl:top-3.5 xl:w-[248px]"
+      className="grid w-full shrink-0 gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3 xl:sticky xl:top-3.5"
       aria-labelledby="conversation-rail-title"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
-            对话
+          <p className="m-0 text-xs font-bold text-[var(--muted)]">
+            历史记录
           </p>
           <h2
-            className="text-[1rem] font-black leading-tight text-[var(--ink)]"
+            className="text-[1rem] font-bold leading-tight text-[var(--ink)]"
             id="conversation-rail-title"
           >
-            当前创作
+            创作记录
           </h2>
         </div>
         <span
-          className={`grid min-h-[30px] max-w-[104px] place-items-center truncate whitespace-nowrap rounded-md border px-2 text-xs font-black ${autoSaveClassByState[autoSaveState]}`}
+          className={`grid min-h-[30px] max-w-full place-items-center whitespace-nowrap rounded-md border px-2 text-xs font-bold ${autoSaveClassByState[autoSaveState]}`}
           aria-live="polite"
           title={autoSaveLabel}
         >
@@ -100,7 +100,7 @@ export function ConversationRail({
                 className={`grid grid-cols-[minmax(0,1fr)_36px] gap-1.5 rounded-md border p-1.5 ${
                   isActive
                     ? "border-[var(--red)] bg-[var(--red-soft)]"
-                    : "border-[var(--line)] bg-[var(--surface-tint)]"
+                    : "border-[var(--line)] bg-[var(--surface)]"
                 }`}
                 key={record.id}
               >
@@ -114,7 +114,7 @@ export function ConversationRail({
                   <span className="truncate font-mono text-[0.72rem] font-extrabold text-[var(--muted)]">
                     {record.savedAt}
                   </span>
-                  <strong className="truncate text-[0.84rem] font-black leading-snug">
+                  <strong className="truncate text-[0.84rem] font-bold leading-snug">
                     {record.title}
                   </strong>
                   <small className="truncate text-[0.74rem] font-extrabold text-[var(--muted)]">

@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PostDraft, SavedDraft } from "./types";
 import { getFullPostText, getPostBodyText } from "./workspace-utils";
@@ -13,12 +14,10 @@ type EditablePostDraftPatch = Partial<
 
 type PostEditorProps = {
   draftStale: boolean;
-  isGenerating: boolean;
   isSavingDraft: boolean;
   onCopy: (text: string, label: string) => void;
   onDraftChange: (patch: EditablePostDraftPatch) => void;
   onOpenSavedDraft: (draft: SavedDraft) => void;
-  onRefresh: () => void;
   onSaveDraft: () => void;
   postDraft: PostDraft | null;
   savedDrafts: SavedDraft[];
@@ -28,20 +27,20 @@ type PostEditorProps = {
 const fieldClass =
   "rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[0.9rem] font-semibold leading-relaxed text-[var(--ink)] outline-none transition placeholder:text-[var(--muted)] focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]";
 
-const labelClass = "grid gap-2 text-[0.82rem] font-extrabold text-[var(--muted)]";
+const labelClass = "grid gap-2 text-[0.82rem] font-bold text-[var(--muted)]";
 const primaryActionClass =
-  "min-h-9 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-2.5 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-3 font-bold text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
 const quietActionClass =
-  "min-h-9 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-2.5 font-black text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-bold text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryCopyClass =
+  "min-h-8 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[0.82rem] font-bold text-[var(--ink-soft)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] hover:text-[var(--red-strong)]";
 
 export function PostEditor({
   draftStale,
-  isGenerating,
   isSavingDraft,
   onCopy,
   onDraftChange,
   onOpenSavedDraft,
-  onRefresh,
   onSaveDraft,
   postDraft,
   savedDrafts,
@@ -69,11 +68,11 @@ export function PostEditor({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+          <p className="m-0 text-xs font-bold text-[var(--muted)]">
             图文
           </p>
           <h2
-            className="text-[1.08rem] font-black leading-tight text-[var(--ink)]"
+            className="text-[1.08rem] font-bold leading-tight text-[var(--ink)]"
             id="post-title"
           >
             编辑最终发布内容
@@ -81,13 +80,13 @@ export function PostEditor({
         </div>
         {postDraft ? (
           <span
-            className={`rounded-full px-2.5 py-1 text-[0.72rem] font-black ${
+            className={`rounded-full px-2.5 py-1 text-[0.72rem] font-bold ${
               draftStale
                 ? "bg-[var(--yellow)] text-[var(--ink)]"
                 : "bg-[var(--red-soft)] text-[var(--red-strong)]"
             }`}
           >
-            {draftStale ? "待刷新" : "已生成"}
+            {draftStale ? "大纲已改" : "已生成"}
           </span>
         ) : null}
       </div>
@@ -174,91 +173,89 @@ export function PostEditor({
       ) : (
         <div className="grid min-h-[220px] place-items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--surface-tint)] p-5 text-center">
           <div className="grid gap-2">
-            <span className="text-[0.78rem] font-black uppercase tracking-[0.12em] text-[var(--red-strong)]">
+            <span className="text-[0.78rem] font-bold text-[var(--red-strong)]">
               等待图文
             </span>
-            <strong className="text-[1rem] font-black leading-snug text-[var(--ink)]">
+            <strong className="text-[1rem] font-bold leading-snug text-[var(--ink)]">
               {selectedTitle ?? "先选择一个大纲"}
             </strong>
+            <small className="text-[0.82rem] font-semibold leading-relaxed text-[var(--muted)]">
+              在大纲区点击生成图文后，这里会出现可复制的发布内容。
+            </small>
           </div>
         </div>
       )}
 
-      <div
-        className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2"
-        aria-label="图文操作"
-      >
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => postDraft && onCopy(getFullPostText(postDraft), "完整笔记")}
-          type="button"
-        >
-          复制完整笔记
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => postDraft && onCopy(postDraft.title, "标题")}
-          type="button"
-        >
-          复制标题
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => postDraft && onCopy(postDraft.coverLine, "封面文案")}
-          type="button"
-        >
-          复制封面文案
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => postDraft && onCopy(getPostBodyText(postDraft), "正文")}
-          type="button"
-        >
-          复制正文
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => onCopy(copyTagsText, "标签")}
-          type="button"
-        >
-          复制标签
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft}
-          onClick={() => postDraft && onCopy(postDraft.imagePrompt, "封面提示")}
-          type="button"
-        >
-          复制封面提示
-        </button>
-        <button
-          className={quietActionClass}
-          disabled={!postDraft || isSavingDraft}
-          onClick={onSaveDraft}
-          type="button"
-        >
-          {isSavingDraft ? "保存中" : "保存草稿"}
-        </button>
-        {draftStale ? (
-          <button
-            className={primaryActionClass}
-            disabled={isGenerating}
-            onClick={onRefresh}
-            type="button"
-          >
-            {isGenerating ? "生成中" : "刷新图文"}
-          </button>
-        ) : null}
-      </div>
+      {postDraft ? (
+        <div className="grid gap-2" aria-label="图文操作">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <button
+              className={primaryActionClass}
+              onClick={() => onCopy(getFullPostText(postDraft), "完整笔记")}
+              type="button"
+            >
+              <Copy aria-hidden="true" size={16} strokeWidth={2.4} />
+              复制完整笔记
+            </button>
+            <button
+              className={quietActionClass}
+              disabled={isSavingDraft}
+              onClick={onSaveDraft}
+              type="button"
+            >
+              <Save aria-hidden="true" size={16} strokeWidth={2.4} />
+              {isSavingDraft ? "保存中" : "保存草稿"}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2" aria-label="局部复制">
+            <button
+              className={secondaryCopyClass}
+              onClick={() => onCopy(postDraft.title, "标题")}
+              type="button"
+            >
+              复制标题
+            </button>
+            <button
+              className={secondaryCopyClass}
+              onClick={() => onCopy(postDraft.coverLine, "封面文案")}
+              type="button"
+            >
+              复制封面文案
+            </button>
+            <button
+              className={secondaryCopyClass}
+              onClick={() => onCopy(getPostBodyText(postDraft), "正文")}
+              type="button"
+            >
+              复制正文
+            </button>
+            <button
+              className={secondaryCopyClass}
+              onClick={() => onCopy(copyTagsText, "标签")}
+              type="button"
+            >
+              复制标签
+            </button>
+            <button
+              className={secondaryCopyClass}
+              onClick={() => onCopy(postDraft.imagePrompt, "封面提示")}
+              type="button"
+            >
+              复制封面提示
+            </button>
+          </div>
+          {draftStale ? (
+            <p className="m-0 text-[0.8rem] font-semibold leading-relaxed text-[var(--muted)]">
+              大纲已调整，需要新版内容时请回到大纲区重新生成。
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {savedDrafts.length ? (
         <div className="grid gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3">
-          <h3 className="text-[0.82rem] font-black text-[var(--ink)]">
+          <h3 className="text-[0.82rem] font-bold text-[var(--ink)]">
             已保存草稿
           </h3>
           <div className="grid gap-2" aria-label="已保存草稿">
@@ -272,7 +269,7 @@ export function PostEditor({
                 <span className="font-mono text-[0.72rem] font-extrabold text-[var(--red-strong)]">
                   {draft.savedAt}
                 </span>
-                <strong className="text-[0.86rem] font-black leading-snug">
+                <strong className="text-[0.86rem] font-bold leading-snug">
                   {draft.title}
                 </strong>
               </button>

@@ -38,9 +38,9 @@ export function OutlineWorkspace({
     Record<string, boolean>
   >({});
   const primaryActionClass =
-    "min-h-9 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-2.5 font-black text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
+    "min-h-9 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-3 font-bold text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
   const quietActionClass =
-    "min-h-9 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-2.5 font-black text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
+    "min-h-9 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-bold text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
   const effectiveOpenBatchById = useMemo(() => {
     const nextOpenBatchById: Record<string, boolean> = {};
@@ -63,11 +63,11 @@ export function OutlineWorkspace({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="m-0 font-mono text-xs font-black text-[var(--red)]">
+          <p className="m-0 text-xs font-bold text-[var(--muted)]">
             大纲
           </p>
           <h2
-            className="text-[1.08rem] font-black leading-tight text-[var(--ink)]"
+            className="text-[1.08rem] font-bold leading-tight text-[var(--ink)]"
             id="outline-title"
           >
             选择并调整方向
@@ -96,18 +96,20 @@ export function OutlineWorkspace({
                 // Ignore toggle events caused by React updating the controlled open prop.
                 if (!event.nativeEvent.isTrusted) return;
 
+                const isOpen = event.currentTarget.open;
+
                 setTouchedBatchById((previousTouchedBatchById) => ({
                   ...previousTouchedBatchById,
                   [batchKey]: true,
                 }));
                 setOpenBatchById((previousOpenBatchById) => ({
                   ...previousOpenBatchById,
-                  [batchKey]: event.currentTarget.open,
+                  [batchKey]: isOpen,
                 }));
               }}
               open={Boolean(effectiveOpenBatchById[batchKey])}
             >
-              <summary className="cursor-pointer text-[0.82rem] font-black text-[var(--ink)] marker:text-[var(--red)]">
+              <summary className="cursor-pointer text-[0.82rem] font-bold text-[var(--ink)] marker:text-[var(--red)]">
                 {isLatestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
                 ，{group.outlines.length} 个方向
               </summary>
@@ -128,13 +130,13 @@ export function OutlineWorkspace({
                       onClick={() => onSelectOutline(outline)}
                       type="button"
                     >
-                      <span className="flex items-center gap-2 text-[0.72rem] font-black text-[var(--muted)]">
+                      <span className="flex items-center gap-2 text-[0.72rem] font-bold text-[var(--muted)]">
                         <strong className="rounded-full bg-[var(--red)] px-2 py-0.5 text-[0.68rem] text-white">
                           {meta.mark}
                         </strong>
                         <em className="not-italic">{outline.label}</em>
                       </span>
-                      <span className="text-[0.94rem] font-black leading-snug text-[var(--ink)]">
+                      <span className="text-[0.94rem] font-bold leading-snug text-[var(--ink)]">
                         {outline.title}
                       </span>
                       <span className="line-clamp-3 text-[0.78rem] font-semibold leading-relaxed text-[var(--muted)]">
@@ -153,10 +155,10 @@ export function OutlineWorkspace({
         <article className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="grid gap-1">
-              <span className="text-[0.72rem] font-black uppercase tracking-[0.12em] text-[var(--muted)]">
-                正在编辑
+              <span className="text-[0.72rem] font-bold text-[var(--muted)]">
+                编辑中的大纲
               </span>
-              <strong className="text-[0.96rem] font-black text-[var(--ink)]">
+              <strong className="text-[0.96rem] font-bold text-[var(--ink)]">
                 {toneMeta[selectedOutline.tone].name}
               </strong>
             </div>
