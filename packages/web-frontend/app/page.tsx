@@ -671,7 +671,11 @@ export default function Home() {
   }
 
   async function generateImage() {
-    if (generatingImageDraftId) return;
+    if (generatingImageDraftId) {
+      setStatusMessage("已有封面图正在生成，请稍等。");
+      return;
+    }
+
     if (!postDraft) return;
     if (!accessToken) {
       setStatusMessage("请先登录，再生成封面图。");

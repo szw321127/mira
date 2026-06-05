@@ -140,11 +140,19 @@ test("page merges generated image fields without overwriting local copy", () => 
   const mergeStart = source.indexOf("function mergePostDraftImageFields");
   const mergeEnd = source.indexOf("\nexport default function Home", mergeStart);
   const mergeSource = source.slice(mergeStart, mergeEnd);
+  const generationGuardStart = source.indexOf("if (generatingImageDraftId)");
+  const generationGuardEnd = source.indexOf("if (!postDraft)", generationGuardStart);
+  const generationGuardSource = source.slice(
+    generationGuardStart,
+    generationGuardEnd,
+  );
 
   assert.match(source, /async function generateImage/);
   assert.match(source, /function mergePostDraftImageFields/);
   assert.ok(mergeStart !== -1);
   assert.ok(mergeEnd > mergeStart);
+  assert.ok(generationGuardStart !== -1);
+  assert.ok(generationGuardEnd > generationGuardStart);
   for (const field of [
     "caption",
     "title",
@@ -156,6 +164,10 @@ test("page merges generated image fields without overwriting local copy", () => 
     assert.doesNotMatch(mergeSource, new RegExp(`\\b${field}\\b`));
   }
   assert.match(source, /generatingImageDraftId/);
+  assert.match(
+    generationGuardSource,
+    /setStatusMessage\("已有封面图正在生成，请稍等。"\);[\s\S]*return;/,
+  );
   assert.match(source, /isGenerating: isGenerating \|\| Boolean\(generatingImageDraftId\)/);
   assert.match(source, /草稿同步失败，封面图生成未开始。/);
   assert.match(source, /api\.postDrafts\.generateImage\(\s*accessToken,\s*draftId,\s*\{\s*\}/);
