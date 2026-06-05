@@ -13,26 +13,23 @@ const env = {
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 fs.closeSync(fs.openSync(databasePath, 'a'));
 
-const migrate = spawnSync('prisma', ['migrate', 'deploy'], {
-  cwd: backendRoot,
-  env,
-  shell: true,
-  stdio: 'inherit',
-});
+function run(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: backendRoot,
+    env,
+    shell: true,
+    stdio: 'inherit',
+  });
 
-if (migrate.status !== 0) {
-  process.exit(migrate.status ?? 1);
+  if (result.signal) {
+    process.kill(process.pid, result.signal);
+  }
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
 }
 
-const nest = spawnSync('nest', ['start', '--watch'], {
-  cwd: backendRoot,
-  env,
-  shell: true,
-  stdio: 'inherit',
-});
-
-if (nest.signal) {
-  process.kill(process.pid, nest.signal);
-}
-
-process.exit(nest.status ?? 0);
+run('prisma', ['generate']);
+run('prisma', ['migrate', 'deploy']);
+run('nest', ['start', '--watch']);
