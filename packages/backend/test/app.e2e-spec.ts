@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { configureApp } from './../src/configure-app';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,14 +14,22 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    configureApp(app);
     await app.init();
   });
 
   it('/ (GET)', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect({
-      name: '@rednote/backend',
-      ok: true,
-    });
+    return request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect({
+        code: 0,
+        data: {
+          name: '@rednote/backend',
+          ok: true,
+        },
+        msg: 'ok',
+      });
   });
 
   afterEach(async () => {
