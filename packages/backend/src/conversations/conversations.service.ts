@@ -134,7 +134,14 @@ export class ConversationsService {
     const data: Prisma.ConversationUpdateInput = {};
 
     if (dto.selectedOutlineId !== undefined) {
-      data.selectedOutlineId = dto.selectedOutlineId;
+      const selectedOutlineId = dto.selectedOutlineId.trim();
+
+      if (selectedOutlineId) {
+        await this.findOwnedOutline(userId, selectedOutlineId, conversationId);
+        data.selectedOutlineId = selectedOutlineId;
+      } else {
+        data.selectedOutlineId = null;
+      }
     }
 
     if (dto.statusMessage !== undefined) {
@@ -272,11 +279,11 @@ export class ConversationsService {
       throw new BadRequestException('Select an outline before generating.');
     }
 
-    const outline = await this.findOwnedOutline(userId, outlineId);
-
-    if (outline.batch.conversationId !== conversationId) {
-      throw new NotFoundException('Outline not found in this conversation.');
-    }
+    const outline = await this.findOwnedOutline(
+      userId,
+      outlineId,
+      conversationId,
+    );
 
     await this.prisma.postDraft.updateMany({
       data: { stale: true },
@@ -343,7 +350,7 @@ export class ConversationsService {
   ) {
     await this.ensureOwnedConversation(userId, conversationId);
     const draft = dto.postDraftId
-      ? await this.findOwnedPostDraft(userId, dto.postDraftId)
+      ? await this.findOwnedPostDraft(userId, dto.postDraftId, conversationId)
       : await this.prisma.postDraft.findFirst({
           orderBy: { updatedAt: 'desc' },
           where: { conversationId },
@@ -456,13 +463,18 @@ export class ConversationsService {
     return conversation;
   }
 
-  private async findOwnedOutline(userId: string, outlineId: string) {
+  private async findOwnedOutline(
+    userId: string,
+    outlineId: string,
+    conversationId?: string,
+  ) {
     const outline = await this.prisma.outline.findFirst({
       include: {
         batch: true,
       },
       where: {
         batch: {
+          conversationId,
           conversation: {
             userId,
           },
@@ -481,9 +493,11 @@ export class ConversationsService {
   private async findOwnedPostDraft(
     userId: string,
     postDraftId: string,
+    conversationId?: string,
   ): Promise<PostDraft> {
     const draft = await this.prisma.postDraft.findFirst({
       where: {
+        conversationId,
         conversation: { userId },
         id: postDraftId,
       },
