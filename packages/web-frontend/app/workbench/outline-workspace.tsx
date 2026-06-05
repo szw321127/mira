@@ -1,11 +1,14 @@
 "use client";
 
+import { useCallback, useRef, type ReactNode } from "react";
 import type { Outline, OutlineGroup } from "./types";
 import { toneMeta } from "./workspace-utils";
 
 type OutlineWorkspaceProps = {
   draftStale: boolean;
+  hasPostDraft: boolean;
   isGenerating: boolean;
+  isStartingConversation: boolean;
   latestBatch: number;
   onConfirmOutline: () => void;
   onRegenerate: () => void;
@@ -16,9 +19,40 @@ type OutlineWorkspaceProps = {
   selectedOutline: Outline | undefined;
 };
 
+type OutlineBatchDetailsProps = {
+  children: ReactNode;
+  initialOpen: boolean;
+};
+
+function OutlineBatchDetails({
+  children,
+  initialOpen,
+}: OutlineBatchDetailsProps) {
+  const hasInitializedRef = useRef(false);
+  const detailsRef = useCallback(
+    (node: HTMLDetailsElement | null) => {
+      if (!node || hasInitializedRef.current) return;
+
+      node.open = initialOpen;
+      hasInitializedRef.current = true;
+    },
+    [initialOpen],
+  );
+
+  return (
+    <details
+      className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
+      ref={detailsRef}
+    >
+      {children}
+    </details>
+  );
+}
+
 export function OutlineWorkspace({
-  draftStale,
+  hasPostDraft,
   isGenerating,
+  isStartingConversation,
   latestBatch,
   onConfirmOutline,
   onRegenerate,
@@ -45,7 +79,7 @@ export function OutlineWorkspace({
         </div>
         <button
           className="quiet-action compact"
-          disabled={isGenerating}
+          disabled={isGenerating || isStartingConversation}
           onClick={onRegenerate}
           type="button"
         >
@@ -58,11 +92,7 @@ export function OutlineWorkspace({
           const isLatestBatch = group.batch === latestBatch;
 
           return (
-            <details
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
-              key={group.batch}
-              open={isLatestBatch}
-            >
+            <OutlineBatchDetails initialOpen={isLatestBatch} key={group.batch}>
               <summary className="cursor-pointer text-[0.82rem] font-black text-[var(--ink)] marker:text-[var(--red)]">
                 {isLatestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
                 ，{group.outlines.length} 个方向
@@ -100,7 +130,7 @@ export function OutlineWorkspace({
                   );
                 })}
               </div>
-            </details>
+            </OutlineBatchDetails>
           );
         })}
       </div>
@@ -122,7 +152,7 @@ export function OutlineWorkspace({
               onClick={onConfirmOutline}
               type="button"
             >
-              {isGenerating ? "生成中" : draftStale ? "刷新图文" : "生成图文"}
+              {isGenerating ? "生成中" : hasPostDraft ? "刷新图文" : "生成图文"}
             </button>
           </div>
 

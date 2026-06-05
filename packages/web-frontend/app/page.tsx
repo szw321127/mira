@@ -967,7 +967,9 @@ export default function Home() {
 
         <OutlineWorkspace
           draftStale={draftStale}
+          hasPostDraft={Boolean(postDraft)}
           isGenerating={isGenerating}
+          isStartingConversation={isStartingConversation}
           latestBatch={latestBatch}
           onConfirmOutline={() => void confirmOutline()}
           onRegenerate={regenerateOutlines}
