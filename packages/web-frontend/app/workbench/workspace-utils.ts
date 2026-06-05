@@ -100,7 +100,6 @@ export function getDraftSignature(draft: PostDraft) {
     caption: draft.caption.trim(),
     coverLine: draft.coverLine.trim(),
     imageError: draft.imageError?.trim() ?? null,
-    imageGeneratedAt: draft.imageGeneratedAt?.trim() ?? null,
     imageProvider: draft.imageProvider?.trim() ?? null,
     imagePrompt: draft.imagePrompt.trim(),
     imageStatus: draft.imageStatus,

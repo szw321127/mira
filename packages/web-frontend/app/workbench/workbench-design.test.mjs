@@ -80,3 +80,22 @@ test("publish package image fields are mapped and restored", () => {
   assert.match(api, /\/post-drafts\/\$\{postDraftId\}\/image/);
   assert.match(api, /get: \(token: string, postDraftId: string\)/);
 });
+
+test("publish package draft signature excludes generation timestamp metadata", () => {
+  const utils = readWorkbenchFile("workspace-utils.ts");
+  const signatureStart = utils.indexOf("export function getDraftSignature");
+  const signatureEnd = utils.indexOf(
+    "\nexport function dedupeSavedDrafts",
+    signatureStart,
+  );
+
+  assert.ok(signatureStart !== -1);
+  assert.ok(signatureEnd > signatureStart);
+
+  const signatureSource = utils.slice(signatureStart, signatureEnd);
+
+  assert.doesNotMatch(signatureSource, /imageGeneratedAt/);
+  assert.match(utils, /imageGeneratedAt: draft\.imageGeneratedAt/);
+  assert.match(utils, /imageGeneratedAt: optionalString\(snapshot\.imageGeneratedAt\)/);
+  assert.match(utils, /imageGeneratedAt: optionalString\(value\.imageGeneratedAt\)/);
+});
