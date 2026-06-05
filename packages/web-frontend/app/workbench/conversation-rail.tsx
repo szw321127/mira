@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import type { AutoSaveState, ConversationRecord } from "./types";
 
 type ConversationRailProps = {
@@ -111,26 +111,15 @@ export function ConversationRail({
                     {record.snapshot?.postDraft ? "含图文" : "后端记录"}
                   </small>
                 </button>
-                <div className="grid content-between gap-1">
-                  <button
-                    aria-label={`恢复记录：${record.title}`}
-                    className="grid size-8 place-items-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] hover:text-[var(--red-strong)]"
-                    onClick={() => onRestoreConversation(record)}
-                    title="恢复"
-                    type="button"
-                  >
-                    <RotateCcw aria-hidden="true" size={14} strokeWidth={2.4} />
-                  </button>
-                  <button
-                    aria-label={`删除记录：${record.title}`}
-                    className="grid size-8 place-items-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--red-strong)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)]"
-                    onClick={() => onDeleteConversation(record)}
-                    title="删除"
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" size={14} strokeWidth={2.4} />
-                  </button>
-                </div>
+                <button
+                  aria-label={`删除记录：${record.title}`}
+                  className="grid size-8 place-items-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--red-strong)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)]"
+                  onClick={() => onDeleteConversation(record)}
+                  title="删除"
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" size={14} strokeWidth={2.4} />
+                </button>
               </li>
             );
           })}
