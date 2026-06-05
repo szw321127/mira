@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import {
   api,
   apiClient,
@@ -144,6 +145,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function getDraftSignature(draft: PostDraft) {
+  return JSON.stringify({
+    caption: draft.caption.trim(),
+    coverLine: draft.coverLine.trim(),
+    imagePrompt: draft.imagePrompt.trim(),
+    sections: draft.sections.map((section) => section.trim()),
+    tags: draft.tags.map((tag) => tag.trim()),
+    title: draft.title.trim(),
+  });
+}
+
+function dedupeSavedDrafts(drafts: SavedDraft[]) {
+  const signatures = new Set<string>();
+
+  return drafts.filter((draft) => {
+    const signature = getDraftSignature(draft);
+
+    if (signatures.has(signature)) return false;
+
+    signatures.add(signature);
+    return true;
+  });
 }
 
 function mapSavedDraft(savedDraft: BackendSavedDraft): SavedDraft | null {
@@ -303,9 +328,11 @@ function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
   if (value.postDraft && !postDraft) return null;
 
   const savedDrafts = Array.isArray(value.savedDrafts)
-    ? value.savedDrafts
-        .map((draft) => mapSnapshotSavedDraft(draft))
-        .filter((draft): draft is SavedDraft => Boolean(draft))
+    ? dedupeSavedDrafts(
+        value.savedDrafts
+          .map((draft) => mapSnapshotSavedDraft(draft))
+          .filter((draft): draft is SavedDraft => Boolean(draft)),
+      )
     : [];
 
   return {
@@ -366,6 +393,7 @@ export default function Home() {
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [briefError, setBriefError] = useState("");
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [conversationRecords, setConversationRecords] = useState<ConversationRecord[]>([]);
@@ -594,9 +622,11 @@ export default function Home() {
     const nextPostDraft = conversation.currentPostDraft
       ? mapBackendPostDraft(conversation.currentPostDraft)
       : null;
-    const nextSavedDrafts = conversation.savedDrafts
-      .map((savedDraft) => mapSavedDraft(savedDraft))
-      .filter((savedDraft): savedDraft is SavedDraft => Boolean(savedDraft));
+    const nextSavedDrafts = dedupeSavedDrafts(
+      conversation.savedDrafts
+        .map((savedDraft) => mapSavedDraft(savedDraft))
+        .filter((savedDraft): savedDraft is SavedDraft => Boolean(savedDraft)),
+    );
 
     setBatch(
       nextOutlines.length
@@ -927,11 +957,24 @@ export default function Home() {
   }
 
   async function saveDraft() {
+    if (isSavingDraft) return;
     if (!postDraft) return;
     if (!accessToken) {
       setStatusMessage("请先登录，再保存草稿。");
       return;
     }
+
+    const draftSignature = getDraftSignature(postDraft);
+    const existingDraft = savedDrafts.find(
+      (draft) => getDraftSignature(draft) === draftSignature,
+    );
+
+    if (existingDraft) {
+      setStatusMessage(`这份草稿已在 ${existingDraft.savedAt} 保存过。`);
+      return;
+    }
+
+    setIsSavingDraft(true);
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
@@ -943,12 +986,16 @@ export default function Home() {
       const mappedDraft = mapSavedDraft(savedDraft);
 
       if (mappedDraft) {
-        setSavedDrafts((drafts) => [mappedDraft, ...drafts].slice(0, 3));
+        setSavedDrafts((drafts) =>
+          dedupeSavedDrafts([mappedDraft, ...drafts]).slice(0, 3),
+        );
       }
 
       setStatusMessage("已保存草稿，后端会保留这次创作状态。");
       await refreshConversationRecords(accessToken);
     } catch {
+    } finally {
+      setIsSavingDraft(false);
     }
   }
 
@@ -1360,13 +1407,6 @@ export default function Home() {
             >
               {isGenerating ? "生成中" : "生成大纲"}
             </button>
-            <button
-              className="quiet-action"
-              disabled={isGenerating || isStartingConversation}
-              onClick={regenerateOutlines}
-            >
-              换一批
-            </button>
           </div>
           <div className="signal-board" aria-label="生成偏好">
             {["收藏率", "图文节奏", "生活感", "可执行"].map((item) => (
@@ -1381,18 +1421,24 @@ export default function Home() {
               </div>
               <div className="history-heading-actions">
                 <button
-                  className="quiet-action compact"
+                  aria-label={isStartingConversation ? "新建对话中" : "新增对话"}
+                  className="icon-button"
+                  data-tooltip={isStartingConversation ? "新建中" : "新增对话"}
                   disabled={!isHistoryReady || isStartingConversation || isGenerating}
                   onClick={() => void startNewConversation()}
+                  title={isStartingConversation ? "新建中" : "新增对话"}
                 >
-                  {isStartingConversation ? "新建中" : "新增对话"}
+                  <Plus aria-hidden="true" size={16} strokeWidth={2.4} />
                 </button>
                 <button
-                  className="quiet-action compact"
+                  aria-label="立即保存"
+                  className="icon-button"
+                  data-tooltip="立即保存"
                   disabled={!isHistoryReady}
                   onClick={() => void saveConversationRecord()}
+                  title="立即保存"
                 >
-                  立即保存
+                  <Save aria-hidden="true" size={16} strokeWidth={2.4} />
                 </button>
               </div>
             </div>
@@ -1413,11 +1459,13 @@ export default function Home() {
                       </small>
                     </button>
                     <button
-                      className="history-delete"
+                      className="history-delete icon-button"
                       aria-label={`删除记录：${record.title}`}
+                      data-tooltip="删除"
                       onClick={() => void deleteConversationRecord(record)}
+                      title="删除"
                     >
-                      删除
+                      <Trash2 aria-hidden="true" size={15} strokeWidth={2.3} />
                     </button>
                   </li>
                 ))}
@@ -1618,17 +1666,10 @@ export default function Home() {
             </button>
             <button
               className="quiet-action compact"
-              disabled={!postDraft}
+              disabled={!postDraft || isSavingDraft}
               onClick={() => void saveDraft()}
             >
-              保存草稿
-            </button>
-            <button
-              className="quiet-action compact"
-              disabled={!postDraft || !selectedOutline || isGenerating}
-              onClick={() => void confirmOutline()}
-            >
-              刷新预览
+              {isSavingDraft ? "保存中" : "保存草稿"}
             </button>
           </div>
 
