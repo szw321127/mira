@@ -7,6 +7,13 @@ import type {
 } from './generation.types';
 
 const DEFAULT_TOPIC = '周末在家低成本做一顿有仪式感的晚餐，适合发小红书';
+const DEFAULT_DRAFT_POINTS = [
+  '痛点场景',
+  '准备清单',
+  '操作步骤',
+  '避坑提醒',
+  '结尾互动',
+];
 
 const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
   checklist: { name: '清单拆解', mark: '清单' },
@@ -103,9 +110,7 @@ export class GenerationService {
   createPostDraft(topic: string, outline: OutlineForDraft): GeneratedPostDraft {
     const normalizedTopic = this.normalizeTopic(topic);
     const meta = toneMeta[outline.tone] ?? toneMeta.guide;
-    const points = outline.points.length
-      ? outline.points
-      : ['痛点场景', '准备清单', '操作步骤', '避坑提醒', '结尾互动'];
+    const points = this.normalizeDraftPoints(outline.points);
 
     return {
       caption: this.createCaption(normalizedTopic, outline, meta.name),
@@ -127,7 +132,7 @@ export class GenerationService {
     outline: OutlineForDraft,
     toneName: string,
   ): string {
-    return `这篇想写给刚开始做小红书图文的人：${topic}其实不用一开始就追求复杂，只要先把「${outline.hook}」讲清楚，再用${toneName}的节奏把方法拆开，读者就能马上知道该怎么照着做。`;
+    return `关于「${topic}」，这份${toneName}适合先收藏。把准备、步骤和容易踩坑的地方放在一条顺手流程里，照着做会比临时想办法更稳，也更容易做出${outline.label}的效果。`;
   }
 
   private createCoverLine(toneName: string, label: string): string {
@@ -136,8 +141,27 @@ export class GenerationService {
   }
 
   private createPostTitle(topic: string, outlineTitle: string): string {
+    const normalizedTitle = outlineTitle.replace('：', ' | ');
+    const topicStem = topic.slice(0, 18);
     const compactTopic = topic.length > 18 ? `${topic.slice(0, 18)}...` : topic;
-    return `${outlineTitle.replace('：', ' | ')}｜${compactTopic}`;
+    const titleAlreadyIncludesTopic =
+      normalizedTitle.includes(topic) ||
+      (topicStem.length > 0 && normalizedTitle.includes(topicStem));
+
+    return titleAlreadyIncludesTopic
+      ? normalizedTitle
+      : `${normalizedTitle}｜${compactTopic}`;
+  }
+
+  private normalizeDraftPoints(points: string[]): string[] {
+    const providedPoints = points
+      .map((point) => point.trim())
+      .filter((point) => point.length > 0)
+      .slice(0, DEFAULT_DRAFT_POINTS.length);
+
+    return DEFAULT_DRAFT_POINTS.map(
+      (fallbackPoint, index) => providedPoints[index] ?? fallbackPoint,
+    );
   }
 
   private createSection(
@@ -147,20 +171,48 @@ export class GenerationService {
     tone: OutlineTone,
   ): string {
     const sectionNo = index + 1;
+    const readerPoint = this.createReaderPointLabel(point);
     const toneLead: Record<OutlineTone, string> = {
       checklist: '这一项适合收藏后逐条核对',
       guide: '这一点可以马上用起来',
       story: '这一幕会很有生活感',
     };
     const sectionCopy = [
-      `刚开始做「${topic}」时，最容易卡在不知道从哪里下手。把「${point}」当成起点，先处理眼前最具体的一件小事，整个过程会轻很多。`,
-      `轮到「${point}」时，可以把时间、材料和顺序摆清楚：今天有什么、少什么、哪一步最省力。信息越具体，照做时越不容易慌。`,
-      `如果「${point}」里需要取舍，就把标准落到日常：好不好清洗、会不会浪费、第二天还能不能继续用。这样不靠“高级”“好看”硬撑，也更适合收藏。`,
-      `「${point}」最值得留意的是失败点。遇到来不及、材料不够或效果不稳的情况，换一个简单版本也可以完成，不会因为一步卡住就放弃。`,
-      `最后回到「${point}」：保存这份顺序，今天只挑一个最轻的动作开始。做完再补一张照片或一句复盘，下一次会更顺手。`,
+      `刚开始做「${topic}」时，最容易卡在不知道从哪里下手。把「${readerPoint}」当成起点，先处理眼前最具体的一件小事，整个过程会轻很多。`,
+      `轮到「${readerPoint}」时，可以把时间、材料和顺序摆清楚：今天有什么、少什么、哪一步最省力。信息越具体，照做时越不容易慌。`,
+      `如果「${readerPoint}」里需要取舍，就把标准落到日常：好不好清洗、会不会浪费、第二天还能不能继续用。这样不靠“高级”“好看”硬撑，也更适合收藏。`,
+      `「${readerPoint}」最值得留意的是失败点。遇到来不及、材料不够或效果不稳的情况，换一个简单版本也可以完成，不会因为一步卡住就放弃。`,
+      `最后回到「${readerPoint}」：保存这份顺序，今天只挑一个最轻的动作开始。做完再补一张照片或一句复盘，下一次会更顺手。`,
     ];
 
-    return `${sectionNo}. ${point}：${toneLead[tone]}。${sectionCopy[index % sectionCopy.length]}`;
+    return `${sectionNo}. ${readerPoint}：${toneLead[tone]}。${sectionCopy[index % sectionCopy.length]}`;
+  }
+
+  private createReaderPointLabel(point: string): string {
+    const trimmedPoint = point.trim();
+    const replacements: Array<[RegExp, string]> = [
+      [/给读者的建议/g, '实用建议'],
+      [/给读者/g, '给你'],
+      [/第一屏直接展示/g, '开头展示'],
+      [/第一屏/g, '开头画面'],
+      [/用一句话定义/g, '一句话看懂'],
+      [/定义这篇内容/g, '看懂重点'],
+      [/每一页只解决/g, '每页聚焦'],
+      [/讲清楚/g, '说透'],
+      [/拆开/g, '整理'],
+      [/直接写出/g, '列出'],
+      [/不要堆概念/g, '少绕弯'],
+      [/结尾把行动收回来/g, '最后一步'],
+      [/提醒读者/g, '记得'],
+      [/写 2 到 3 句/g, '补充细节'],
+      [/用定调的方式/g, '开头语气'],
+      [/避免空泛形容/g, '说具体'],
+    ];
+
+    return replacements.reduce(
+      (label, [pattern, replacement]) => label.replace(pattern, replacement),
+      trimmedPoint,
+    );
   }
 
   private normalizeTopic(topic: string): string {
