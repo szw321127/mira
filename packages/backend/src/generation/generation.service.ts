@@ -102,21 +102,65 @@ export class GenerationService {
 
   createPostDraft(topic: string, outline: OutlineForDraft): GeneratedPostDraft {
     const normalizedTopic = this.normalizeTopic(topic);
-    const firstPoint = outline.points[0] ?? '核心场景';
-    const secondPoint = outline.points[1] ?? '执行步骤';
     const meta = toneMeta[outline.tone] ?? toneMeta.guide;
+    const points = outline.points.length
+      ? outline.points
+      : ['痛点场景', '准备清单', '操作步骤', '避坑提醒', '结尾互动'];
 
     return {
-      caption: `今天这篇围绕「${normalizedTopic}」展开，用「${firstPoint}」先把读者带进来，再用「${secondPoint}」给出清楚路径。整体语气保持自然、具体、可收藏。`,
-      coverLine: `${meta.name} / ${outline.label}`,
-      imagePrompt: `竖版图文封面，主题为「${normalizedTopic}」，画面有手写批注、红色贴纸、生活道具、自然窗光，标题区域留白清楚。`,
-      sections: outline.points.map((point, index) => {
-        const verbs = ['定调', '展开', '证明', '补充', '收束'];
-        return `${index + 1}. ${point}：用${verbs[index] ?? '说明'}的方式写 2 到 3 句，避免空泛形容。`;
-      }),
-      tags: ['小红书图文', meta.name, outline.label, '可编辑大纲'],
-      title: outline.title.replace('：', ' | '),
+      caption: this.createCaption(normalizedTopic, outline, meta.name),
+      coverLine: this.createCoverLine(meta.name, outline.label),
+      imagePrompt: `竖版小红书图文封面，主题为「${normalizedTopic}」，主标题使用「${this.createCoverLine(
+        meta.name,
+        outline.label,
+      )}」，画面包含自然窗光、手写批注、红色贴纸和生活道具，标题区域留白清楚，整体干净、有真实创作感。`,
+      sections: points.map((point, index) =>
+        this.createSection(normalizedTopic, point, index, outline.tone),
+      ),
+      tags: ['小红书图文', meta.name, outline.label, '可直接发布'],
+      title: this.createPostTitle(normalizedTopic, outline.title),
     };
+  }
+
+  private createCaption(
+    topic: string,
+    outline: OutlineForDraft,
+    toneName: string,
+  ): string {
+    return `这篇想写给刚开始做小红书图文的人：${topic}其实不用一开始就追求复杂，只要先把「${outline.hook}」讲清楚，再用${toneName}的节奏把方法拆开，读者就能马上知道该怎么照着做。`;
+  }
+
+  private createCoverLine(toneName: string, label: string): string {
+    const coverLine = `${toneName} ${label}`;
+    return coverLine.length > 18 ? coverLine.slice(0, 18) : coverLine;
+  }
+
+  private createPostTitle(topic: string, outlineTitle: string): string {
+    const compactTopic = topic.length > 18 ? `${topic.slice(0, 18)}...` : topic;
+    return `${outlineTitle.replace('：', ' | ')}｜${compactTopic}`;
+  }
+
+  private createSection(
+    topic: string,
+    point: string,
+    index: number,
+    tone: OutlineTone,
+  ): string {
+    const sectionNo = index + 1;
+    const toneLead: Record<OutlineTone, string> = {
+      checklist: '可以直接照着这一步检查',
+      guide: '真正好执行的关键在这里',
+      story: '这一段要写得像发生在今天',
+    };
+    const practicalTip = [
+      `先把「${point}」放到第一屏附近，让读者一眼知道这篇和「${topic}」有关。`,
+      `准备内容时不要堆概念，直接写出一个能照做的小动作，比如时间、材料、顺序或判断标准。`,
+      `如果过程里有取舍，把原因说清楚，比单纯说“高级”“好看”更容易被收藏。`,
+      `遇到容易失败的地方，提前写出替代方案，读者会觉得这篇笔记真的替自己想过。`,
+      `结尾把行动收回来：提醒读者先保存，再选一个最轻的步骤今天就试。`,
+    ];
+
+    return `${sectionNo}. ${point}：${toneLead[tone]}。${practicalTip[index % practicalTip.length]}`;
   }
 
   private normalizeTopic(topic: string): string {
