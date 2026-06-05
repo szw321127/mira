@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   apiClient,
@@ -75,6 +75,8 @@ type ConversationRecord = {
 
 type AuthMode = "login" | "register";
 
+type AutoSaveState = "idle" | "saving" | "saved" | "error";
+
 type AuthSession = {
   accessToken: string;
   user: AuthUser;
@@ -102,6 +104,13 @@ function formatRecordTime(value: string) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(value));
+}
+
+function formatAutoSaveTime(value: Date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
 }
 
 function mapBackendOutline(outline: BackendOutline, batch: number): Outline {
@@ -167,6 +176,169 @@ function mapSavedDraft(savedDraft: BackendSavedDraft): SavedDraft | null {
   };
 }
 
+function mapSnapshotOutline(value: unknown): Outline | null {
+  if (
+    !isRecord(value) ||
+    typeof value.batch !== "number" ||
+    typeof value.hook !== "string" ||
+    typeof value.id !== "string" ||
+    typeof value.label !== "string" ||
+    !isStringArray(value.points) ||
+    typeof value.title !== "string" ||
+    typeof value.tone !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    batch: value.batch,
+    hook: value.hook,
+    id: value.id,
+    label: value.label,
+    points: value.points,
+    title: value.title,
+    tone: isOutlineTone(value.tone) ? value.tone : "guide",
+  };
+}
+
+function mapSnapshotPostDraft(value: unknown): PostDraft | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.coverLine !== "string" ||
+    typeof value.caption !== "string" ||
+    typeof value.imagePrompt !== "string" ||
+    !isStringArray(value.sections) ||
+    !isStringArray(value.tags)
+  ) {
+    return null;
+  }
+
+  return {
+    caption: value.caption,
+    coverLine: value.coverLine,
+    id: value.id,
+    imagePrompt: value.imagePrompt,
+    sections: value.sections,
+    stale: typeof value.stale === "boolean" ? value.stale : false,
+    tags: value.tags,
+    title: value.title,
+  };
+}
+
+function mapUndoSnapshot(value: unknown): Snapshot | null {
+  if (
+    !isRecord(value) ||
+    typeof value.batch !== "number" ||
+    !Array.isArray(value.outlines) ||
+    typeof value.selectedId !== "string"
+  ) {
+    return null;
+  }
+
+  const mappedOutlines = value.outlines
+    .map((outline) => mapSnapshotOutline(outline))
+    .filter((outline): outline is Outline => Boolean(outline));
+
+  if (mappedOutlines.length !== value.outlines.length) return null;
+
+  const postDraft =
+    value.postDraft === null || value.postDraft === undefined
+      ? null
+      : mapSnapshotPostDraft(value.postDraft);
+
+  if (value.postDraft && !postDraft) return null;
+
+  return {
+    batch: value.batch,
+    outlines: mappedOutlines,
+    postDraft,
+    selectedId: value.selectedId,
+  };
+}
+
+function mapSnapshotSavedDraft(value: unknown): SavedDraft | null {
+  if (
+    !isRecord(value) ||
+    typeof value.savedAt !== "string" ||
+    typeof value.savedDraftId !== "string"
+  ) {
+    return null;
+  }
+
+  const draft = mapSnapshotPostDraft(value);
+
+  if (!draft) return null;
+
+  return {
+    ...draft,
+    savedAt: value.savedAt,
+    savedDraftId: value.savedDraftId,
+  };
+}
+
+function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
+  if (
+    !isRecord(value) ||
+    typeof value.batch !== "number" ||
+    !Array.isArray(value.outlines) ||
+    typeof value.seed !== "string" ||
+    typeof value.selectedId !== "string"
+  ) {
+    return null;
+  }
+
+  const outlines = value.outlines
+    .map((outline) => mapSnapshotOutline(outline))
+    .filter((outline): outline is Outline => Boolean(outline));
+
+  if (outlines.length !== value.outlines.length) return null;
+
+  const postDraft =
+    value.postDraft === null || value.postDraft === undefined
+      ? null
+      : mapSnapshotPostDraft(value.postDraft);
+
+  if (value.postDraft && !postDraft) return null;
+
+  const savedDrafts = Array.isArray(value.savedDrafts)
+    ? value.savedDrafts
+        .map((draft) => mapSnapshotSavedDraft(draft))
+        .filter((draft): draft is SavedDraft => Boolean(draft))
+    : [];
+
+  return {
+    batch: value.batch,
+    briefError: typeof value.briefError === "string" ? value.briefError : "",
+    draftStale:
+      typeof value.draftStale === "boolean" ? value.draftStale : false,
+    lastSnapshot: mapUndoSnapshot(value.lastSnapshot),
+    outlines,
+    postDraft,
+    savedDrafts,
+    seed: value.seed,
+    selectedId: value.selectedId,
+    statusMessage:
+      typeof value.statusMessage === "string"
+        ? value.statusMessage
+        : "已从自动保存恢复当前工作状态。",
+  };
+}
+
+function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
+  return JSON.stringify({
+    batch: snapshot.batch,
+    briefError: snapshot.briefError,
+    draftStale: snapshot.draftStale,
+    outlines: snapshot.outlines,
+    postDraft: snapshot.postDraft,
+    savedDrafts: snapshot.savedDrafts,
+    seed: snapshot.seed,
+    selectedId: snapshot.selectedId,
+  });
+}
+
 function getPostText(postDraft: PostDraft) {
   return [
     postDraft.title,
@@ -198,8 +370,313 @@ export default function Home() {
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [conversationRecords, setConversationRecords] = useState<ConversationRecord[]>([]);
   const [isHistoryReady, setIsHistoryReady] = useState(false);
+  const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
+  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
+  const [lastAutoSavedAt, setLastAutoSavedAt] = useState("");
   const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
+  const autoSaveRunRef = useRef(0);
+  const lastAutoSavedKeyRef = useRef("");
+
+  useEffect(() => {
+    return apiClient.interceptors.error.use((error) => {
+      if (error.code === 401 && accessToken) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        setAccessToken(null);
+        setAuthUser(null);
+        setConversationId(null);
+        setStatusMessage("登录已过期，请重新登录。");
+        return;
+      }
+
+      if (authUser) {
+        setStatusMessage(error.message);
+      }
+    });
+  }, [accessToken, authUser]);
+
+  const latestBatch = useMemo(
+    () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
+    [outlines],
+  );
+
+  const outlineGroups = useMemo(() => {
+    return outlines.reduce<Array<{ batch: number; outlines: Outline[] }>>(
+      (groups, outline) => {
+        const group = groups.find((item) => item.batch === outline.batch);
+
+        if (group) {
+          group.outlines.push(outline);
+        } else {
+          groups.push({ batch: outline.batch, outlines: [outline] });
+        }
+
+        return groups;
+      },
+      [],
+    );
+  }, [outlines]);
+
+  const selectedOutline = useMemo(
+    () => outlines.find((outline) => outline.id === selectedId) ?? outlines[0],
+    [outlines, selectedId],
+  );
+
+  const currentStep = postDraft ? 3 : selectedOutline ? 2 : 1;
+
+  const workspaceSnapshot = useMemo<WorkspaceSnapshot>(
+    () => ({
+      batch,
+      briefError,
+      draftStale,
+      lastSnapshot,
+      outlines,
+      postDraft,
+      savedDrafts,
+      seed,
+      selectedId,
+      statusMessage,
+    }),
+    [
+      batch,
+      briefError,
+      draftStale,
+      lastSnapshot,
+      outlines,
+      postDraft,
+      savedDrafts,
+      seed,
+      selectedId,
+      statusMessage,
+    ],
+  );
+
+  const autoSaveKey = useMemo(
+    () => createAutoSaveKey(workspaceSnapshot),
+    [workspaceSnapshot],
+  );
+
+  const autoSaveLabel = useMemo(() => {
+    if (autoSaveState === "saving") return "自动保存中";
+    if (autoSaveState === "error") return "自动保存失败";
+    if (lastAutoSavedAt) return `已自动保存 ${lastAutoSavedAt}`;
+    return "等待自动保存";
+  }, [autoSaveState, lastAutoSavedAt]);
+
+  useEffect(() => {
+    if (
+      !accessToken ||
+      !authUser ||
+      !conversationId ||
+      isGenerating ||
+      isStartingConversation ||
+      autoSaveKey === lastAutoSavedKeyRef.current
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const runId = autoSaveRunRef.current + 1;
+      autoSaveRunRef.current = runId;
+      setAutoSaveState("saving");
+
+      const snapshot = workspaceSnapshot;
+      const topic = seed.trim();
+      const fallbackTitle = topic || selectedOutline?.title || postDraft?.title || "新对话";
+      const updateBody: {
+        selectedOutlineId?: string;
+        statusMessage?: string;
+        title?: string;
+        topic?: string;
+      } = {
+        selectedOutlineId: selectedId,
+        statusMessage,
+        title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
+      };
+
+      if (topic) updateBody.topic = topic;
+
+      void (async () => {
+        await api.conversations.update(accessToken, conversationId, updateBody);
+        const savedSnapshot = await api.conversations.createSnapshot(
+          accessToken,
+          conversationId,
+          { snapshot: snapshot as unknown as Record<string, unknown> },
+        );
+
+        if (runId !== autoSaveRunRef.current) return;
+
+        lastAutoSavedKeyRef.current = autoSaveKey;
+        setAutoSaveState("saved");
+        setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
+        setConversationRecords((records) => {
+          const record: ConversationRecord = {
+            conversationId,
+            id: conversationId,
+            outlineCount: snapshot.outlines.length,
+            savedAt: formatRecordTime(savedSnapshot.createdAt),
+            snapshot,
+            title: updateBody.title ?? "新对话",
+            topic: topic || snapshot.seed || DEFAULT_SEED,
+          };
+
+          return [
+            record,
+            ...records.filter((item) => item.conversationId !== conversationId),
+          ].slice(0, 8);
+        });
+      })().catch(() => {
+        if (runId !== autoSaveRunRef.current) return;
+        setAutoSaveState("error");
+      });
+    }, 1400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    accessToken,
+    authUser,
+    autoSaveKey,
+    conversationId,
+    isGenerating,
+    isStartingConversation,
+    postDraft?.title,
+    seed,
+    selectedId,
+    selectedOutline?.title,
+    statusMessage,
+    workspaceSnapshot,
+  ]);
+
+  function mapConversationRecord(
+    conversation: BackendConversationSummary,
+  ): ConversationRecord {
+    return {
+      conversationId: conversation.id,
+      id: conversation.id,
+      outlineCount: conversation.outlineBatchCount * 3,
+      savedAt: formatRecordTime(conversation.updatedAt),
+      snapshot: null,
+      title: conversation.title,
+      topic: conversation.topic,
+    };
+  }
+
+  function applyConversation(
+    conversation: BackendConversation,
+    options: {
+      keepLastSnapshot?: boolean;
+      message?: string;
+      preferSnapshot?: boolean;
+    } = {},
+  ) {
+    if (options.preferSnapshot) {
+      const latestSnapshot = conversation.snapshots[0];
+      const mappedSnapshot = latestSnapshot
+        ? mapWorkspaceSnapshot(latestSnapshot.snapshot)
+        : null;
+
+      if (mappedSnapshot) {
+        setConversationId(conversation.id);
+        applyWorkspaceSnapshot(
+          mappedSnapshot,
+          options.message ?? "已从自动保存恢复当前工作状态。",
+        );
+        setLastAutoSavedAt(formatAutoSaveTime(new Date(latestSnapshot.createdAt)));
+        return;
+      }
+    }
+
+    const nextOutlines = conversation.outlineBatches.flatMap((outlineBatch) =>
+      outlineBatch.outlines.map((outline) =>
+        mapBackendOutline(outline, outlineBatch.batchNo),
+      ),
+    );
+    const nextPostDraft = conversation.currentPostDraft
+      ? mapBackendPostDraft(conversation.currentPostDraft)
+      : null;
+    const nextSavedDrafts = conversation.savedDrafts
+      .map((savedDraft) => mapSavedDraft(savedDraft))
+      .filter((savedDraft): savedDraft is SavedDraft => Boolean(savedDraft));
+
+    setBatch(
+      nextOutlines.length
+        ? Math.max(...nextOutlines.map((outline) => outline.batch))
+        : -1,
+    );
+    setBriefError("");
+    setConversationId(conversation.id);
+    setDraftStale(Boolean(nextPostDraft?.stale));
+    if (!options.keepLastSnapshot) setLastSnapshot(null);
+    setOutlines(nextOutlines);
+    setPostDraft(nextPostDraft);
+    setSavedDrafts(nextSavedDrafts);
+    setSeed(conversation.topic || DEFAULT_SEED);
+    setSelectedId(conversation.selectedOutlineId ?? nextOutlines[0]?.id ?? "");
+    setStatusMessage(
+      options.message ??
+        conversation.statusMessage ??
+        "已从后端恢复当前工作状态。",
+    );
+  }
+
+  function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot, message: string) {
+    setBatch(snapshot.batch);
+    setBriefError(snapshot.briefError);
+    setDraftStale(snapshot.draftStale);
+    setLastSnapshot(snapshot.lastSnapshot);
+    setOutlines(snapshot.outlines);
+    setPostDraft(snapshot.postDraft);
+    setSavedDrafts(snapshot.savedDrafts);
+    setSeed(snapshot.seed);
+    setSelectedId(snapshot.selectedId);
+    setStatusMessage(message);
+    lastAutoSavedKeyRef.current = createAutoSaveKey(snapshot);
+    setAutoSaveState("saved");
+    setLastAutoSavedAt(formatAutoSaveTime(new Date()));
+  }
+
+  async function refreshConversationRecords(token = accessToken) {
+    if (!token) return [];
+
+    const records = (await api.conversations.list(token))
+      .map((conversation) => mapConversationRecord(conversation))
+      .slice(0, 8);
+
+    setConversationRecords(records);
+    setIsHistoryReady(true);
+    return records;
+  }
+
+  async function createInitialWorkspace(token: string) {
+    const conversation = await api.conversations.create(token, {
+      topic: DEFAULT_SEED,
+    });
+    const result = await api.conversations.createOutlineBatch(token, conversation.id, {
+      prompt: DEFAULT_SEED,
+    });
+
+    applyConversation(result.conversation, {
+      message: "已连接后端，并准备好第一批方向。",
+    });
+    await refreshConversationRecords(token);
+  }
+
+  async function bootstrapWorkspace(token: string) {
+    setIsHistoryReady(false);
+
+    const records = await refreshConversationRecords(token);
+
+    if (records[0]) {
+      const conversation = await api.conversations.get(token, records[0].conversationId);
+      applyConversation(conversation, {
+        message: "已从后端恢复最近一次创作。",
+        preferSnapshot: true,
+      });
+      return;
+    }
+
+    await createInitialWorkspace(token);
+  }
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -248,158 +725,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    return apiClient.interceptors.error.use((error) => {
-      if (error.code === 401 && accessToken) {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        setAccessToken(null);
-        setAuthUser(null);
-        setConversationId(null);
-        setStatusMessage("登录已过期，请重新登录。");
-        return;
-      }
-
-      if (authUser) {
-        setStatusMessage(error.message);
-      }
-    });
-  }, [accessToken, authUser]);
-
-  const latestBatch = useMemo(
-    () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
-    [outlines],
-  );
-
-  const outlineGroups = useMemo(() => {
-    return outlines.reduce<Array<{ batch: number; outlines: Outline[] }>>(
-      (groups, outline) => {
-        const group = groups.find((item) => item.batch === outline.batch);
-
-        if (group) {
-          group.outlines.push(outline);
-        } else {
-          groups.push({ batch: outline.batch, outlines: [outline] });
-        }
-
-        return groups;
-      },
-      [],
-    );
-  }, [outlines]);
-
-  const selectedOutline = useMemo(
-    () => outlines.find((outline) => outline.id === selectedId) ?? outlines[0],
-    [outlines, selectedId],
-  );
-
-  const currentStep = postDraft ? 3 : selectedOutline ? 2 : 1;
-
-  function mapConversationRecord(
-    conversation: BackendConversationSummary,
-  ): ConversationRecord {
-    return {
-      conversationId: conversation.id,
-      id: conversation.id,
-      outlineCount: conversation.outlineBatchCount * 3,
-      savedAt: formatRecordTime(conversation.updatedAt),
-      snapshot: null,
-      title: conversation.title,
-      topic: conversation.topic,
-    };
-  }
-
-  function applyConversation(
-    conversation: BackendConversation,
-    options: { keepLastSnapshot?: boolean; message?: string } = {},
-  ) {
-    const nextOutlines = conversation.outlineBatches.flatMap((outlineBatch) =>
-      outlineBatch.outlines.map((outline) =>
-        mapBackendOutline(outline, outlineBatch.batchNo),
-      ),
-    );
-    const nextPostDraft = conversation.currentPostDraft
-      ? mapBackendPostDraft(conversation.currentPostDraft)
-      : null;
-    const nextSavedDrafts = conversation.savedDrafts
-      .map((savedDraft) => mapSavedDraft(savedDraft))
-      .filter((savedDraft): savedDraft is SavedDraft => Boolean(savedDraft));
-
-    setBatch(
-      nextOutlines.length
-        ? Math.max(...nextOutlines.map((outline) => outline.batch))
-        : -1,
-    );
-    setBriefError("");
-    setConversationId(conversation.id);
-    setDraftStale(Boolean(nextPostDraft?.stale));
-    if (!options.keepLastSnapshot) setLastSnapshot(null);
-    setOutlines(nextOutlines);
-    setPostDraft(nextPostDraft);
-    setSavedDrafts(nextSavedDrafts);
-    setSeed(conversation.topic || DEFAULT_SEED);
-    setSelectedId(conversation.selectedOutlineId ?? nextOutlines[0]?.id ?? "");
-    setStatusMessage(
-      options.message ??
-        conversation.statusMessage ??
-        "已从后端恢复当前工作状态。",
-    );
-  }
-
-  function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot, message: string) {
-    setBatch(snapshot.batch);
-    setBriefError(snapshot.briefError);
-    setDraftStale(snapshot.draftStale);
-    setLastSnapshot(snapshot.lastSnapshot);
-    setOutlines(snapshot.outlines);
-    setPostDraft(snapshot.postDraft);
-    setSavedDrafts(snapshot.savedDrafts);
-    setSeed(snapshot.seed);
-    setSelectedId(snapshot.selectedId);
-    setStatusMessage(message);
-  }
-
-  async function refreshConversationRecords(token = accessToken) {
-    if (!token) return [];
-
-    const records = (await api.conversations.list(token))
-      .map((conversation) => mapConversationRecord(conversation))
-      .slice(0, 8);
-
-    setConversationRecords(records);
-    setIsHistoryReady(true);
-    return records;
-  }
-
-  async function createInitialWorkspace(token: string) {
-    const conversation = await api.conversations.create(token, {
-      topic: DEFAULT_SEED,
-    });
-    const result = await api.conversations.createOutlineBatch(token, conversation.id, {
-      prompt: DEFAULT_SEED,
-    });
-
-    applyConversation(result.conversation, {
-      message: "已连接后端，并准备好 3 个方向。",
-    });
-    await refreshConversationRecords(token);
-  }
-
-  async function bootstrapWorkspace(token: string) {
-    setIsHistoryReady(false);
-
-    const records = await refreshConversationRecords(token);
-
-    if (records[0]) {
-      const conversation = await api.conversations.get(token, records[0].conversationId);
-      applyConversation(conversation, {
-        message: "已从后端恢复最近一次创作。",
-      });
-      return;
-    }
-
-    await createInitialWorkspace(token);
-  }
-
   async function ensureConversation(token: string) {
     if (conversationId) return conversationId;
 
@@ -409,6 +734,72 @@ export default function Home() {
 
     setConversationId(conversation.id);
     return conversation.id;
+  }
+
+  async function startNewConversation() {
+    if (!accessToken) {
+      setStatusMessage("请先登录，再新增对话。");
+      return;
+    }
+
+    setIsStartingConversation(true);
+
+    try {
+      if (conversationId && autoSaveKey !== lastAutoSavedKeyRef.current) {
+        setAutoSaveState("saving");
+
+        const snapshot = workspaceSnapshot;
+        const topic = seed.trim();
+        const fallbackTitle =
+          topic || selectedOutline?.title || postDraft?.title || "新对话";
+        const updateBody: {
+          selectedOutlineId?: string;
+          statusMessage?: string;
+          title?: string;
+          topic?: string;
+        } = {
+          selectedOutlineId: selectedId,
+          statusMessage,
+          title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
+        };
+
+        if (topic) updateBody.topic = topic;
+
+        const savedSnapshot = await api.conversations.createSnapshot(
+          accessToken,
+          conversationId,
+          { snapshot: snapshot as unknown as Record<string, unknown> },
+        );
+        await api.conversations.update(accessToken, conversationId, updateBody);
+        lastAutoSavedKeyRef.current = createAutoSaveKey(snapshot);
+        setAutoSaveState("saved");
+        setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
+      }
+
+      const conversation = await api.conversations.create(accessToken, {
+        title: "新对话",
+        topic: DEFAULT_SEED,
+      });
+
+      setBatch(-1);
+      setBriefError("");
+      setConversationId(conversation.id);
+      setDraftStale(false);
+      setLastSnapshot(null);
+      setOutlines([]);
+      setPostDraft(null);
+      setSavedDrafts([]);
+      setSeed("");
+      setSelectedId("");
+      setAutoSaveState("idle");
+      setLastAutoSavedAt("");
+      lastAutoSavedKeyRef.current = "";
+      setStatusMessage("已新建对话，写下主题后生成大纲。");
+      await refreshConversationRecords(accessToken);
+    } catch {
+    } finally {
+      setIsStartingConversation(false);
+    }
   }
 
   async function applyAuthResponse(response: AuthResponse, message: string) {
@@ -562,18 +953,7 @@ export default function Home() {
   }
 
   function getWorkspaceSnapshot(): WorkspaceSnapshot {
-    return {
-      batch,
-      briefError,
-      draftStale,
-      lastSnapshot,
-      outlines,
-      postDraft,
-      savedDrafts,
-      seed,
-      selectedId,
-      statusMessage,
-    };
+    return workspaceSnapshot;
   }
 
   async function saveConversationRecord() {
@@ -587,15 +967,23 @@ export default function Home() {
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
+      const snapshot = getWorkspaceSnapshot();
       await api.conversations.update(accessToken, currentConversationId, {
         title,
         topic,
         selectedOutlineId: selectedId,
         statusMessage,
       });
-      await api.conversations.createSnapshot(accessToken, currentConversationId, {
-        snapshot: getWorkspaceSnapshot() as unknown as Record<string, unknown>,
-      });
+      const savedSnapshot = await api.conversations.createSnapshot(
+        accessToken,
+        currentConversationId,
+        {
+          snapshot: snapshot as unknown as Record<string, unknown>,
+        },
+      );
+      lastAutoSavedKeyRef.current = createAutoSaveKey(snapshot);
+      setAutoSaveState("saved");
+      setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
       await refreshConversationRecords(accessToken);
       setStatusMessage("已保存对话记录，可从记录中恢复完整工作状态。");
     } catch {
@@ -621,6 +1009,7 @@ export default function Home() {
       );
       applyConversation(conversation, {
         message: `已恢复 ${record.savedAt} 的对话记录。`,
+        preferSnapshot: true,
       });
       await refreshConversationRecords(accessToken);
     } catch {
@@ -925,6 +1314,9 @@ export default function Home() {
               撤销新增
             </button>
           ) : null}
+          <span className={`autosave-pill is-${autoSaveState}`} aria-live="polite">
+            {autoSaveLabel}
+          </span>
           <div className="account-chip" aria-label="当前登录账号">
             <span>{authUser.name.slice(0, 1).toUpperCase()}</span>
             <strong>{authUser.name}</strong>
@@ -963,14 +1355,14 @@ export default function Home() {
           <div className="brief-actions">
             <button
               className="primary-action"
-              disabled={isGenerating}
+              disabled={isGenerating || isStartingConversation}
               onClick={() => void appendOutlineBatch()}
             >
-              {isGenerating ? "生成中" : "生成 3 个大纲"}
+              {isGenerating ? "生成中" : "生成大纲"}
             </button>
             <button
               className="quiet-action"
-              disabled={isGenerating}
+              disabled={isGenerating || isStartingConversation}
               onClick={regenerateOutlines}
             >
               换一批
@@ -987,13 +1379,22 @@ export default function Home() {
                 <p className="section-kicker">对话记录</p>
                 <strong id="history-title">保留工作状态</strong>
               </div>
-              <button
-                className="quiet-action compact"
-                disabled={!isHistoryReady}
-                onClick={() => void saveConversationRecord()}
-              >
-                保存当前
-              </button>
+              <div className="history-heading-actions">
+                <button
+                  className="quiet-action compact"
+                  disabled={!isHistoryReady || isStartingConversation || isGenerating}
+                  onClick={() => void startNewConversation()}
+                >
+                  {isStartingConversation ? "新建中" : "新增对话"}
+                </button>
+                <button
+                  className="quiet-action compact"
+                  disabled={!isHistoryReady}
+                  onClick={() => void saveConversationRecord()}
+                >
+                  立即保存
+                </button>
+              </div>
             </div>
             {conversationRecords.length ? (
               <ul className="history-list">
@@ -1035,7 +1436,7 @@ export default function Home() {
             </div>
             <button
               className="quiet-action compact"
-              disabled={isGenerating}
+              disabled={isGenerating || isStartingConversation}
               onClick={regenerateOutlines}
             >
               {isGenerating ? "生成中" : "换一批"}

@@ -418,6 +418,38 @@ h2 {
   font-weight: 900;
 }
 
+.autosave-pill {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 9px;
+  background: var(--surface-tint);
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.autosave-pill.is-saving {
+  border-color: oklch(79% 0.08 24);
+  background: var(--red-soft);
+  color: var(--red-strong);
+}
+
+.autosave-pill.is-saved {
+  border-color: oklch(82% 0.05 158);
+  background: var(--mint);
+  color: var(--mint-ink);
+}
+
+.autosave-pill.is-error {
+  border-color: oklch(82% 0.08 88);
+  background: var(--yellow);
+  color: var(--ink);
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(250px, 300px) minmax(420px, 1fr) minmax(320px, 390px);
@@ -588,6 +620,13 @@ input {
 .history-heading div {
   display: grid;
   gap: 3px;
+}
+
+.history-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .history-heading strong {
@@ -1032,6 +1071,7 @@ input {
 
   .panel-heading,
   .editor-heading,
+  .history-heading,
   .status-strip {
     align-items: stretch;
     flex-direction: column;
@@ -1040,6 +1080,14 @@ input {
   .status-actions {
     justify-content: stretch;
     flex-wrap: wrap;
+  }
+
+  .history-heading-actions {
+    justify-content: stretch;
+  }
+
+  .history-heading-actions .compact {
+    flex: 1 1 120px;
   }
 
   .account-chip {
