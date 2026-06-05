@@ -99,7 +99,9 @@ export default function Home() {
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [generatingImageDraftId, setGeneratingImageDraftId] = useState<
+    string | null
+  >(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [briefError, setBriefError] = useState("");
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
@@ -198,7 +200,7 @@ export default function Home() {
     accessToken,
     authReady: Boolean(authUser),
     conversationId,
-    isGenerating: isGenerating || isGeneratingImage,
+    isGenerating: isGenerating || Boolean(generatingImageDraftId),
     isStartingConversation,
     postDraft,
     seed,
@@ -669,7 +671,7 @@ export default function Home() {
   }
 
   async function generateImage() {
-    if (isGeneratingImage) return;
+    if (generatingImageDraftId) return;
     if (!postDraft) return;
     if (!accessToken) {
       setStatusMessage("请先登录，再生成封面图。");
@@ -677,8 +679,15 @@ export default function Home() {
     }
 
     const draftId = postDraft.id;
+    const previousImageFields = {
+      imageError: postDraft.imageError,
+      imageGeneratedAt: postDraft.imageGeneratedAt,
+      imageProvider: postDraft.imageProvider,
+      imageStatus: postDraft.imageStatus,
+      imageUrl: postDraft.imageUrl,
+    };
 
-    setIsGeneratingImage(true);
+    setGeneratingImageDraftId(draftId);
     setPostDraft((draft) =>
       draft?.id === draftId
         ? { ...draft, imageError: null, imageStatus: "generating" }
@@ -686,12 +695,24 @@ export default function Home() {
     );
 
     try {
-      await flushPostDraftPatch();
+      try {
+        await flushPostDraftPatch();
+      } catch (error) {
+        setPostDraft((draft) =>
+          draft?.id === draftId
+            ? { ...draft, ...previousImageFields }
+            : draft,
+        );
+        setStatusMessage(
+          getWorkspaceErrorMessage(error, "草稿同步失败，封面图生成未开始。"),
+        );
+        return;
+      }
 
       const generatedDraft = await api.postDrafts.generateImage(
         accessToken,
         draftId,
-        { imagePrompt: postDraft.imagePrompt },
+        {},
       );
       const nextPostDraft = mapBackendPostDraft(generatedDraft);
 
@@ -727,7 +748,7 @@ export default function Home() {
         getWorkspaceErrorMessage(error, "封面图生成失败，文案已保留。"),
       );
     } finally {
-      setIsGeneratingImage(false);
+      setGeneratingImageDraftId(null);
     }
   }
 
@@ -1330,7 +1351,7 @@ export default function Home() {
             </div>
             <PostEditor
               draftStale={draftStale}
-              isGeneratingImage={isGeneratingImage}
+              isGeneratingImage={postDraft?.id === generatingImageDraftId}
               isSavingDraft={isSavingDraft}
               onCopy={(text, label) => void copyText(text, label)}
               onDownloadImage={downloadImage}

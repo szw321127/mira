@@ -137,11 +137,30 @@ test("failed cover preview keeps the fallback cover layout visible", () => {
 
 test("page merges generated image fields without overwriting local copy", () => {
   const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const mergeStart = source.indexOf("function mergePostDraftImageFields");
+  const mergeEnd = source.indexOf("\nexport default function Home", mergeStart);
+  const mergeSource = source.slice(mergeStart, mergeEnd);
 
   assert.match(source, /async function generateImage/);
   assert.match(source, /function mergePostDraftImageFields/);
-  assert.match(source, /api\.postDrafts\.generateImage/);
+  assert.ok(mergeStart !== -1);
+  assert.ok(mergeEnd > mergeStart);
+  for (const field of [
+    "caption",
+    "title",
+    "sections",
+    "tags",
+    "coverLine",
+    "imagePrompt",
+  ]) {
+    assert.doesNotMatch(mergeSource, new RegExp(`\\b${field}\\b`));
+  }
+  assert.match(source, /generatingImageDraftId/);
+  assert.match(source, /isGenerating: isGenerating \|\| Boolean\(generatingImageDraftId\)/);
+  assert.match(source, /草稿同步失败，封面图生成未开始。/);
+  assert.match(source, /api\.postDrafts\.generateImage\(\s*accessToken,\s*draftId,\s*\{\s*\}/);
   assert.match(source, /await flushPostDraftPatch\(\)/);
   assert.match(source, /onGenerateImage=\{generateImage\}/);
   assert.match(source, /onDownloadImage=\{downloadImage\}/);
+  assert.match(source, /isGeneratingImage=\{postDraft\?\.id === generatingImageDraftId\}/);
 });
