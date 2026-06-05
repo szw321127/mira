@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PostDraft, SavedDraft } from "./types";
 import { getFullPostText, getPostBodyText } from "./workspace-utils";
+
+type EditablePostDraftPatch = Partial<
+  Pick<
+    PostDraft,
+    "caption" | "coverLine" | "imagePrompt" | "sections" | "tags" | "title"
+  >
+>;
 
 type PostEditorProps = {
   draftStale: boolean;
   isGenerating: boolean;
   isSavingDraft: boolean;
   onCopy: (text: string, label: string) => void;
-  onDraftChange: (patch: Partial<PostDraft>) => void;
+  onDraftChange: (patch: EditablePostDraftPatch) => void;
   onOpenSavedDraft: (draft: SavedDraft) => void;
   onRefresh: () => void;
   onSaveDraft: () => void;
@@ -38,21 +45,24 @@ export function PostEditor({
 }: PostEditorProps) {
   const sourceSectionsText = postDraft?.sections.join("\n") ?? "";
   const sourceTagsText = postDraft?.tags.join(" ") ?? "";
-  const sourceTextKey = `${postDraft?.id ?? ""}\n${sourceSectionsText}\n${sourceTagsText}`;
-  const [draftText, setDraftText] = useState({
-    key: sourceTextKey,
-    sectionsText: sourceSectionsText,
-    tagsText: sourceTagsText,
-  });
+  const [sectionsText, setSectionsText] = useState(sourceSectionsText);
+  const [tagsText, setTagsText] = useState(sourceTagsText);
   const copyTagsText = postDraft?.tags.map((tag) => `#${tag}`).join(" ") ?? "";
 
-  if (draftText.key !== sourceTextKey) {
-    setDraftText({
-      key: sourceTextKey,
-      sectionsText: sourceSectionsText,
-      tagsText: sourceTagsText,
+  useEffect(() => {
+    let isCurrent = true;
+
+    queueMicrotask(() => {
+      if (!isCurrent) return;
+
+      setSectionsText(sourceSectionsText);
+      setTagsText(sourceTagsText);
     });
-  }
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [sourceSectionsText, sourceTagsText]);
 
   return (
     <aside
@@ -125,13 +135,10 @@ export function PostEditor({
                 })
               }
               onChange={(event) =>
-                setDraftText((text) => ({
-                  ...text,
-                  sectionsText: event.target.value,
-                }))
+                setSectionsText(event.target.value)
               }
               rows={6}
-              value={draftText.sectionsText}
+              value={sectionsText}
             />
           </label>
 
@@ -148,12 +155,9 @@ export function PostEditor({
                 })
               }
               onChange={(event) =>
-                setDraftText((text) => ({
-                  ...text,
-                  tagsText: event.target.value,
-                }))
+                setTagsText(event.target.value)
               }
-              value={draftText.tagsText}
+              value={tagsText}
             />
           </label>
 

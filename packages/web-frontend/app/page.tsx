@@ -86,6 +86,8 @@ export default function Home() {
   const postDraftPatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const postDraftPatchInFlightErrorRef = useRef<unknown>(null);
+  const postDraftPatchInFlightRef = useRef<Promise<void> | null>(null);
   const postDraftPatchSequenceRef = useRef(0);
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function Home() {
         return;
       }
 
-      if (authUser) {
+      if (authUser && !postDraftPatchInFlightRef.current) {
         setStatusMessage(error.message);
       }
     });
@@ -107,20 +109,15 @@ export default function Home() {
 
   useEffect(() => {
     return () => {
-      if (postDraftPatchTimeoutRef.current) {
-        clearTimeout(postDraftPatchTimeoutRef.current);
-      }
+      clearPostDraftPatchTimeout();
     };
   }, []);
 
   useEffect(() => {
-    if (postDraftPatchTimeoutRef.current) {
-      clearTimeout(postDraftPatchTimeoutRef.current);
-      postDraftPatchTimeoutRef.current = null;
-    }
-
+    clearPostDraftPatchTimeout();
     pendingPostDraftIdRef.current = null;
     pendingPostDraftPatchRef.current = null;
+    postDraftPatchInFlightErrorRef.current = null;
     postDraftPatchSequenceRef.current += 1;
   }, [postDraft?.id]);
 
@@ -576,6 +573,7 @@ export default function Home() {
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
+      await flushPostDraftPatch();
       const savedDraft = await api.conversations.createSavedDraft(
         accessToken,
         currentConversationId,
@@ -594,6 +592,74 @@ export default function Home() {
     } catch {
     } finally {
       setIsSavingDraft(false);
+    }
+  }
+
+  function clearPostDraftPatchTimeout() {
+    if (!postDraftPatchTimeoutRef.current) return;
+
+    clearTimeout(postDraftPatchTimeoutRef.current);
+    postDraftPatchTimeoutRef.current = null;
+  }
+
+  async function flushPostDraftPatch(): Promise<void> {
+    clearPostDraftPatchTimeout();
+
+    if (postDraftPatchInFlightRef.current) {
+      await postDraftPatchInFlightRef.current;
+
+      const inFlightError = postDraftPatchInFlightErrorRef.current;
+      postDraftPatchInFlightErrorRef.current = null;
+
+      if (!pendingPostDraftPatchRef.current && inFlightError) {
+        throw inFlightError;
+      }
+
+      return flushPostDraftPatch();
+    }
+
+    const draftId = pendingPostDraftIdRef.current;
+    const nextPatch = pendingPostDraftPatchRef.current;
+
+    pendingPostDraftIdRef.current = null;
+    pendingPostDraftPatchRef.current = null;
+
+    if (!accessToken || !draftId || !nextPatch) return;
+
+    const requestSequence = postDraftPatchSequenceRef.current;
+    let requestError: unknown;
+    postDraftPatchInFlightErrorRef.current = null;
+    const request = api.postDrafts
+      .update(accessToken, draftId, nextPatch)
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        requestError = error;
+        postDraftPatchInFlightErrorRef.current = error;
+
+        if (postDraftPatchSequenceRef.current === requestSequence) {
+          setStatusMessage("草稿同步失败，本地编辑已保留。");
+        }
+      });
+
+    postDraftPatchInFlightRef.current = request;
+
+    try {
+      await request;
+    } finally {
+      if (postDraftPatchInFlightRef.current === request) {
+        postDraftPatchInFlightRef.current = null;
+      }
+    }
+
+    if (pendingPostDraftPatchRef.current) {
+      await flushPostDraftPatch();
+      return;
+    }
+
+    postDraftPatchInFlightErrorRef.current = null;
+
+    if (requestError) {
+      throw requestError;
     }
   }
 
@@ -618,40 +684,18 @@ export default function Home() {
       ...patch,
     };
 
-    if (postDraftPatchTimeoutRef.current) {
-      clearTimeout(postDraftPatchTimeoutRef.current);
-    }
+    clearPostDraftPatchTimeout();
 
     postDraftPatchTimeoutRef.current = setTimeout(() => {
-      const draftId = pendingPostDraftIdRef.current;
-      const nextPatch = pendingPostDraftPatchRef.current;
-
-      postDraftPatchTimeoutRef.current = null;
-      pendingPostDraftIdRef.current = null;
-      pendingPostDraftPatchRef.current = null;
-
-      if (!draftId || !nextPatch) return;
-
-      const requestSequence = postDraftPatchSequenceRef.current;
-
-      void api.postDrafts
-        .update(accessToken, draftId, nextPatch)
-        .catch(() => {
-          if (postDraftPatchSequenceRef.current !== requestSequence) return;
-
-          setStatusMessage("草稿同步失败，本地编辑已保留。");
-        });
+      void flushPostDraftPatch().catch(() => {});
     }, POST_DRAFT_UPDATE_DEBOUNCE_MS);
   }
 
   function openSavedDraft(draft: SavedDraft) {
-    if (postDraftPatchTimeoutRef.current) {
-      clearTimeout(postDraftPatchTimeoutRef.current);
-      postDraftPatchTimeoutRef.current = null;
-    }
-
+    clearPostDraftPatchTimeout();
     pendingPostDraftIdRef.current = null;
     pendingPostDraftPatchRef.current = null;
+    postDraftPatchInFlightErrorRef.current = null;
     postDraftPatchSequenceRef.current += 1;
     setPostDraft(draft);
     setDraftStale(false);
