@@ -134,3 +134,14 @@ test("failed cover preview keeps the fallback cover layout visible", () => {
   assert.match(failedState, /postDraft\.imageError \?\? "封面生成失败"/);
   assert.match(failedState, /postDraft\.coverLine \|\| postDraft\.title/);
 });
+
+test("page merges generated image fields without overwriting local copy", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+
+  assert.match(source, /async function generateImage/);
+  assert.match(source, /function mergePostDraftImageFields/);
+  assert.match(source, /api\.postDrafts\.generateImage/);
+  assert.match(source, /await flushPostDraftPatch\(\)/);
+  assert.match(source, /onGenerateImage=\{generateImage\}/);
+  assert.match(source, /onDownloadImage=\{downloadImage\}/);
+});

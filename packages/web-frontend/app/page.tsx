@@ -70,6 +70,17 @@ function getWorkspaceErrorMessage(error: unknown, fallback: string) {
   return `${fallback}（${detail}）`;
 }
 
+function mergePostDraftImageFields(current: PostDraft, next: PostDraft): PostDraft {
+  return {
+    ...current,
+    imageError: next.imageError,
+    imageGeneratedAt: next.imageGeneratedAt,
+    imageProvider: next.imageProvider,
+    imageStatus: next.imageStatus,
+    imageUrl: next.imageUrl,
+  };
+}
+
 export default function Home() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -88,6 +99,7 @@ export default function Home() {
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [briefError, setBriefError] = useState("");
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
@@ -186,7 +198,7 @@ export default function Home() {
     accessToken,
     authReady: Boolean(authUser),
     conversationId,
-    isGenerating,
+    isGenerating: isGenerating || isGeneratingImage,
     isStartingConversation,
     postDraft,
     seed,
@@ -654,6 +666,95 @@ export default function Home() {
     } finally {
       setIsSavingDraft(false);
     }
+  }
+
+  async function generateImage() {
+    if (isGeneratingImage) return;
+    if (!postDraft) return;
+    if (!accessToken) {
+      setStatusMessage("请先登录，再生成封面图。");
+      return;
+    }
+
+    const draftId = postDraft.id;
+
+    setIsGeneratingImage(true);
+    setPostDraft((draft) =>
+      draft?.id === draftId
+        ? { ...draft, imageError: null, imageStatus: "generating" }
+        : draft,
+    );
+
+    try {
+      await flushPostDraftPatch();
+
+      const generatedDraft = await api.postDrafts.generateImage(
+        accessToken,
+        draftId,
+        { imagePrompt: postDraft.imagePrompt },
+      );
+      const nextPostDraft = mapBackendPostDraft(generatedDraft);
+
+      if (currentPostDraftIdRef.current === draftId) {
+        setPostDraft((draft) =>
+          draft?.id === draftId
+            ? mergePostDraftImageFields(draft, nextPostDraft)
+            : draft,
+        );
+      }
+
+      setStatusMessage("封面图已生成，可以下载或继续调整文案。");
+      await refreshConversationRecordsSafely(
+        "封面图已生成，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      const imageError = getWorkspaceErrorMessage(error, "封面图生成失败。");
+
+      setPostDraft((draft) =>
+        draft?.id === draftId
+          ? {
+              ...draft,
+              imageError,
+              imageGeneratedAt: null,
+              imageProvider: null,
+              imageStatus: "failed",
+              imageUrl: null,
+            }
+          : draft,
+      );
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "封面图生成失败，文案已保留。"),
+      );
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  }
+
+  function downloadImage() {
+    const imageUrl = postDraft?.imageUrl;
+
+    if (!imageUrl) {
+      setStatusMessage("还没有可下载的封面图。");
+      return;
+    }
+
+    const title = postDraft?.title.trim() || "rednote-cover";
+    const safeBaseName =
+      title
+        .replace(/[\\/:*?"<>|]+/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/^\.+/, "")
+        .slice(0, 80) || "rednote-cover";
+    const extension = imageUrl.startsWith("data:image/svg+xml") ? "svg" : "png";
+    const anchor = document.createElement("a");
+
+    anchor.href = imageUrl;
+    anchor.download = `${safeBaseName}.${extension}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setStatusMessage("封面图已开始下载。");
   }
 
   function clearPostDraftPatchTimeout() {
@@ -1229,9 +1330,12 @@ export default function Home() {
             </div>
             <PostEditor
               draftStale={draftStale}
+              isGeneratingImage={isGeneratingImage}
               isSavingDraft={isSavingDraft}
               onCopy={(text, label) => void copyText(text, label)}
+              onDownloadImage={downloadImage}
               onDraftChange={updatePostDraft}
+              onGenerateImage={generateImage}
               onOpenSavedDraft={openSavedDraft}
               onSaveDraft={() => void saveDraft()}
               postDraft={postDraft}
