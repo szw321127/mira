@@ -5,6 +5,7 @@ describe('GenerationService post drafts', () => {
   const service = new GenerationService();
   const writerFacingPattern =
     /写 2 到 3 句|用定调的方式|避免空泛形容|直接写出|不要堆概念|第一屏|结尾把行动收回来|提醒读者|给读者|讲清楚|第一屏直接展示|用一句话定义|每一页只解决|定义这篇内容|拆开/;
+  const structureLabelPattern = /痛点场景|结尾互动|准备清单|操作步骤|避坑提醒/;
 
   const outline: OutlineForDraft = {
     hook: '先给读者一个立刻想收藏的理由。',
@@ -29,6 +30,7 @@ describe('GenerationService post drafts', () => {
     expect(body).toContain('小红书新手');
     expect(draft.caption).not.toContain(outline.hook);
     expect(body).not.toMatch(writerFacingPattern);
+    expect(body).not.toMatch(structureLabelPattern);
     expect(draft.tags).toEqual(
       expect.arrayContaining(['小红书图文', '实用攻略', '高保存率']),
     );
@@ -36,6 +38,7 @@ describe('GenerationService post drafts', () => {
   });
 
   it.each([
+    ['租房厨房改造省钱清单', 0, 0],
     ['租房厨房改造省钱清单', 1, 0],
     ['租房厨房改造省钱清单', 1, 1],
   ])(
@@ -55,13 +58,14 @@ describe('GenerationService post drafts', () => {
       expect(draft.sections).toHaveLength(5);
       expect(draft.caption).not.toContain(generatedOutline.hook);
       expect(body).not.toMatch(writerFacingPattern);
+      expect(body).not.toMatch(structureLabelPattern);
       expect(draft.title.match(/租房厨房改造省钱清单/g)).toHaveLength(1);
     },
   );
 
   it.each([
     {
-      expectedPoints: ['一个点', '准备清单', '操作步骤', '避坑提醒', '结尾互动'],
+      expectedPoints: ['一个点', '准备好材料', '照着做步骤', '少踩坑做法', '保存后开做'],
       points: ['一个点'],
     },
     {
@@ -78,5 +82,6 @@ describe('GenerationService post drafts', () => {
     expect(draft.sections.map((section) => section.split('：')[0])).toEqual(
       example.expectedPoints.map((point, index) => `${index + 1}. ${point}`),
     );
+    expect(draft.sections.join('\n')).not.toMatch(structureLabelPattern);
   });
 });

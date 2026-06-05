@@ -8,11 +8,11 @@ import type {
 
 const DEFAULT_TOPIC = '周末在家低成本做一顿有仪式感的晚餐，适合发小红书';
 const DEFAULT_DRAFT_POINTS = [
-  '痛点场景',
-  '准备清单',
-  '操作步骤',
-  '避坑提醒',
-  '结尾互动',
+  '先看省心理由',
+  '准备好材料',
+  '照着做步骤',
+  '少踩坑做法',
+  '保存后开做',
 ];
 
 const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
@@ -191,6 +191,11 @@ export class GenerationService {
   private createReaderPointLabel(point: string): string {
     const trimmedPoint = point.trim();
     const replacements: Array<[RegExp, string]> = [
+      [/痛点场景/g, '先看省心理由'],
+      [/准备清单/g, '准备好材料'],
+      [/操作步骤/g, '照着做步骤'],
+      [/避坑提醒/g, '少踩坑做法'],
+      [/结尾互动/g, '保存后开做'],
       [/给读者的建议/g, '实用建议'],
       [/给读者/g, '给你'],
       [/第一屏直接展示/g, '开头展示'],
