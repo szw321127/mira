@@ -73,9 +73,6 @@ export function PostEditor({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
-          <p className="m-0 text-xs font-bold text-[var(--muted)]">
-            图文
-          </p>
           <h2
             className="text-[1.08rem] font-bold leading-tight text-[var(--ink)]"
             id="post-title"

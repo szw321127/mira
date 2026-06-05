@@ -83,18 +83,38 @@ export function PostCoverPreview({
         ) : null}
 
         {imageStatus === "failed" ? (
-          <div className="grid h-full place-items-center bg-[var(--red-soft)] p-5 text-center">
-            <div className="grid max-w-[15rem] gap-2">
-              <ImageIcon
-                aria-hidden="true"
-                className="mx-auto text-[var(--red-strong)]"
-                size={24}
-                strokeWidth={2.2}
-              />
-              <strong className="text-[0.94rem] font-bold text-[var(--ink)]">
+          <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] gap-3 bg-[var(--surface)] p-4 text-center">
+            <div className="grid min-h-0 place-items-center rounded-md border border-dashed border-[var(--line)] bg-[var(--surface-tint)] p-4">
+              <div className="grid max-w-[16rem] gap-3">
+                <ImageIcon
+                  aria-hidden="true"
+                  className="mx-auto text-[var(--red)]"
+                  size={24}
+                  strokeWidth={2.2}
+                />
+                <strong className="text-[1.18rem] font-black leading-tight text-[var(--ink)]">
+                  {postDraft.coverLine || postDraft.title}
+                </strong>
+                <span
+                  aria-hidden="true"
+                  className="mx-auto h-1 w-12 rounded-md bg-[var(--red)]"
+                />
+                <small className="text-[0.78rem] font-bold leading-relaxed text-[var(--muted)]">
+                  {postDraft.title}
+                </small>
+              </div>
+            </div>
+            <div className="grid gap-1 rounded-md border border-[var(--line)] bg-[var(--red-soft)] p-2.5 text-left">
+              <strong className="inline-flex items-center gap-2 text-[0.84rem] font-bold text-[var(--ink)]">
+                <ImageIcon
+                  aria-hidden="true"
+                  className="text-[var(--red-strong)]"
+                  size={15}
+                  strokeWidth={2.2}
+                />
                 生成失败
               </strong>
-              <small className="text-[0.78rem] font-semibold leading-relaxed text-[var(--muted)]">
+              <small className="text-[0.76rem] font-semibold leading-relaxed text-[var(--muted)]">
                 {postDraft.imageError ?? "封面生成失败"}
               </small>
             </div>

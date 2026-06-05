@@ -113,3 +113,24 @@ test("post editor presents a focused publish package with image actions", () => 
   assert.match(preview, /imageStatus === "failed"/);
   assert.match(preview, /imageStatus === "generating"/);
 });
+
+test("post editor uses publish package as the visible concept label", () => {
+  const editor = readWorkbenchFile("post-editor.tsx");
+
+  assert.match(editor, /id="post-title"[\s\S]*发布包/);
+  assert.doesNotMatch(editor, />\s*图文\s*</);
+});
+
+test("failed cover preview keeps the fallback cover layout visible", () => {
+  const preview = readWorkbenchFile("post-cover-preview.tsx");
+  const failedStart = preview.indexOf('{imageStatus === "failed" ? (');
+  const idleStart = preview.indexOf("{shouldShowIdlePreview", failedStart);
+
+  assert.ok(failedStart !== -1);
+  assert.ok(idleStart > failedStart);
+
+  const failedState = preview.slice(failedStart, idleStart);
+
+  assert.match(failedState, /postDraft\.imageError \?\? "封面生成失败"/);
+  assert.match(failedState, /postDraft\.coverLine \|\| postDraft\.title/);
+});
