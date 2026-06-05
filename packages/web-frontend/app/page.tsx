@@ -2,7 +2,6 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Trash2 } from "lucide-react";
 import {
   api,
   apiClient,
@@ -35,6 +34,7 @@ import {
   toneMeta,
 } from "./workbench/workspace-utils";
 import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
+import { ConversationRail } from "./workbench/conversation-rail";
 
 type AuthMode = "login" | "register";
 
@@ -936,6 +936,19 @@ export default function Home() {
       </div>
 
       <section className="workspace-grid">
+        <ConversationRail
+          activeConversationId={conversationId}
+          autoSaveLabel={autoSaveLabel}
+          autoSaveState={autoSaveState}
+          conversations={conversationRecords}
+          isGenerating={isGenerating}
+          isHistoryReady={isHistoryReady}
+          isStartingConversation={isStartingConversation}
+          onCreateConversation={() => void startNewConversation()}
+          onDeleteConversation={(record) => void deleteConversationRecord(record)}
+          onRestoreConversation={(record) => void restoreConversationRecord(record)}
+          onSaveConversation={() => void saveConversationRecord()}
+        />
         <aside className="brief-panel" aria-labelledby="brief-title">
           <div>
             <p className="section-kicker">灵感输入</p>
@@ -976,67 +989,6 @@ export default function Home() {
               <span key={item}>{item}</span>
             ))}
           </div>
-          <section className="history-panel" aria-labelledby="history-title">
-            <div className="history-heading">
-              <div>
-                <p className="section-kicker">对话记录</p>
-                <strong id="history-title">保留工作状态</strong>
-              </div>
-              <div className="history-heading-actions">
-                <button
-                  aria-label={isStartingConversation ? "新建对话中" : "新增对话"}
-                  className="icon-button"
-                  data-tooltip={isStartingConversation ? "新建中" : "新增对话"}
-                  disabled={!isHistoryReady || isStartingConversation || isGenerating}
-                  onClick={() => void startNewConversation()}
-                  title={isStartingConversation ? "新建中" : "新增对话"}
-                >
-                  <Plus aria-hidden="true" size={16} strokeWidth={2.4} />
-                </button>
-                <button
-                  aria-label="立即保存"
-                  className="icon-button"
-                  data-tooltip="立即保存"
-                  disabled={!isHistoryReady}
-                  onClick={() => void saveConversationRecord()}
-                  title="立即保存"
-                >
-                  <Save aria-hidden="true" size={16} strokeWidth={2.4} />
-                </button>
-              </div>
-            </div>
-            {conversationRecords.length ? (
-              <ul className="history-list">
-                {conversationRecords.map((record) => (
-                  <li key={record.id}>
-                    <button
-                      className="history-record"
-                      aria-label={`恢复记录：${record.title}`}
-                      onClick={() => void restoreConversationRecord(record)}
-                    >
-                      <span>{record.savedAt}</span>
-                      <strong>{record.title}</strong>
-                      <small>
-                        {record.outlineCount} 个大纲 ·{" "}
-                        {record.snapshot?.postDraft ? "含图文" : "后端记录"}
-                      </small>
-                    </button>
-                    <button
-                      className="history-delete icon-button"
-                      aria-label={`删除记录：${record.title}`}
-                      data-tooltip="删除"
-                      onClick={() => void deleteConversationRecord(record)}
-                      title="删除"
-                    >
-                      <Trash2 aria-hidden="true" size={15} strokeWidth={2.3} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="history-empty">暂无记录，保存后可恢复主题、大纲和草稿。</p>
-            )}
-          </section>
         </aside>
 
         <section className="outline-panel" aria-labelledby="outline-title">
