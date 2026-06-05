@@ -560,6 +560,7 @@ input {
 
 .icon-button {
   position: relative;
+  z-index: 1;
   width: 36px;
   height: 36px;
   display: inline-grid;
@@ -581,7 +582,7 @@ input {
 
 .icon-button::after {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   left: 50%;
   z-index: 10;
   width: max-content;
@@ -596,11 +597,16 @@ input {
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -2px);
+  transform: translate(-50%, 2px);
   transition:
     opacity 140ms ease,
     transform 140ms ease;
   white-space: nowrap;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  z-index: 20;
 }
 
 .icon-button:hover::after,
