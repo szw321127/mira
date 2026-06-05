@@ -10,73 +10,34 @@ import {
   type AuthResponse,
   type AuthUser,
   type BackendConversation,
-  type BackendConversationSummary,
-  type BackendOutline,
-  type BackendPostDraft,
-  type BackendSavedDraft,
 } from "@/lib/api";
-
-type OutlineTone = "guide" | "story" | "checklist";
-
-type Outline = {
-  id: string;
-  batch: number;
-  tone: OutlineTone;
-  label: string;
-  title: string;
-  hook: string;
-  points: string[];
-};
-
-type PostDraft = {
-  id: string;
-  title: string;
-  coverLine: string;
-  caption: string;
-  imagePrompt: string;
-  sections: string[];
-  tags: string[];
-  stale?: boolean;
-};
-
-type Snapshot = {
-  batch: number;
-  outlines: Outline[];
-  postDraft: PostDraft | null;
-  selectedId: string;
-};
-
-type SavedDraft = PostDraft & {
-  savedDraftId: string;
-  savedAt: string;
-};
-
-type WorkspaceSnapshot = {
-  batch: number;
-  briefError: string;
-  draftStale: boolean;
-  lastSnapshot: Snapshot | null;
-  outlines: Outline[];
-  postDraft: PostDraft | null;
-  savedDrafts: SavedDraft[];
-  seed: string;
-  selectedId: string;
-  statusMessage: string;
-};
-
-type ConversationRecord = {
-  conversationId: string;
-  id: string;
-  outlineCount: number;
-  savedAt: string;
-  snapshot: WorkspaceSnapshot | null;
-  title: string;
-  topic: string;
-};
+import type {
+  AutoSaveState,
+  ConversationRecord,
+  Outline,
+  PostDraft,
+  SavedDraft,
+  Snapshot,
+  WorkspaceSnapshot,
+} from "./workbench/types";
+import {
+  DEFAULT_SEED,
+  createAutoSaveKey,
+  dedupeSavedDrafts,
+  formatAutoSaveTime,
+  formatRecordTime,
+  getDraftSignature,
+  getFullPostText,
+  groupOutlines,
+  mapBackendOutline,
+  mapBackendPostDraft,
+  mapConversationRecord,
+  mapSavedDraft,
+  mapWorkspaceSnapshot,
+  toneMeta,
+} from "./workbench/workspace-utils";
 
 type AuthMode = "login" | "register";
-
-type AutoSaveState = "idle" | "saving" | "saved" | "error";
 
 type AuthSession = {
   accessToken: string;
@@ -84,296 +45,6 @@ type AuthSession = {
 };
 
 const AUTH_STORAGE_KEY = "rednote:auth-session";
-
-const DEFAULT_SEED =
-  "周末在家低成本做一顿有仪式感的晚餐，适合发小红书";
-
-const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
-  guide: { name: "实用攻略", mark: "攻略" },
-  story: { name: "生活叙事", mark: "故事" },
-  checklist: { name: "清单拆解", mark: "清单" },
-};
-
-function isOutlineTone(tone: string): tone is OutlineTone {
-  return tone === "guide" || tone === "story" || tone === "checklist";
-}
-
-function formatRecordTime(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatAutoSaveTime(value: Date) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
-}
-
-function mapBackendOutline(outline: BackendOutline, batch: number): Outline {
-  return {
-    batch,
-    hook: outline.hook,
-    id: outline.id,
-    label: outline.label,
-    points: outline.points,
-    title: outline.title,
-    tone: isOutlineTone(outline.tone) ? outline.tone : "guide",
-  };
-}
-
-function mapBackendPostDraft(draft: BackendPostDraft): PostDraft {
-  return {
-    caption: draft.caption,
-    coverLine: draft.coverLine,
-    id: draft.id,
-    imagePrompt: draft.imagePrompt,
-    sections: draft.sections,
-    stale: draft.stale,
-    tags: draft.tags,
-    title: draft.title,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function getDraftSignature(draft: PostDraft) {
-  return JSON.stringify({
-    caption: draft.caption.trim(),
-    coverLine: draft.coverLine.trim(),
-    imagePrompt: draft.imagePrompt.trim(),
-    sections: draft.sections.map((section) => section.trim()),
-    tags: draft.tags.map((tag) => tag.trim()),
-    title: draft.title.trim(),
-  });
-}
-
-function dedupeSavedDrafts(drafts: SavedDraft[]) {
-  const signatures = new Set<string>();
-
-  return drafts.filter((draft) => {
-    const signature = getDraftSignature(draft);
-
-    if (signatures.has(signature)) return false;
-
-    signatures.add(signature);
-    return true;
-  });
-}
-
-function mapSavedDraft(savedDraft: BackendSavedDraft): SavedDraft | null {
-  const snapshot = savedDraft.snapshot;
-
-  if (
-    !isRecord(snapshot) ||
-    typeof snapshot.id !== "string" ||
-    typeof snapshot.title !== "string" ||
-    typeof snapshot.coverLine !== "string" ||
-    typeof snapshot.caption !== "string" ||
-    typeof snapshot.imagePrompt !== "string" ||
-    !isStringArray(snapshot.sections) ||
-    !isStringArray(snapshot.tags)
-  ) {
-    return null;
-  }
-
-  return {
-    caption: snapshot.caption,
-    coverLine: snapshot.coverLine,
-    id: snapshot.id,
-    imagePrompt: snapshot.imagePrompt,
-    savedAt: formatRecordTime(savedDraft.createdAt),
-    savedDraftId: savedDraft.id,
-    sections: snapshot.sections,
-    stale: typeof snapshot.stale === "boolean" ? snapshot.stale : false,
-    tags: snapshot.tags,
-    title: snapshot.title,
-  };
-}
-
-function mapSnapshotOutline(value: unknown): Outline | null {
-  if (
-    !isRecord(value) ||
-    typeof value.batch !== "number" ||
-    typeof value.hook !== "string" ||
-    typeof value.id !== "string" ||
-    typeof value.label !== "string" ||
-    !isStringArray(value.points) ||
-    typeof value.title !== "string" ||
-    typeof value.tone !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    batch: value.batch,
-    hook: value.hook,
-    id: value.id,
-    label: value.label,
-    points: value.points,
-    title: value.title,
-    tone: isOutlineTone(value.tone) ? value.tone : "guide",
-  };
-}
-
-function mapSnapshotPostDraft(value: unknown): PostDraft | null {
-  if (
-    !isRecord(value) ||
-    typeof value.id !== "string" ||
-    typeof value.title !== "string" ||
-    typeof value.coverLine !== "string" ||
-    typeof value.caption !== "string" ||
-    typeof value.imagePrompt !== "string" ||
-    !isStringArray(value.sections) ||
-    !isStringArray(value.tags)
-  ) {
-    return null;
-  }
-
-  return {
-    caption: value.caption,
-    coverLine: value.coverLine,
-    id: value.id,
-    imagePrompt: value.imagePrompt,
-    sections: value.sections,
-    stale: typeof value.stale === "boolean" ? value.stale : false,
-    tags: value.tags,
-    title: value.title,
-  };
-}
-
-function mapUndoSnapshot(value: unknown): Snapshot | null {
-  if (
-    !isRecord(value) ||
-    typeof value.batch !== "number" ||
-    !Array.isArray(value.outlines) ||
-    typeof value.selectedId !== "string"
-  ) {
-    return null;
-  }
-
-  const mappedOutlines = value.outlines
-    .map((outline) => mapSnapshotOutline(outline))
-    .filter((outline): outline is Outline => Boolean(outline));
-
-  if (mappedOutlines.length !== value.outlines.length) return null;
-
-  const postDraft =
-    value.postDraft === null || value.postDraft === undefined
-      ? null
-      : mapSnapshotPostDraft(value.postDraft);
-
-  if (value.postDraft && !postDraft) return null;
-
-  return {
-    batch: value.batch,
-    outlines: mappedOutlines,
-    postDraft,
-    selectedId: value.selectedId,
-  };
-}
-
-function mapSnapshotSavedDraft(value: unknown): SavedDraft | null {
-  if (
-    !isRecord(value) ||
-    typeof value.savedAt !== "string" ||
-    typeof value.savedDraftId !== "string"
-  ) {
-    return null;
-  }
-
-  const draft = mapSnapshotPostDraft(value);
-
-  if (!draft) return null;
-
-  return {
-    ...draft,
-    savedAt: value.savedAt,
-    savedDraftId: value.savedDraftId,
-  };
-}
-
-function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
-  if (
-    !isRecord(value) ||
-    typeof value.batch !== "number" ||
-    !Array.isArray(value.outlines) ||
-    typeof value.seed !== "string" ||
-    typeof value.selectedId !== "string"
-  ) {
-    return null;
-  }
-
-  const outlines = value.outlines
-    .map((outline) => mapSnapshotOutline(outline))
-    .filter((outline): outline is Outline => Boolean(outline));
-
-  if (outlines.length !== value.outlines.length) return null;
-
-  const postDraft =
-    value.postDraft === null || value.postDraft === undefined
-      ? null
-      : mapSnapshotPostDraft(value.postDraft);
-
-  if (value.postDraft && !postDraft) return null;
-
-  const savedDrafts = Array.isArray(value.savedDrafts)
-    ? dedupeSavedDrafts(
-        value.savedDrafts
-          .map((draft) => mapSnapshotSavedDraft(draft))
-          .filter((draft): draft is SavedDraft => Boolean(draft)),
-      )
-    : [];
-
-  return {
-    batch: value.batch,
-    briefError: typeof value.briefError === "string" ? value.briefError : "",
-    draftStale:
-      typeof value.draftStale === "boolean" ? value.draftStale : false,
-    lastSnapshot: mapUndoSnapshot(value.lastSnapshot),
-    outlines,
-    postDraft,
-    savedDrafts,
-    seed: value.seed,
-    selectedId: value.selectedId,
-    statusMessage:
-      typeof value.statusMessage === "string"
-        ? value.statusMessage
-        : "已从自动保存恢复当前工作状态。",
-  };
-}
-
-function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
-  return JSON.stringify({
-    batch: snapshot.batch,
-    briefError: snapshot.briefError,
-    draftStale: snapshot.draftStale,
-    outlines: snapshot.outlines,
-    postDraft: snapshot.postDraft,
-    savedDrafts: snapshot.savedDrafts,
-    seed: snapshot.seed,
-    selectedId: snapshot.selectedId,
-  });
-}
-
-function getPostText(postDraft: PostDraft) {
-  return [
-    postDraft.title,
-    postDraft.caption,
-    ...postDraft.sections,
-    postDraft.tags.map((tag) => `#${tag}`).join(" "),
-  ].join("\n");
-}
 
 export default function Home() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -428,22 +99,7 @@ export default function Home() {
     [outlines],
   );
 
-  const outlineGroups = useMemo(() => {
-    return outlines.reduce<Array<{ batch: number; outlines: Outline[] }>>(
-      (groups, outline) => {
-        const group = groups.find((item) => item.batch === outline.batch);
-
-        if (group) {
-          group.outlines.push(outline);
-        } else {
-          groups.push({ batch: outline.batch, outlines: [outline] });
-        }
-
-        return groups;
-      },
-      [],
-    );
-  }, [outlines]);
+  const outlineGroups = useMemo(() => groupOutlines(outlines), [outlines]);
 
   const selectedOutline = useMemo(
     () => outlines.find((outline) => outline.id === selectedId) ?? outlines[0],
@@ -574,20 +230,6 @@ export default function Home() {
     statusMessage,
     workspaceSnapshot,
   ]);
-
-  function mapConversationRecord(
-    conversation: BackendConversationSummary,
-  ): ConversationRecord {
-    return {
-      conversationId: conversation.id,
-      id: conversation.id,
-      outlineCount: conversation.outlineBatchCount * 3,
-      savedAt: formatRecordTime(conversation.updatedAt),
-      snapshot: null,
-      title: conversation.title,
-      topic: conversation.topic,
-    };
-  }
 
   function applyConversation(
     conversation: BackendConversation,
@@ -1653,7 +1295,7 @@ export default function Home() {
             <button
               className="quiet-action compact"
               disabled={!postDraft}
-              onClick={() => postDraft && copyText(getPostText(postDraft), "图文草稿")}
+              onClick={() => postDraft && copyText(getFullPostText(postDraft), "图文草稿")}
             >
               复制草稿
             </button>
