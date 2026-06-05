@@ -2,6 +2,17 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  api,
+  getApiErrorMessage,
+  type AuthResponse,
+  type AuthUser,
+  type BackendConversation,
+  type BackendConversationSummary,
+  type BackendOutline,
+  type BackendPostDraft,
+  type BackendSavedDraft,
+} from "@/lib/api";
 
 type OutlineTone = "guide" | "story" | "checklist";
 
@@ -16,12 +27,14 @@ type Outline = {
 };
 
 type PostDraft = {
+  id: string;
   title: string;
   coverLine: string;
   caption: string;
   imagePrompt: string;
   sections: string[];
   tags: string[];
+  stale?: boolean;
 };
 
 type Snapshot = {
@@ -32,6 +45,7 @@ type Snapshot = {
 };
 
 type SavedDraft = PostDraft & {
+  savedDraftId: string;
   savedAt: string;
 };
 
@@ -49,32 +63,23 @@ type WorkspaceSnapshot = {
 };
 
 type ConversationRecord = {
+  conversationId: string;
   id: string;
   outlineCount: number;
   savedAt: string;
-  snapshot: WorkspaceSnapshot;
+  snapshot: WorkspaceSnapshot | null;
   title: string;
   topic: string;
 };
 
-type AuthUser = {
-  account: string;
-  id: string;
-  loginAt: string;
-  name: string;
-};
-
 type AuthMode = "login" | "register";
 
-type RegisteredAccount = {
-  account: string;
-  createdAt: string;
-  name: string;
+type AuthSession = {
+  accessToken: string;
+  user: AuthUser;
 };
 
-const AUTH_STORAGE_KEY = "rednote:auth-user";
-const CONVERSATION_STORAGE_KEY = "rednote:conversation-records";
-const REGISTERED_ACCOUNTS_STORAGE_KEY = "rednote:registered-accounts";
+const AUTH_STORAGE_KEY = "rednote:auth-session";
 
 const DEFAULT_SEED =
   "周末在家低成本做一顿有仪式感的晚餐，适合发小红书";
@@ -85,107 +90,79 @@ const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
   checklist: { name: "清单拆解", mark: "清单" },
 };
 
-const outlineBanks = [
-  [
-    {
-      tone: "guide",
-      label: "高保存率",
-      title: "把一句灵感拆成可执行的 5 步",
-      hook: "先给读者一个立刻想收藏的理由。",
-      points: ["痛点场景", "准备清单", "操作步骤", "避坑提醒", "结尾互动"],
-    },
-    {
-      tone: "story",
-      label: "强代入感",
-      title: "用一天里的转折写出生活感",
-      hook: "从一个小尴尬或小惊喜开始。",
-      points: ["开场画面", "情绪铺垫", "关键选择", "结果反差", "温柔收束"],
-    },
-    {
-      tone: "checklist",
-      label: "快读结构",
-      title: "三类人群都能用的发布框架",
-      hook: "把内容变成一张清楚的选择表。",
-      points: ["适合谁", "不适合谁", "核心步骤", "替代方案", "保存提示"],
-    },
-  ],
-  [
-    {
-      tone: "story",
-      label: "更有人味",
-      title: "从真实困扰写到一个漂亮解法",
-      hook: "先承认这件事没那么完美。",
-      points: ["真实开头", "现场细节", "尝试过程", "关键发现", "给读者的建议"],
-    },
-    {
-      tone: "guide",
-      label: "更像教程",
-      title: "用前后对比做一篇干货图文",
-      hook: "第一屏直接展示变化。",
-      points: ["原始状态", "目标效果", "工具材料", "分步说明", "最终复盘"],
-    },
-    {
-      tone: "checklist",
-      label: "更易转发",
-      title: "把经验整理成可截图的备忘录",
-      hook: "每一条都短到可以被记住。",
-      points: ["必做三件事", "可选加分项", "预算控制", "时间安排", "失败补救"],
-    },
-  ],
-  [
-    {
-      tone: "checklist",
-      label: "更利落",
-      title: "一页讲完准备、执行、复盘",
-      hook: "用一句话定义这篇内容的收益。",
-      points: ["准备前", "进行中", "完成后", "常见问题", "评论引导"],
-    },
-    {
-      tone: "guide",
-      label: "更有节奏",
-      title: "把普通主题做成连续翻页体验",
-      hook: "每一页只解决一个问题。",
-      points: ["封面钩子", "问题拆解", "方法展开", "例子证明", "行动清单"],
-    },
-    {
-      tone: "story",
-      label: "更有温度",
-      title: "用一个具体瞬间承载整篇笔记",
-      hook: "让读者先看见人，再看见方法。",
-      points: ["人物状态", "环境气味", "动作细节", "情绪变化", "余味结尾"],
-    },
-  ],
-] satisfies Array<
-  Array<Omit<Outline, "batch" | "id">>
->;
-
-function createOutlines(seed: string, batch: number): Outline[] {
-  const source = outlineBanks[batch % outlineBanks.length];
-  const topic = seed.trim() || DEFAULT_SEED;
-
-  return source.map((outline, index) => ({
-    ...outline,
-    id: `${batch}-${index}`,
-    batch,
-    title: `${outline.title}：${topic.slice(0, 18)}`,
-  }));
+function isOutlineTone(tone: string): tone is OutlineTone {
+  return tone === "guide" || tone === "story" || tone === "checklist";
 }
 
-function createPostDraft(seed: string, outline: Outline): PostDraft {
-  const topic = seed.trim() || DEFAULT_SEED;
-  const firstPoint = outline.points[0] ?? "核心场景";
-  const secondPoint = outline.points[1] ?? "执行步骤";
+function formatRecordTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function mapBackendOutline(outline: BackendOutline, batch: number): Outline {
+  return {
+    batch,
+    hook: outline.hook,
+    id: outline.id,
+    label: outline.label,
+    points: outline.points,
+    title: outline.title,
+    tone: isOutlineTone(outline.tone) ? outline.tone : "guide",
+  };
+}
+
+function mapBackendPostDraft(draft: BackendPostDraft): PostDraft {
+  return {
+    caption: draft.caption,
+    coverLine: draft.coverLine,
+    id: draft.id,
+    imagePrompt: draft.imagePrompt,
+    sections: draft.sections,
+    stale: draft.stale,
+    tags: draft.tags,
+    title: draft.title,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function mapSavedDraft(savedDraft: BackendSavedDraft): SavedDraft | null {
+  const snapshot = savedDraft.snapshot;
+
+  if (
+    !isRecord(snapshot) ||
+    typeof snapshot.id !== "string" ||
+    typeof snapshot.title !== "string" ||
+    typeof snapshot.coverLine !== "string" ||
+    typeof snapshot.caption !== "string" ||
+    typeof snapshot.imagePrompt !== "string" ||
+    !isStringArray(snapshot.sections) ||
+    !isStringArray(snapshot.tags)
+  ) {
+    return null;
+  }
 
   return {
-    title: outline.title.replace("：", " | "),
-    coverLine: `${toneMeta[outline.tone].name} / ${outline.label}`,
-    caption: `今天这篇围绕「${topic}」展开，用「${firstPoint}」先把读者带进来，再用「${secondPoint}」给出清楚路径。整体语气保持自然、具体、可收藏。`,
-    imagePrompt: `竖版图文封面，主题为「${topic}」，画面有手写批注、红色贴纸、生活道具、自然窗光，标题区域留白清楚。`,
-    sections: outline.points.map((point, index) => {
-      const verbs = ["定调", "展开", "证明", "补充", "收束"];
-      return `${index + 1}. ${point}：用${verbs[index] ?? "说明"}的方式写 2 到 3 句，避免空泛形容。`;
-    }),
-    tags: ["小红书图文", toneMeta[outline.tone].name, outline.label, "可编辑大纲"],
+    caption: snapshot.caption,
+    coverLine: snapshot.coverLine,
+    id: snapshot.id,
+    imagePrompt: snapshot.imagePrompt,
+    savedAt: formatRecordTime(savedDraft.createdAt),
+    savedDraftId: savedDraft.id,
+    sections: snapshot.sections,
+    stale: typeof snapshot.stale === "boolean" ? snapshot.stale : false,
+    tags: snapshot.tags,
+    title: snapshot.title,
   };
 }
 
@@ -199,19 +176,20 @@ function getPostText(postDraft: PostDraft) {
 }
 
 export default function Home() {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [loginAccount, setLoginAccount] = useState("creator@rednote.local");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [registerName, setRegisterName] = useState("");
-  const [registeredAccounts, setRegisteredAccounts] = useState<RegisteredAccount[]>([]);
-  const [isRegisteredReady, setIsRegisteredReady] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [seed, setSeed] = useState(DEFAULT_SEED);
-  const [batch, setBatch] = useState(0);
-  const [outlines, setOutlines] = useState(() => createOutlines(DEFAULT_SEED, 0));
-  const [selectedId, setSelectedId] = useState(outlines[0]?.id ?? "");
+  const [batch, setBatch] = useState(-1);
+  const [outlines, setOutlines] = useState<Outline[]>([]);
+  const [selectedId, setSelectedId] = useState("");
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -220,127 +198,57 @@ export default function Home() {
   const [conversationRecords, setConversationRecords] = useState<ConversationRecord[]>([]);
   const [isHistoryReady, setIsHistoryReady] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
-  const [statusMessage, setStatusMessage] = useState("已准备 3 个方向，可先比较再编辑。");
+  const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
 
   useEffect(() => {
-    let storedUser: AuthUser | null = null;
-    let hasReadError = false;
+    let shouldIgnore = false;
 
-    try {
-      const storedAuth = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    async function restoreSession() {
+      try {
+        const storedAuth = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
-      if (storedAuth) {
-        storedUser = JSON.parse(storedAuth) as AuthUser;
-      }
-    } catch {
-      hasReadError = true;
-    }
+        if (!storedAuth) {
+          setStatusMessage("请登录后开始创作。");
+          return;
+        }
 
-    const authTimer = window.setTimeout(() => {
-      setAuthUser(storedUser);
-      if (hasReadError) {
-        setLoginError("登录状态读取失败，请重新登录。");
-      }
-      setIsAuthReady(true);
-    }, 0);
+        const session = JSON.parse(storedAuth) as AuthSession;
 
-    return () => window.clearTimeout(authTimer);
-  }, []);
+        if (!session.accessToken) {
+          window.localStorage.removeItem(AUTH_STORAGE_KEY);
+          setStatusMessage("请登录后开始创作。");
+          return;
+        }
 
-  useEffect(() => {
-    if (!isAuthReady) return;
+        const user = await api.auth.me(session.accessToken);
 
-    try {
-      if (authUser) {
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser));
-      } else {
+        if (shouldIgnore) return;
+
+        const nextSession = { accessToken: session.accessToken, user };
+        setAccessToken(nextSession.accessToken);
+        setAuthUser(nextSession.user);
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+        await bootstrapWorkspace(nextSession.accessToken);
+      } catch {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        setLoginError("登录状态已失效，请重新登录。");
+        setStatusMessage("请登录后开始创作。");
+      } finally {
+        if (!shouldIgnore) setIsAuthReady(true);
       }
-    } catch {
-      window.setTimeout(() => {
-        setStatusMessage("登录状态保存失败，当前工作不受影响。");
-      }, 0);
-    }
-  }, [authUser, isAuthReady]);
-
-  useEffect(() => {
-    let storedAccounts: RegisteredAccount[] = [];
-
-    try {
-      const stored = window.localStorage.getItem(REGISTERED_ACCOUNTS_STORAGE_KEY);
-
-      if (stored) {
-        storedAccounts = JSON.parse(stored) as RegisteredAccount[];
-      }
-    } catch {
-      storedAccounts = [];
     }
 
-    const registerTimer = window.setTimeout(() => {
-      setRegisteredAccounts(storedAccounts);
-      setIsRegisteredReady(true);
-    }, 0);
+    void restoreSession();
 
-    return () => window.clearTimeout(registerTimer);
+    return () => {
+      shouldIgnore = true;
+    };
+    // Restore persisted auth once on mount; later workspace loads are user-driven.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!isRegisteredReady) return;
-
-    try {
-      window.localStorage.setItem(
-        REGISTERED_ACCOUNTS_STORAGE_KEY,
-        JSON.stringify(registeredAccounts),
-      );
-    } catch {
-      window.setTimeout(() => {
-        setLoginError("注册信息保存失败，请稍后重试。");
-      }, 0);
-    }
-  }, [isRegisteredReady, registeredAccounts]);
-
-  useEffect(() => {
-    let storedHistory: ConversationRecord[] = [];
-    let hasReadError = false;
-
-    try {
-      const storedRecords = window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
-
-      if (storedRecords) {
-        storedHistory = JSON.parse(storedRecords) as ConversationRecord[];
-      }
-    } catch {
-      hasReadError = true;
-    }
-
-    const loadTimer = window.setTimeout(() => {
-      setConversationRecords(storedHistory);
-      if (hasReadError) {
-        setStatusMessage("对话记录读取失败，当前工作不受影响。");
-      }
-      setIsHistoryReady(true);
-    }, 0);
-
-    return () => window.clearTimeout(loadTimer);
-  }, []);
-
-  useEffect(() => {
-    if (!isHistoryReady) return;
-
-    try {
-      window.localStorage.setItem(
-        CONVERSATION_STORAGE_KEY,
-        JSON.stringify(conversationRecords),
-      );
-    } catch {
-      window.setTimeout(() => {
-        setStatusMessage("对话记录保存失败，请减少记录数量后重试。");
-      }, 0);
-    }
-  }, [conversationRecords, isHistoryReady]);
 
   const latestBatch = useMemo(
-    () => Math.max(...outlines.map((outline) => outline.batch)),
+    () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
     [outlines],
   );
 
@@ -368,8 +276,136 @@ export default function Home() {
 
   const currentStep = postDraft ? 3 : selectedOutline ? 2 : 1;
 
-  function rememberCurrentState() {
-    setLastSnapshot({ batch, outlines, postDraft, selectedId });
+  function mapConversationRecord(
+    conversation: BackendConversationSummary,
+  ): ConversationRecord {
+    return {
+      conversationId: conversation.id,
+      id: conversation.id,
+      outlineCount: conversation.outlineBatchCount * 3,
+      savedAt: formatRecordTime(conversation.updatedAt),
+      snapshot: null,
+      title: conversation.title,
+      topic: conversation.topic,
+    };
+  }
+
+  function applyConversation(
+    conversation: BackendConversation,
+    options: { keepLastSnapshot?: boolean; message?: string } = {},
+  ) {
+    const nextOutlines = conversation.outlineBatches.flatMap((outlineBatch) =>
+      outlineBatch.outlines.map((outline) =>
+        mapBackendOutline(outline, outlineBatch.batchNo),
+      ),
+    );
+    const nextPostDraft = conversation.currentPostDraft
+      ? mapBackendPostDraft(conversation.currentPostDraft)
+      : null;
+    const nextSavedDrafts = conversation.savedDrafts
+      .map((savedDraft) => mapSavedDraft(savedDraft))
+      .filter((savedDraft): savedDraft is SavedDraft => Boolean(savedDraft));
+
+    setBatch(
+      nextOutlines.length
+        ? Math.max(...nextOutlines.map((outline) => outline.batch))
+        : -1,
+    );
+    setBriefError("");
+    setConversationId(conversation.id);
+    setDraftStale(Boolean(nextPostDraft?.stale));
+    if (!options.keepLastSnapshot) setLastSnapshot(null);
+    setOutlines(nextOutlines);
+    setPostDraft(nextPostDraft);
+    setSavedDrafts(nextSavedDrafts);
+    setSeed(conversation.topic || DEFAULT_SEED);
+    setSelectedId(conversation.selectedOutlineId ?? nextOutlines[0]?.id ?? "");
+    setStatusMessage(
+      options.message ??
+        conversation.statusMessage ??
+        "已从后端恢复当前工作状态。",
+    );
+  }
+
+  function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot, message: string) {
+    setBatch(snapshot.batch);
+    setBriefError(snapshot.briefError);
+    setDraftStale(snapshot.draftStale);
+    setLastSnapshot(snapshot.lastSnapshot);
+    setOutlines(snapshot.outlines);
+    setPostDraft(snapshot.postDraft);
+    setSavedDrafts(snapshot.savedDrafts);
+    setSeed(snapshot.seed);
+    setSelectedId(snapshot.selectedId);
+    setStatusMessage(message);
+  }
+
+  async function refreshConversationRecords(token = accessToken) {
+    if (!token) return [];
+
+    const records = (await api.conversations.list(token))
+      .map((conversation) => mapConversationRecord(conversation))
+      .slice(0, 8);
+
+    setConversationRecords(records);
+    setIsHistoryReady(true);
+    return records;
+  }
+
+  async function createInitialWorkspace(token: string) {
+    const conversation = await api.conversations.create(token, {
+      topic: DEFAULT_SEED,
+    });
+    const result = await api.conversations.createOutlineBatch(token, conversation.id, {
+      prompt: DEFAULT_SEED,
+    });
+
+    applyConversation(result.conversation, {
+      message: "已连接后端，并准备好 3 个方向。",
+    });
+    await refreshConversationRecords(token);
+  }
+
+  async function bootstrapWorkspace(token: string) {
+    setIsHistoryReady(false);
+
+    const records = await refreshConversationRecords(token);
+
+    if (records[0]) {
+      const conversation = await api.conversations.get(token, records[0].conversationId);
+      applyConversation(conversation, {
+        message: "已从后端恢复最近一次创作。",
+      });
+      return;
+    }
+
+    await createInitialWorkspace(token);
+  }
+
+  async function ensureConversation(token: string) {
+    if (conversationId) return conversationId;
+
+    const conversation = await api.conversations.create(token, {
+      topic: seed.trim() || DEFAULT_SEED,
+    });
+
+    setConversationId(conversation.id);
+    return conversation.id;
+  }
+
+  async function applyAuthResponse(response: AuthResponse, message: string) {
+    const session: AuthSession = {
+      accessToken: response.accessToken,
+      user: response.user,
+    };
+
+    setAccessToken(session.accessToken);
+    setAuthUser(session.user);
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+    setLoginError("");
+    setLoginPassword("");
+    setStatusMessage(message);
+    await bootstrapWorkspace(session.accessToken);
   }
 
   function validateSeed() {
@@ -383,23 +419,39 @@ export default function Home() {
     return false;
   }
 
-  function appendOutlineBatch() {
+  async function appendOutlineBatch() {
     if (!validateSeed()) return;
+    if (!accessToken) {
+      setStatusMessage("请先登录，再生成大纲。");
+      return;
+    }
 
-    rememberCurrentState();
+    const previousSnapshot = getWorkspaceSnapshot();
     setIsGenerating(true);
-    const nextBatch = batch + 1;
-    const nextOutlines = createOutlines(seed, nextBatch);
-    setBatch(nextBatch);
-    setOutlines((items) => [...nextOutlines, ...items]);
-    setSelectedId(nextOutlines[0]?.id ?? "");
-    setDraftStale(Boolean(postDraft));
-    setStatusMessage("已追加新一批大纲，之前生成的仍保留。");
-    window.setTimeout(() => setIsGenerating(false), 180);
+
+    try {
+      const currentConversationId = await ensureConversation(accessToken);
+      const result = await api.conversations.createOutlineBatch(
+        accessToken,
+        currentConversationId,
+        { prompt: seed },
+      );
+
+      setLastSnapshot(previousSnapshot);
+      applyConversation(result.conversation, {
+        keepLastSnapshot: true,
+        message: "已追加新一批大纲，之前生成的仍保留。",
+      });
+      await refreshConversationRecords(accessToken);
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   function regenerateOutlines() {
-    appendOutlineBatch();
+    void appendOutlineBatch();
   }
 
   function undoBatch() {
@@ -419,17 +471,45 @@ export default function Home() {
     );
     if (postDraft) setDraftStale(true);
     setStatusMessage("大纲已更新，生成图文可刷新预览。");
+
+    if (!accessToken) return;
+
+    void api.outlines.update(accessToken, id, patch).catch((error) => {
+      setStatusMessage(getApiErrorMessage(error));
+    });
   }
 
-  function confirmOutline() {
+  async function confirmOutline() {
     if (!selectedOutline) return;
     if (!validateSeed()) return;
+    if (!accessToken) {
+      setStatusMessage("请先登录，再生成图文。");
+      return;
+    }
 
     setIsGenerating(true);
-    setPostDraft(createPostDraft(seed, selectedOutline));
-    setDraftStale(false);
-    setStatusMessage("图文草稿已生成，可以复制或继续微调大纲。");
-    window.setTimeout(() => setIsGenerating(false), 180);
+
+    try {
+      const currentConversationId = await ensureConversation(accessToken);
+      await api.conversations.update(accessToken, currentConversationId, {
+        selectedOutlineId: selectedOutline.id,
+        topic: seed,
+      });
+      const draft = await api.conversations.generatePostDraft(
+        accessToken,
+        currentConversationId,
+        { outlineId: selectedOutline.id },
+      );
+
+      setPostDraft(mapBackendPostDraft(draft));
+      setDraftStale(false);
+      setStatusMessage("图文草稿已生成，可以复制或继续微调大纲。");
+      await refreshConversationRecords(accessToken);
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   async function copyText(text: string, label: string) {
@@ -441,16 +521,31 @@ export default function Home() {
     }
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     if (!postDraft) return;
+    if (!accessToken) {
+      setStatusMessage("请先登录，再保存草稿。");
+      return;
+    }
 
-    const savedAt = new Intl.DateTimeFormat("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date());
+    try {
+      const currentConversationId = await ensureConversation(accessToken);
+      const savedDraft = await api.conversations.createSavedDraft(
+        accessToken,
+        currentConversationId,
+        { postDraftId: postDraft.id },
+      );
+      const mappedDraft = mapSavedDraft(savedDraft);
 
-    setSavedDrafts((drafts) => [{ ...postDraft, savedAt }, ...drafts].slice(0, 3));
-    setStatusMessage(`已保存草稿，当前保留 ${Math.min(savedDrafts.length + 1, 3)} 条。`);
+      if (mappedDraft) {
+        setSavedDrafts((drafts) => [mappedDraft, ...drafts].slice(0, 3));
+      }
+
+      setStatusMessage("已保存草稿，后端会保留这次创作状态。");
+      await refreshConversationRecords(accessToken);
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    }
   }
 
   function getWorkspaceSnapshot(): WorkspaceSnapshot {
@@ -468,58 +563,78 @@ export default function Home() {
     };
   }
 
-  function saveConversationRecord() {
+  async function saveConversationRecord() {
+    if (!accessToken) {
+      setStatusMessage("请先登录，再保存对话记录。");
+      return;
+    }
+
     const topic = seed.trim() || DEFAULT_SEED;
-    const savedAt = new Intl.DateTimeFormat("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
     const title = postDraft?.title ?? selectedOutline?.title ?? topic;
-    const record: ConversationRecord = {
-      id: `${Date.now()}`,
-      outlineCount: outlines.length,
-      savedAt,
-      snapshot: getWorkspaceSnapshot(),
-      title,
-      topic,
-    };
 
-    setConversationRecords((records) => [record, ...records].slice(0, 8));
-    setStatusMessage("已保存对话记录，可从记录中恢复完整工作状态。");
+    try {
+      const currentConversationId = await ensureConversation(accessToken);
+      await api.conversations.update(accessToken, currentConversationId, {
+        title,
+        topic,
+        selectedOutlineId: selectedId,
+        statusMessage,
+      });
+      await api.conversations.createSnapshot(accessToken, currentConversationId, {
+        snapshot: getWorkspaceSnapshot() as unknown as Record<string, unknown>,
+      });
+      await refreshConversationRecords(accessToken);
+      setStatusMessage("已保存对话记录，可从记录中恢复完整工作状态。");
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    }
   }
 
-  function restoreConversationRecord(record: ConversationRecord) {
-    const { snapshot } = record;
+  async function restoreConversationRecord(record: ConversationRecord) {
+    if (!accessToken) return;
 
-    setBatch(snapshot.batch);
-    setBriefError(snapshot.briefError);
-    setDraftStale(snapshot.draftStale);
-    setLastSnapshot(snapshot.lastSnapshot);
-    setOutlines(snapshot.outlines);
-    setPostDraft(snapshot.postDraft);
-    setSavedDrafts(snapshot.savedDrafts);
-    setSeed(snapshot.seed);
-    setSelectedId(snapshot.selectedId);
-    setStatusMessage(`已恢复 ${record.savedAt} 的对话记录。`);
+    if (record.snapshot) {
+      setConversationId(record.conversationId);
+      applyWorkspaceSnapshot(
+        record.snapshot,
+        `已恢复 ${record.savedAt} 的对话记录。`,
+      );
+      return;
+    }
+
+    try {
+      const conversation = await api.conversations.get(
+        accessToken,
+        record.conversationId,
+      );
+      applyConversation(conversation, {
+        message: `已恢复 ${record.savedAt} 的对话记录。`,
+      });
+      await refreshConversationRecords(accessToken);
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    }
   }
 
-  function deleteConversationRecord(id: string) {
-    setConversationRecords((records) => records.filter((record) => record.id !== id));
-    setStatusMessage("已删除一条对话记录。");
-  }
+  async function deleteConversationRecord(record: ConversationRecord) {
+    if (!accessToken) return;
 
-  function createAuthUser(account: string, displayName?: string): AuthUser {
-    const normalizedAccount = account.trim().toLowerCase();
-    const name = displayName?.trim() || normalizedAccount.split("@")[0] || "内容创作者";
-
-    return {
-      account: normalizedAccount,
-      id: normalizedAccount,
-      loginAt: new Date().toISOString(),
-      name,
-    };
+    try {
+      await api.conversations.delete(accessToken, record.conversationId);
+      setConversationRecords((records) =>
+        records.filter((item) => item.id !== record.id),
+      );
+      if (record.conversationId === conversationId) {
+        setConversationId(null);
+        setOutlines([]);
+        setPostDraft(null);
+        setSavedDrafts([]);
+        setSelectedId("");
+      }
+      setStatusMessage("已删除一条对话记录。");
+    } catch (error) {
+      setStatusMessage(getApiErrorMessage(error));
+    }
   }
 
   function switchAuthMode(nextMode: AuthMode) {
@@ -527,7 +642,7 @@ export default function Home() {
     setLoginError("");
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedAccount = loginAccount.trim().toLowerCase();
 
@@ -541,23 +656,22 @@ export default function Home() {
       return;
     }
 
-    const registeredAccount = registeredAccounts.find(
-      (account) => account.account === normalizedAccount,
-    );
-    const isDemoAccount = normalizedAccount === "creator@rednote.local";
+    setIsAuthSubmitting(true);
 
-    if (!registeredAccount && !isDemoAccount) {
-      setLoginError("账号未注册。");
-      return;
+    try {
+      const response = await api.auth.login({
+        account: normalizedAccount,
+        password: loginPassword,
+      });
+      await applyAuthResponse(response, "登录成功，已进入创作工作台。");
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error));
+    } finally {
+      setIsAuthSubmitting(false);
     }
-
-    setAuthUser(createAuthUser(normalizedAccount, registeredAccount?.name));
-    setLoginError("");
-    setLoginPassword("");
-    setStatusMessage("登录成功，已进入创作工作台。");
   }
 
-  function handleRegister(event: FormEvent<HTMLFormElement>) {
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedAccount = loginAccount.trim().toLowerCase();
     const displayName = registerName.trim();
@@ -577,37 +691,53 @@ export default function Home() {
       return;
     }
 
-    if (registeredAccounts.some((account) => account.account === normalizedAccount)) {
-      setLoginError("账号已注册，请直接登录。");
-      return;
+    setIsAuthSubmitting(true);
+
+    try {
+      const response = await api.auth.register({
+        account: normalizedAccount,
+        name: displayName,
+        password: loginPassword,
+      });
+      await applyAuthResponse(response, "注册成功，已进入创作工作台。");
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error));
+    } finally {
+      setIsAuthSubmitting(false);
     }
-
-    const registeredAccount: RegisteredAccount = {
-      account: normalizedAccount,
-      createdAt: new Date().toISOString(),
-      name: displayName,
-    };
-
-    setRegisteredAccounts((accounts) => [registeredAccount, ...accounts]);
-    setAuthUser(createAuthUser(normalizedAccount, displayName));
-    setLoginError("");
-    setLoginPassword("");
-    setStatusMessage("注册成功，已进入创作工作台。");
   }
 
-  function loginWithDemoAccount() {
+  async function loginWithDemoAccount() {
     setLoginAccount("creator@rednote.local");
     setLoginPassword("");
     setLoginError("");
     setAuthMode("login");
-    setAuthUser(createAuthUser("creator@rednote.local"));
-    setStatusMessage("已使用演示账号进入工作台。");
+    setIsAuthSubmitting(true);
+
+    try {
+      const response = await api.auth.demo();
+      await applyAuthResponse(response, "已使用演示账号进入工作台。");
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error));
+    } finally {
+      setIsAuthSubmitting(false);
+    }
   }
 
   function logout() {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setAccessToken(null);
     setAuthUser(null);
+    setConversationId(null);
+    setConversationRecords([]);
+    setIsHistoryReady(false);
     setLoginPassword("");
     setLoginError("");
+    setOutlines([]);
+    setPostDraft(null);
+    setSavedDrafts([]);
+    setSelectedId("");
+    setStatusMessage("已退出登录。");
   }
 
   if (!isAuthReady) {
@@ -640,7 +770,11 @@ export default function Home() {
 
           <form
             className="login-form"
-            onSubmit={authMode === "login" ? handleLogin : handleRegister}
+            onSubmit={(event) => {
+              void (authMode === "login"
+                ? handleLogin(event)
+                : handleRegister(event));
+            }}
           >
             <div className="login-copy">
               <p className="section-kicker">
@@ -715,13 +849,22 @@ export default function Home() {
             {loginError ? <p className="login-error">{loginError}</p> : null}
 
             <div className="login-actions">
-              <button className="primary-action" type="submit">
-                {authMode === "login" ? "登录" : "创建并进入"}
+              <button
+                className="primary-action"
+                disabled={isAuthSubmitting}
+                type="submit"
+              >
+                {isAuthSubmitting
+                  ? "处理中"
+                  : authMode === "login"
+                    ? "登录"
+                    : "创建并进入"}
               </button>
               {authMode === "login" ? (
                 <button
                   className="quiet-action"
-                  onClick={loginWithDemoAccount}
+                  disabled={isAuthSubmitting}
+                  onClick={() => void loginWithDemoAccount()}
                   type="button"
                 >
                   演示账号
@@ -811,7 +954,7 @@ export default function Home() {
             <button
               className="primary-action"
               disabled={isGenerating}
-              onClick={appendOutlineBatch}
+              onClick={() => void appendOutlineBatch()}
             >
               {isGenerating ? "生成中" : "生成 3 个大纲"}
             </button>
@@ -837,7 +980,7 @@ export default function Home() {
               <button
                 className="quiet-action compact"
                 disabled={!isHistoryReady}
-                onClick={saveConversationRecord}
+                onClick={() => void saveConversationRecord()}
               >
                 保存当前
               </button>
@@ -849,18 +992,19 @@ export default function Home() {
                     <button
                       className="history-record"
                       aria-label={`恢复记录：${record.title}`}
-                      onClick={() => restoreConversationRecord(record)}
+                      onClick={() => void restoreConversationRecord(record)}
                     >
                       <span>{record.savedAt}</span>
                       <strong>{record.title}</strong>
                       <small>
-                        {record.outlineCount} 个大纲 · {record.snapshot.postDraft ? "含图文" : "未生成图文"}
+                        {record.outlineCount} 个大纲 ·{" "}
+                        {record.snapshot?.postDraft ? "含图文" : "后端记录"}
                       </small>
                     </button>
                     <button
                       className="history-delete"
                       aria-label={`删除记录：${record.title}`}
-                      onClick={() => deleteConversationRecord(record.id)}
+                      onClick={() => void deleteConversationRecord(record)}
                     >
                       删除
                     </button>
@@ -911,6 +1055,15 @@ export default function Home() {
                           setSelectedId(outline.id);
                           if (postDraft) setDraftStale(true);
                           setStatusMessage(`已选择「${meta.name}」。`);
+                          if (accessToken && conversationId) {
+                            void api.conversations
+                              .update(accessToken, conversationId, {
+                                selectedOutlineId: outline.id,
+                              })
+                              .catch((error) => {
+                                setStatusMessage(getApiErrorMessage(error));
+                              });
+                          }
                         }}
                       >
                         <span className="option-meta">
@@ -942,7 +1095,7 @@ export default function Home() {
                 <button
                   className="primary-action compact"
                   disabled={isGenerating}
-                  onClick={confirmOutline}
+                  onClick={() => void confirmOutline()}
                 >
                   {isGenerating ? "生成中" : postDraft ? "刷新图文" : "生成图文"}
                 </button>
@@ -1057,14 +1210,14 @@ export default function Home() {
             <button
               className="quiet-action compact"
               disabled={!postDraft}
-              onClick={saveDraft}
+              onClick={() => void saveDraft()}
             >
               保存草稿
             </button>
             <button
               className="quiet-action compact"
               disabled={!postDraft || !selectedOutline || isGenerating}
-              onClick={confirmOutline}
+              onClick={() => void confirmOutline()}
             >
               刷新预览
             </button>
