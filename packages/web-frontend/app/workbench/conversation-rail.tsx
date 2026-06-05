@@ -31,10 +31,12 @@ export function ConversationRail({
   onSaveConversation,
 }: ConversationRailProps) {
   const newConversationTitle = isStartingConversation ? "新建中" : "新增对话";
+  const headerButtonClass =
+    "grid size-9 place-items-center rounded-md border border-[var(--line)] bg-[var(--surface-tint)] text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] hover:text-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--line)] disabled:hover:bg-[var(--surface-tint)] disabled:hover:text-[var(--ink)]";
 
   return (
     <aside
-      className="sticky top-3.5 grid w-[248px] shrink-0 gap-3.5 bg-[var(--surface)] p-3.5"
+      className="grid w-full shrink-0 gap-3.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3.5 xl:sticky xl:top-3.5 xl:w-[248px]"
       aria-labelledby="conversation-rail-title"
     >
       <div className="flex items-start justify-between gap-3">
@@ -59,7 +61,7 @@ export function ConversationRail({
       <div className="flex items-center gap-1.5">
         <button
           aria-label={newConversationTitle}
-          className="icon-button"
+          className={headerButtonClass}
           disabled={!isHistoryReady || isStartingConversation || isGenerating}
           onClick={onCreateConversation}
           title={newConversationTitle}
@@ -69,7 +71,7 @@ export function ConversationRail({
         </button>
         <button
           aria-label="立即保存"
-          className="icon-button"
+          className={headerButtonClass}
           disabled={!isHistoryReady}
           onClick={onSaveConversation}
           title="立即保存"
