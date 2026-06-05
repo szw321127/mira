@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   api,
+  apiClient,
   getApiErrorMessage,
   type AuthResponse,
   type AuthUser,
@@ -247,6 +248,23 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    return apiClient.interceptors.error.use((error) => {
+      if (error.code === 401 && accessToken) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        setAccessToken(null);
+        setAuthUser(null);
+        setConversationId(null);
+        setStatusMessage("登录已过期，请重新登录。");
+        return;
+      }
+
+      if (authUser) {
+        setStatusMessage(error.message);
+      }
+    });
+  }, [accessToken, authUser]);
+
   const latestBatch = useMemo(
     () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
     [outlines],
@@ -443,8 +461,7 @@ export default function Home() {
         message: "已追加新一批大纲，之前生成的仍保留。",
       });
       await refreshConversationRecords(accessToken);
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     } finally {
       setIsGenerating(false);
     }
@@ -474,9 +491,7 @@ export default function Home() {
 
     if (!accessToken) return;
 
-    void api.outlines.update(accessToken, id, patch).catch((error) => {
-      setStatusMessage(getApiErrorMessage(error));
-    });
+    void api.outlines.update(accessToken, id, patch).catch(() => {});
   }
 
   async function confirmOutline() {
@@ -505,8 +520,7 @@ export default function Home() {
       setDraftStale(false);
       setStatusMessage("图文草稿已生成，可以复制或继续微调大纲。");
       await refreshConversationRecords(accessToken);
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     } finally {
       setIsGenerating(false);
     }
@@ -543,8 +557,7 @@ export default function Home() {
 
       setStatusMessage("已保存草稿，后端会保留这次创作状态。");
       await refreshConversationRecords(accessToken);
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     }
   }
 
@@ -585,8 +598,7 @@ export default function Home() {
       });
       await refreshConversationRecords(accessToken);
       setStatusMessage("已保存对话记录，可从记录中恢复完整工作状态。");
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     }
   }
 
@@ -611,8 +623,7 @@ export default function Home() {
         message: `已恢复 ${record.savedAt} 的对话记录。`,
       });
       await refreshConversationRecords(accessToken);
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     }
   }
 
@@ -632,8 +643,7 @@ export default function Home() {
         setSelectedId("");
       }
       setStatusMessage("已删除一条对话记录。");
-    } catch (error) {
-      setStatusMessage(getApiErrorMessage(error));
+    } catch {
     }
   }
 
@@ -1060,9 +1070,7 @@ export default function Home() {
                               .update(accessToken, conversationId, {
                                 selectedOutlineId: outline.id,
                               })
-                              .catch((error) => {
-                                setStatusMessage(getApiErrorMessage(error));
-                              });
+                              .catch(() => {});
                           }
                         }}
                       >

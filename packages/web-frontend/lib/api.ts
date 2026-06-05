@@ -7,6 +7,20 @@ export type ApiEnvelope<T> = {
   msg: string;
 };
 
+export type ApiRequestConfig = {
+  body?: unknown;
+  headers: Headers;
+  method: string;
+  path: string;
+  token?: string | null;
+};
+
+export type ApiResponseContext<T> = {
+  config: ApiRequestConfig;
+  envelope: ApiEnvelope<T>;
+  response: Response;
+};
+
 export type AuthUser = {
   account: string;
   id: string;
@@ -107,10 +121,12 @@ export type OutlineBatchResult = {
 
 export class ApiError extends Error {
   code: number;
+  status: number;
 
-  constructor(code: number, message: string) {
+  constructor(code: number, message: string, status = code) {
     super(message);
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -119,6 +135,49 @@ type RequestOptions = {
   method?: string;
   token?: string | null;
 };
+
+type Interceptor<T> = (value: T) => T | Promise<T>;
+type ErrorInterceptor = (error: ApiError) => void | Promise<void>;
+
+function createInterceptorManager<T>() {
+  const interceptors = new Set<Interceptor<T>>();
+
+  return {
+    async run(value: T) {
+      let nextValue = value;
+
+      for (const interceptor of interceptors) {
+        nextValue = await interceptor(nextValue);
+      }
+
+      return nextValue;
+    },
+    use(interceptor: Interceptor<T>) {
+      interceptors.add(interceptor);
+      return () => {
+        interceptors.delete(interceptor);
+      };
+    },
+  };
+}
+
+function createErrorInterceptorManager() {
+  const interceptors = new Set<ErrorInterceptor>();
+
+  return {
+    async run(error: ApiError) {
+      for (const interceptor of interceptors) {
+        await interceptor(error);
+      }
+    },
+    use(interceptor: ErrorInterceptor) {
+      interceptors.add(interceptor);
+      return () => {
+        interceptors.delete(interceptor);
+      };
+    },
+  };
+}
 
 function isEnvelope(value: unknown): value is ApiEnvelope<unknown> {
   if (typeof value !== "object" || value === null) return false;
@@ -141,34 +200,74 @@ export function getApiErrorMessage(error: unknown) {
   return getErrorMessage(error);
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const headers = new Headers();
-
-  if (options.body !== undefined) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  if (options.token) {
-    headers.set("Authorization", `Bearer ${options.token}`);
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    headers,
-    method: options.method ?? "GET",
-  });
-  const payload: unknown = await response.json().catch(() => null);
-
-  if (!isEnvelope(payload)) {
-    throw new ApiError(response.status, "接口返回格式异常。");
-  }
-
-  if (!response.ok || payload.code !== 0) {
-    throw new ApiError(payload.code || response.status, payload.msg);
-  }
-
-  return payload.data as T;
+function normalizeApiError(error: unknown) {
+  if (error instanceof ApiError) return error;
+  return new ApiError(0, getErrorMessage(error), 0);
 }
+
+class ApiClient {
+  interceptors = {
+    error: createErrorInterceptorManager(),
+    request: createInterceptorManager<ApiRequestConfig>(),
+    response: createInterceptorManager<ApiResponseContext<unknown>>(),
+  };
+
+  async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const headers = new Headers();
+
+    if (options.body !== undefined) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (options.token) {
+      headers.set("Authorization", `Bearer ${options.token}`);
+    }
+
+    const initialConfig: ApiRequestConfig = {
+      body: options.body,
+      headers,
+      method: options.method ?? "GET",
+      path,
+      token: options.token,
+    };
+
+    try {
+      const config = await this.interceptors.request.run(initialConfig);
+      const response = await fetch(`${API_BASE_URL}${config.path}`, {
+        body:
+          config.body === undefined ? undefined : JSON.stringify(config.body),
+        headers: config.headers,
+        method: config.method,
+      });
+      const payload: unknown = await response.json().catch(() => null);
+
+      if (!isEnvelope(payload)) {
+        throw new ApiError(response.status, "接口返回格式异常。", response.status);
+      }
+
+      if (!response.ok || payload.code !== 0) {
+        throw new ApiError(payload.code || response.status, payload.msg, response.status);
+      }
+
+      const context = await this.interceptors.response.run({
+        config,
+        envelope: payload,
+        response,
+      });
+
+      return context.envelope.data as T;
+    } catch (error) {
+      const apiError = normalizeApiError(error);
+      await this.interceptors.error.run(apiError);
+      throw apiError;
+    }
+  }
+}
+
+export const apiClient = new ApiClient();
+
+const request = <T>(path: string, options?: RequestOptions) =>
+  apiClient.request<T>(path, options);
 
 export const api = {
   auth: {
