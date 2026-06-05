@@ -99,3 +99,17 @@ test("publish package draft signature excludes generation timestamp metadata", (
   assert.match(utils, /imageGeneratedAt: optionalString\(snapshot\.imageGeneratedAt\)/);
   assert.match(utils, /imageGeneratedAt: optionalString\(value\.imageGeneratedAt\)/);
 });
+
+test("post editor presents a focused publish package with image actions", () => {
+  const editor = readWorkbenchFile("post-editor.tsx");
+  const preview = readWorkbenchFile("post-cover-preview.tsx");
+
+  assert.match(editor, /发布包/);
+  assert.match(editor, /PostCoverPreview/);
+  assert.match(editor, /onGenerateImage/);
+  assert.match(editor, /onDownloadImage/);
+  assert.doesNotMatch(editor, /aria-label="局部复制"/);
+  assert.match(preview, /imageStatus === "ready"/);
+  assert.match(preview, /imageStatus === "failed"/);
+  assert.match(preview, /imageStatus === "generating"/);
+});

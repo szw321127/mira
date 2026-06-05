@@ -1,9 +1,10 @@
 "use client";
 
-import { Copy, Save } from "lucide-react";
+import { Copy, Download, Save } from "lucide-react";
 import { useEffect, useState } from "react";
+import { PostCoverPreview } from "./post-cover-preview";
 import type { PostDraft, SavedDraft } from "./types";
-import { getFullPostText, getPostBodyText } from "./workspace-utils";
+import { getFullPostText } from "./workspace-utils";
 
 type EditablePostDraftPatch = Partial<
   Pick<
@@ -14,9 +15,12 @@ type EditablePostDraftPatch = Partial<
 
 type PostEditorProps = {
   draftStale: boolean;
+  isGeneratingImage?: boolean;
   isSavingDraft: boolean;
   onCopy: (text: string, label: string) => void;
   onDraftChange: (patch: EditablePostDraftPatch) => void;
+  onDownloadImage?: () => void;
+  onGenerateImage?: () => void;
   onOpenSavedDraft: (draft: SavedDraft) => void;
   onSaveDraft: () => void;
   postDraft: PostDraft | null;
@@ -32,14 +36,15 @@ const primaryActionClass =
   "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-transparent bg-[var(--red)] px-3 font-bold text-[var(--surface)] transition hover:bg-[var(--red-strong)] disabled:cursor-not-allowed disabled:opacity-50";
 const quietActionClass =
   "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-bold text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryCopyClass =
-  "min-h-8 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[0.82rem] font-bold text-[var(--ink-soft)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] hover:text-[var(--red-strong)]";
 
 export function PostEditor({
   draftStale,
+  isGeneratingImage = false,
   isSavingDraft,
   onCopy,
   onDraftChange,
+  onDownloadImage,
+  onGenerateImage,
   onOpenSavedDraft,
   onSaveDraft,
   postDraft,
@@ -50,7 +55,7 @@ export function PostEditor({
   const sourceTagsText = postDraft?.tags.join(" ") ?? "";
   const [sectionsText, setSectionsText] = useState(sourceSectionsText);
   const [tagsText, setTagsText] = useState(sourceTagsText);
-  const copyTagsText = postDraft?.tags.map((tag) => `#${tag}`).join(" ") ?? "";
+  const canDownloadImage = Boolean(postDraft?.imageUrl && onDownloadImage);
 
   useEffect(() => {
     const syncDraftText = window.setTimeout(() => {
@@ -75,7 +80,7 @@ export function PostEditor({
             className="text-[1.08rem] font-bold leading-tight text-[var(--ink)]"
             id="post-title"
           >
-            编辑最终发布内容
+            发布包
           </h2>
         </div>
         {postDraft ? (
@@ -93,6 +98,12 @@ export function PostEditor({
 
       {postDraft ? (
         <div className="grid gap-3">
+          <PostCoverPreview
+            isGeneratingImage={isGeneratingImage}
+            onGenerateImage={onGenerateImage}
+            postDraft={postDraft}
+          />
+
           <label className={labelClass}>
             <span>标题</span>
             <input
@@ -174,21 +185,21 @@ export function PostEditor({
         <div className="grid min-h-[220px] place-items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--surface-tint)] p-5 text-center">
           <div className="grid gap-2">
             <span className="text-[0.78rem] font-bold text-[var(--red-strong)]">
-              等待图文
+              等待发布包
             </span>
             <strong className="text-[1rem] font-bold leading-snug text-[var(--ink)]">
               {selectedTitle ?? "先选择一个大纲"}
             </strong>
             <small className="text-[0.82rem] font-semibold leading-relaxed text-[var(--muted)]">
-              在大纲区点击生成图文后，这里会出现可复制的发布内容。
+              标题、封面、正文会在这里成组整理。
             </small>
           </div>
         </div>
       )}
 
       {postDraft ? (
-        <div className="grid gap-2" aria-label="图文操作">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid gap-2" aria-label="发布包操作">
+          <div className="grid gap-2 sm:grid-cols-3">
             <button
               className={primaryActionClass}
               onClick={() => onCopy(getFullPostText(postDraft), "完整笔记")}
@@ -199,50 +210,21 @@ export function PostEditor({
             </button>
             <button
               className={quietActionClass}
+              disabled={!canDownloadImage}
+              onClick={canDownloadImage ? onDownloadImage : undefined}
+              type="button"
+            >
+              <Download aria-hidden="true" size={16} strokeWidth={2.4} />
+              下载封面
+            </button>
+            <button
+              className={quietActionClass}
               disabled={isSavingDraft}
               onClick={onSaveDraft}
               type="button"
             >
               <Save aria-hidden="true" size={16} strokeWidth={2.4} />
               {isSavingDraft ? "保存中" : "保存草稿"}
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2" aria-label="局部复制">
-            <button
-              className={secondaryCopyClass}
-              onClick={() => onCopy(postDraft.title, "标题")}
-              type="button"
-            >
-              复制标题
-            </button>
-            <button
-              className={secondaryCopyClass}
-              onClick={() => onCopy(postDraft.coverLine, "封面文案")}
-              type="button"
-            >
-              复制封面文案
-            </button>
-            <button
-              className={secondaryCopyClass}
-              onClick={() => onCopy(getPostBodyText(postDraft), "正文")}
-              type="button"
-            >
-              复制正文
-            </button>
-            <button
-              className={secondaryCopyClass}
-              onClick={() => onCopy(copyTagsText, "标签")}
-              type="button"
-            >
-              复制标签
-            </button>
-            <button
-              className={secondaryCopyClass}
-              onClick={() => onCopy(postDraft.imagePrompt, "封面提示")}
-              type="button"
-            >
-              复制封面提示
             </button>
           </div>
           {draftStale ? (
