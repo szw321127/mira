@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { GenerationModule } from '../generation/generation.module';
+import { ImageGenerationModule } from '../image-generation/image-generation.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsService } from './conversations.service';
@@ -15,7 +16,7 @@ import { SnapshotsController } from './snapshots.controller';
     PostDraftsController,
     SnapshotsController,
   ],
-  imports: [AuthModule, GenerationModule, PrismaModule],
+  imports: [AuthModule, GenerationModule, ImageGenerationModule, PrismaModule],
   providers: [ConversationsService],
 })
 export class ConversationsModule {}

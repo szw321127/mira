@@ -21,11 +21,13 @@ import type {
   OutlineForDraft,
   OutlineTone,
 } from '../generation/generation.types';
+import { ImageGenerationService } from '../image-generation/image-generation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateOutlineBatchDto } from './dto/create-outline-batch.dto';
 import type { CreateSavedDraftDto } from './dto/create-saved-draft.dto';
 import type { CreateSnapshotDto } from './dto/create-snapshot.dto';
+import type { GeneratePostDraftImageDto } from './dto/generate-post-draft-image.dto';
 import type { GeneratePostDraftDto } from './dto/generate-post-draft.dto';
 import type { UpdateConversationDto } from './dto/update-conversation.dto';
 import type { UpdateOutlineDto } from './dto/update-outline.dto';
@@ -54,6 +56,10 @@ const conversationInclude = {
   },
 } satisfies Prisma.ConversationInclude;
 
+const postDraftInclude = {
+  conversation: true,
+} satisfies Prisma.PostDraftInclude;
+
 type OutlineBatchWithOutlines = Prisma.OutlineBatchGetPayload<{
   include: typeof outlineBatchInclude;
 }>;
@@ -62,10 +68,15 @@ type ConversationAggregate = Prisma.ConversationGetPayload<{
   include: typeof conversationInclude;
 }>;
 
+type PostDraftWithConversation = Prisma.PostDraftGetPayload<{
+  include: typeof postDraftInclude;
+}>;
+
 @Injectable()
 export class ConversationsService {
   constructor(
     private readonly generation: GenerationService,
+    private readonly images: ImageGenerationService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -299,7 +310,12 @@ export class ConversationsService {
         caption: generated.caption,
         conversationId,
         coverLine: generated.coverLine,
+        imageError: null,
+        imageGeneratedAt: null,
         imagePrompt: generated.imagePrompt,
+        imageProvider: null,
+        imageStatus: 'idle',
+        imageUrl: null,
         outlineId,
         sections: stringifyJson(generated.sections),
         stale: false,
@@ -317,6 +333,64 @@ export class ConversationsService {
     });
 
     return this.toPostDraft(draft);
+  }
+
+  async getPostDraft(userId: string, postDraftId: string) {
+    const draft = await this.findOwnedPostDraft(userId, postDraftId);
+    return this.toPostDraft(draft);
+  }
+
+  async generatePostDraftImage(
+    userId: string,
+    postDraftId: string,
+    dto: GeneratePostDraftImageDto,
+  ) {
+    const draft = await this.findOwnedPostDraft(userId, postDraftId);
+    const imagePrompt = dto.imagePrompt?.trim() || draft.imagePrompt;
+
+    await this.prisma.postDraft.update({
+      data: {
+        imageError: null,
+        imagePrompt,
+        imageStatus: 'generating',
+      },
+      where: { id: postDraftId },
+    });
+
+    try {
+      const result = await this.images.generateCover({
+        coverLine: draft.coverLine,
+        imagePrompt,
+        postDraftId: draft.id,
+        tags: parseStringArray(draft.tags),
+        title: draft.title,
+        topic: draft.conversation.topic,
+      });
+      const updated = await this.prisma.postDraft.update({
+        data: {
+          imageError: null,
+          imageGeneratedAt: result.generatedAt,
+          imageProvider: result.provider,
+          imageStatus: 'ready',
+          imageUrl: result.imageUrl,
+        },
+        where: { id: postDraftId },
+      });
+
+      return this.toPostDraft(updated);
+    } catch (error) {
+      const imageError = this.toErrorMessage(error);
+
+      await this.prisma.postDraft.update({
+        data: {
+          imageError,
+          imageStatus: 'failed',
+        },
+        where: { id: postDraftId },
+      });
+
+      throw new BadRequestException(imageError);
+    }
   }
 
   async updatePostDraft(
@@ -494,8 +568,9 @@ export class ConversationsService {
     userId: string,
     postDraftId: string,
     conversationId?: string,
-  ): Promise<PostDraft> {
+  ): Promise<PostDraftWithConversation> {
     const draft = await this.prisma.postDraft.findFirst({
+      include: postDraftInclude,
       where: {
         conversationId,
         conversation: { userId },
@@ -575,7 +650,12 @@ export class ConversationsService {
       coverLine: draft.coverLine,
       createdAt: draft.createdAt,
       id: draft.id,
+      imageError: draft.imageError,
+      imageGeneratedAt: draft.imageGeneratedAt,
+      imageProvider: draft.imageProvider,
       imagePrompt: draft.imagePrompt,
+      imageStatus: draft.imageStatus,
+      imageUrl: draft.imageUrl,
       outlineId: draft.outlineId,
       sections: parseStringArray(draft.sections),
       stale: draft.stale,
@@ -623,5 +703,13 @@ export class ConversationsService {
     }
 
     return 'guide';
+  }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Image generation failed.';
   }
 }
