@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import {
   api,
@@ -12,7 +12,6 @@ import {
   type BackendConversation,
 } from "@/lib/api";
 import type {
-  AutoSaveState,
   ConversationRecord,
   Outline,
   PostDraft,
@@ -25,7 +24,6 @@ import {
   createAutoSaveKey,
   dedupeSavedDrafts,
   formatAutoSaveTime,
-  formatRecordTime,
   getDraftSignature,
   getFullPostText,
   groupOutlines,
@@ -36,6 +34,7 @@ import {
   mapWorkspaceSnapshot,
   toneMeta,
 } from "./workbench/workspace-utils";
+import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
 
 type AuthMode = "login" | "register";
 
@@ -71,11 +70,7 @@ export default function Home() {
   const [isHistoryReady, setIsHistoryReady] = useState(false);
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
-  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>("idle");
-  const [lastAutoSavedAt, setLastAutoSavedAt] = useState("");
   const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
-  const autoSaveRunRef = useRef(0);
-  const lastAutoSavedKeyRef = useRef("");
 
   useEffect(() => {
     return apiClient.interceptors.error.use((error) => {
@@ -135,101 +130,27 @@ export default function Home() {
     ],
   );
 
-  const autoSaveKey = useMemo(
-    () => createAutoSaveKey(workspaceSnapshot),
-    [workspaceSnapshot],
-  );
-
-  const autoSaveLabel = useMemo(() => {
-    if (autoSaveState === "saving") return "自动保存中";
-    if (autoSaveState === "error") return "自动保存失败";
-    if (lastAutoSavedAt) return `已自动保存 ${lastAutoSavedAt}`;
-    return "等待自动保存";
-  }, [autoSaveState, lastAutoSavedAt]);
-
-  useEffect(() => {
-    if (
-      !accessToken ||
-      !authUser ||
-      !conversationId ||
-      isGenerating ||
-      isStartingConversation ||
-      autoSaveKey === lastAutoSavedKeyRef.current
-    ) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const runId = autoSaveRunRef.current + 1;
-      autoSaveRunRef.current = runId;
-      setAutoSaveState("saving");
-
-      const snapshot = workspaceSnapshot;
-      const topic = seed.trim();
-      const fallbackTitle = topic || selectedOutline?.title || postDraft?.title || "新对话";
-      const updateBody: {
-        selectedOutlineId?: string;
-        statusMessage?: string;
-        title?: string;
-        topic?: string;
-      } = {
-        selectedOutlineId: selectedId,
-        statusMessage,
-        title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
-      };
-
-      if (topic) updateBody.topic = topic;
-
-      void (async () => {
-        await api.conversations.update(accessToken, conversationId, updateBody);
-        const savedSnapshot = await api.conversations.createSnapshot(
-          accessToken,
-          conversationId,
-          { snapshot: snapshot as unknown as Record<string, unknown> },
-        );
-
-        if (runId !== autoSaveRunRef.current) return;
-
-        lastAutoSavedKeyRef.current = autoSaveKey;
-        setAutoSaveState("saved");
-        setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
-        setConversationRecords((records) => {
-          const record: ConversationRecord = {
-            conversationId,
-            id: conversationId,
-            outlineCount: snapshot.outlines.length,
-            savedAt: formatRecordTime(savedSnapshot.createdAt),
-            snapshot,
-            title: updateBody.title ?? "新对话",
-            topic: topic || snapshot.seed || DEFAULT_SEED,
-          };
-
-          return [
-            record,
-            ...records.filter((item) => item.conversationId !== conversationId),
-          ].slice(0, 8);
-        });
-      })().catch(() => {
-        if (runId !== autoSaveRunRef.current) return;
-        setAutoSaveState("error");
-      });
-    }, 1400);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [
-    accessToken,
-    authUser,
+  const {
     autoSaveKey,
+    autoSaveLabel,
+    autoSaveState,
+    lastAutoSavedKeyRef,
+    setAutoSaveState,
+    setLastAutoSavedAt,
+  } = useWorkspaceAutosave({
+    accessToken,
+    authReady: Boolean(authUser),
     conversationId,
     isGenerating,
     isStartingConversation,
-    postDraft?.title,
+    postDraft,
     seed,
     selectedId,
-    selectedOutline?.title,
+    selectedOutline,
     statusMessage,
     workspaceSnapshot,
-  ]);
+    setConversationRecords,
+  });
 
   function applyConversation(
     conversation: BackendConversation,
