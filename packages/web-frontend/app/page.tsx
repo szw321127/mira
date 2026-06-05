@@ -988,6 +988,7 @@ export default function Home() {
           outlineGroups={outlineGroups}
           selectedId={selectedId}
           selectedOutline={selectedOutline}
+          workspaceKey={conversationId ?? "local"}
         />
 
         <aside className="post-panel" aria-labelledby="post-title">

@@ -16,6 +16,7 @@ type OutlineWorkspaceProps = {
   outlineGroups: OutlineGroup[];
   selectedId: string;
   selectedOutline: Outline | undefined;
+  workspaceKey: string;
 };
 
 export function OutlineWorkspace({
@@ -30,23 +31,26 @@ export function OutlineWorkspace({
   outlineGroups,
   selectedId,
   selectedOutline,
+  workspaceKey,
 }: OutlineWorkspaceProps) {
-  const [openBatchById, setOpenBatchById] = useState<Record<number, boolean>>({});
+  const [openBatchById, setOpenBatchById] = useState<Record<string, boolean>>({});
   const [touchedBatchById, setTouchedBatchById] = useState<
-    Record<number, boolean>
+    Record<string, boolean>
   >({});
 
   const effectiveOpenBatchById = useMemo(() => {
-    const nextOpenBatchById: Record<number, boolean> = {};
+    const nextOpenBatchById: Record<string, boolean> = {};
 
     outlineGroups.forEach((group) => {
-      nextOpenBatchById[group.batch] = touchedBatchById[group.batch]
-        ? Boolean(openBatchById[group.batch])
+      const batchKey = `${workspaceKey}:${group.batch}`;
+
+      nextOpenBatchById[batchKey] = touchedBatchById[batchKey]
+        ? Boolean(openBatchById[batchKey])
         : group.batch === latestBatch;
     });
 
     return nextOpenBatchById;
-  }, [latestBatch, openBatchById, outlineGroups, touchedBatchById]);
+  }, [latestBatch, openBatchById, outlineGroups, touchedBatchById, workspaceKey]);
 
   return (
     <section
@@ -75,25 +79,27 @@ export function OutlineWorkspace({
 
       <div className="grid gap-3" aria-label="大纲方向">
         {outlineGroups.map((group) => {
+          const batchKey = `${workspaceKey}:${group.batch}`;
           const isLatestBatch = group.batch === latestBatch;
 
           return (
             <details
               className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
-              key={group.batch}
+              key={batchKey}
               onToggle={(event) => {
+                // Ignore toggle events caused by React updating the controlled open prop.
                 if (!event.nativeEvent.isTrusted) return;
 
                 setTouchedBatchById((previousTouchedBatchById) => ({
                   ...previousTouchedBatchById,
-                  [group.batch]: true,
+                  [batchKey]: true,
                 }));
                 setOpenBatchById((previousOpenBatchById) => ({
                   ...previousOpenBatchById,
-                  [group.batch]: event.currentTarget.open,
+                  [batchKey]: event.currentTarget.open,
                 }));
               }}
-              open={Boolean(effectiveOpenBatchById[group.batch])}
+              open={Boolean(effectiveOpenBatchById[batchKey])}
             >
               <summary className="cursor-pointer text-[0.82rem] font-black text-[var(--ink)] marker:text-[var(--red)]">
                 {isLatestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
