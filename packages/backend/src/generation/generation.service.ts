@@ -148,19 +148,19 @@ export class GenerationService {
   ): string {
     const sectionNo = index + 1;
     const toneLead: Record<OutlineTone, string> = {
-      checklist: '可以直接照着这一步检查',
-      guide: '真正好执行的关键在这里',
-      story: '这一段要写得像发生在今天',
+      checklist: '这一项适合收藏后逐条核对',
+      guide: '这一点可以马上用起来',
+      story: '这一幕会很有生活感',
     };
-    const practicalTip = [
-      `先把「${point}」放到第一屏附近，让读者一眼知道这篇和「${topic}」有关。`,
-      `准备内容时不要堆概念，直接写出一个能照做的小动作，比如时间、材料、顺序或判断标准。`,
-      `如果过程里有取舍，把原因说清楚，比单纯说“高级”“好看”更容易被收藏。`,
-      `遇到容易失败的地方，提前写出替代方案，读者会觉得这篇笔记真的替自己想过。`,
-      `结尾把行动收回来：提醒读者先保存，再选一个最轻的步骤今天就试。`,
+    const sectionCopy = [
+      `刚开始做「${topic}」时，最容易卡在不知道从哪里下手。把「${point}」当成起点，先处理眼前最具体的一件小事，整个过程会轻很多。`,
+      `轮到「${point}」时，可以把时间、材料和顺序摆清楚：今天有什么、少什么、哪一步最省力。信息越具体，照做时越不容易慌。`,
+      `如果「${point}」里需要取舍，就把标准落到日常：好不好清洗、会不会浪费、第二天还能不能继续用。这样不靠“高级”“好看”硬撑，也更适合收藏。`,
+      `「${point}」最值得留意的是失败点。遇到来不及、材料不够或效果不稳的情况，换一个简单版本也可以完成，不会因为一步卡住就放弃。`,
+      `最后回到「${point}」：保存这份顺序，今天只挑一个最轻的动作开始。做完再补一张照片或一句复盘，下一次会更顺手。`,
     ];
 
-    return `${sectionNo}. ${point}：${toneLead[tone]}。${practicalTip[index % practicalTip.length]}`;
+    return `${sectionNo}. ${point}：${toneLead[tone]}。${sectionCopy[index % sectionCopy.length]}`;
   }
 
   private normalizeTopic(topic: string): string {

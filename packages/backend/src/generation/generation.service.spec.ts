@@ -25,7 +25,9 @@ describe('GenerationService post drafts', () => {
     expect(draft.coverLine.length).toBeLessThanOrEqual(18);
     expect(draft.sections).toHaveLength(5);
     expect(body).toContain('小红书新手');
-    expect(body).not.toMatch(/写 2 到 3 句|用定调的方式|避免空泛形容/);
+    expect(body).not.toMatch(
+      /写 2 到 3 句|用定调的方式|避免空泛形容|直接写出|不要堆概念|第一屏|结尾把行动收回来|提醒读者/,
+    );
     expect(draft.tags).toEqual(
       expect.arrayContaining(['小红书图文', '实用攻略', '高保存率']),
     );
