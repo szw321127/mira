@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class UpdateConversationDto {
   @IsOptional()
@@ -15,6 +15,5 @@ export class UpdateConversationDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
   topic?: string;
 }
