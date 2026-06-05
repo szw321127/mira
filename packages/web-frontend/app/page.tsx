@@ -24,7 +24,6 @@ import {
   dedupeSavedDrafts,
   formatAutoSaveTime,
   getDraftSignature,
-  getFullPostText,
   groupOutlines,
   mapBackendOutline,
   mapBackendPostDraft,
@@ -37,6 +36,7 @@ import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
 import { ConversationRail } from "./workbench/conversation-rail";
 import { IdeaComposer } from "./workbench/idea-composer";
 import { OutlineWorkspace } from "./workbench/outline-workspace";
+import { PostEditor } from "./workbench/post-editor";
 
 type AuthMode = "login" | "register";
 
@@ -564,6 +564,21 @@ export default function Home() {
     }
   }
 
+  function updatePostDraft(patch: Partial<PostDraft>) {
+    setPostDraft((draft) => (draft ? { ...draft, ...patch } : draft));
+    setDraftStale(false);
+
+    if (!accessToken || !postDraft) return;
+
+    void api.postDrafts.update(accessToken, postDraft.id, patch).catch(() => {});
+  }
+
+  function openSavedDraft(draft: SavedDraft) {
+    setPostDraft(draft);
+    setDraftStale(false);
+    setStatusMessage(`已打开 ${draft.savedAt} 保存的草稿。`);
+  }
+
   function getWorkspaceSnapshot(): WorkspaceSnapshot {
     return workspaceSnapshot;
   }
@@ -991,107 +1006,19 @@ export default function Home() {
           workspaceKey={conversationId ?? "local"}
         />
 
-        <aside className="post-panel" aria-labelledby="post-title">
-          <div className="panel-heading">
-            <div>
-              <p className="section-kicker">图文预览</p>
-              <h2 id="post-title">可复制的草稿包</h2>
-            </div>
-            {postDraft ? (
-              <span className={`draft-badge ${draftStale ? "is-stale" : ""}`}>
-                {draftStale ? "待刷新" : "已生成"}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="phone-frame" aria-label="图文笔记预览">
-            <div className="cover-art">
-              <div className="cover-note">{postDraft?.coverLine ?? "等待生成"}</div>
-              <div className="cover-title">
-                {postDraft?.title ?? selectedOutline?.title ?? "选择一个大纲"}
-              </div>
-              <div className="cover-image" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-
-            <div className="post-copy">
-              {postDraft ? (
-                <>
-                  <p>{postDraft.caption}</p>
-                  <ul>
-                    {postDraft.sections.map((section) => (
-                      <li key={section}>{section}</li>
-                    ))}
-                  </ul>
-                  <div className="tag-row">
-                    {postDraft.tags.map((tag) => (
-                      <span key={tag}>#{tag}</span>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="empty-preview">
-                  <span>等待图文</span>
-                  <strong>{selectedOutline?.title}</strong>
-                  <p>{selectedOutline?.hook}</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="output-actions" aria-label="图文操作">
-            <button
-              className="quiet-action compact"
-              disabled={!postDraft}
-              onClick={() => postDraft && copyText(getFullPostText(postDraft), "图文草稿")}
-            >
-              复制草稿
-            </button>
-            <button
-              className="quiet-action compact"
-              disabled={!postDraft}
-              onClick={() => postDraft && copyText(postDraft.imagePrompt, "封面提示")}
-            >
-              复制封面提示
-            </button>
-            <button
-              className="quiet-action compact"
-              disabled={!postDraft || isSavingDraft}
-              onClick={() => void saveDraft()}
-            >
-              {isSavingDraft ? "保存中" : "保存草稿"}
-            </button>
-          </div>
-
-          <div className="image-brief">
-            <span>封面画面</span>
-            <p>
-              {postDraft?.imagePrompt ??
-                "生成后会把封面构图、标题留白和视觉道具整理在这里。"}
-            </p>
-            {savedDrafts.length ? (
-              <div className="saved-drafts" aria-label="已保存草稿">
-                {savedDrafts.map((draft) => (
-                  <button
-                    className="saved-draft"
-                    key={`${draft.title}-${draft.savedAt}`}
-                    onClick={() => {
-                      setPostDraft(draft);
-                      setDraftStale(false);
-                      setStatusMessage(`已打开 ${draft.savedAt} 保存的草稿。`);
-                    }}
-                  >
-                    <span>{draft.savedAt}</span>
-                    {draft.title}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </aside>
+        <PostEditor
+          draftStale={draftStale}
+          isGenerating={isGenerating}
+          isSavingDraft={isSavingDraft}
+          onCopy={(text, label) => void copyText(text, label)}
+          onDraftChange={updatePostDraft}
+          onOpenSavedDraft={openSavedDraft}
+          onRefresh={() => void confirmOutline()}
+          onSaveDraft={() => void saveDraft()}
+          postDraft={postDraft}
+          savedDrafts={savedDrafts}
+          selectedTitle={selectedOutline?.title}
+        />
       </section>
     </main>
   );
