@@ -676,14 +676,16 @@ input {
   gap: 10px;
 }
 
-.history-heading div {
+.history-heading > div:not(.history-heading-actions) {
   display: grid;
   gap: 3px;
 }
 
-.history-heading-actions {
+.history-heading .history-heading-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
 }
@@ -1146,13 +1148,8 @@ input {
     flex-wrap: wrap;
   }
 
-  .history-heading-actions {
-    justify-content: stretch;
-  }
-
-  .history-heading-actions .icon-button {
-    flex: 1 1 64px;
-    width: auto;
+  .history-heading .history-heading-actions {
+    justify-content: flex-start;
   }
 
   .account-chip {
