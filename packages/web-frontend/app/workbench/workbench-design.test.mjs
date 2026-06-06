@@ -176,3 +176,16 @@ test("page merges generated image fields without overwriting local copy", () => 
   assert.match(source, /onDownloadImage=\{downloadImage\}/);
   assert.match(source, /isGeneratingImage=\{postDraft\?\.id === generatingImageDraftId\}/);
 });
+
+test("login page supports Google email sign-in", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+
+  assert.match(api, /google: \(body: \{ credential: string \}\)/);
+  assert.match(api, /\/auth\/google/);
+  assert.match(source, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
+  assert.match(source, /accounts\.google\.com\/gsi\/client/);
+  assert.match(source, /handleGoogleCredential/);
+  assert.match(source, /使用 Google 邮箱登录/);
+  assert.match(source, /Google 登录未配置/);
+});

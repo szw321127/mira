@@ -9,16 +9,16 @@ const SVG_DATA_URL_PREFIX = 'data:image/svg+xml;base64,';
 
 @Injectable()
 export class MockImageProvider implements ImageProvider {
-  async generate(input: ImageGenerationInput): Promise<ImageGenerationResult> {
+  generate(input: ImageGenerationInput): Promise<ImageGenerationResult> {
     const svg = this.createSvg(input);
 
-    return {
+    return Promise.resolve({
       generatedAt: new Date(),
       imageUrl: `${SVG_DATA_URL_PREFIX}${Buffer.from(svg, 'utf8').toString(
         'base64',
       )}`,
       provider: 'mock',
-    };
+    });
   }
 
   private createSvg(input: ImageGenerationInput): string {

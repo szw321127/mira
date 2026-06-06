@@ -9,6 +9,8 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
+import type { GoogleLoginDto } from './dto/google-login.dto';
+import { GoogleIdentityService } from './google-identity.service';
 import type { JwtPayload } from './auth.types';
 
 type PublicUser = {
@@ -28,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly googleIdentityService: GoogleIdentityService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -57,6 +60,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid account or password.');
     }
 
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Invalid account or password.');
+    }
+
     const isPasswordValid = await argon2.verify(
       user.passwordHash,
       dto.password,
@@ -65,6 +72,54 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid account or password.');
     }
+
+    return this.createAuthResponse(user);
+  }
+
+  async loginWithGoogle(dto: GoogleLoginDto): Promise<AuthResponse> {
+    const profile = await this.googleIdentityService.verifyCredential(
+      dto.credential,
+    );
+
+    if (!profile.emailVerified) {
+      throw new UnauthorizedException('Google email is not verified.');
+    }
+
+    const account = this.normalizeAccount(profile.email);
+    const existingByGoogleSub = await this.prisma.user.findUnique({
+      where: { googleSub: profile.sub },
+    });
+
+    if (existingByGoogleSub) {
+      return this.createAuthResponse(existingByGoogleSub);
+    }
+
+    const existingByAccount = await this.prisma.user.findUnique({
+      where: { account },
+    });
+
+    if (existingByAccount) {
+      const user = await this.prisma.user.update({
+        data: {
+          authProvider: 'google',
+          displayName: profile.name,
+          googleSub: profile.sub,
+        },
+        where: { id: existingByAccount.id },
+      });
+
+      return this.createAuthResponse(user);
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        account,
+        authProvider: 'google',
+        displayName: profile.name,
+        googleSub: profile.sub,
+        passwordHash: null,
+      },
+    });
 
     return this.createAuthResponse(user);
   }

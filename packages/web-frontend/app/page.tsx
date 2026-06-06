@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
+import Script from "next/script";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
@@ -39,6 +40,35 @@ import { PostEditor } from "./workbench/post-editor";
 
 type AuthMode = "login" | "register";
 
+type GoogleCredentialResponse = {
+  credential?: string;
+};
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            callback: (response: GoogleCredentialResponse) => void;
+            client_id: string;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              shape?: "rectangular";
+              size?: "large";
+              text?: "continue_with" | "signin_with";
+              theme?: "outline" | "filled_blue";
+              width?: number;
+            },
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
 type AuthSession = {
   accessToken: string;
   user: AuthUser;
@@ -59,6 +89,7 @@ type PostDraftPatchInFlight = {
 };
 
 const AUTH_STORAGE_KEY = "rednote:auth-session";
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
 
 function getWorkspaceErrorMessage(error: unknown, fallback: string) {
@@ -87,6 +118,7 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isGoogleScriptLoaded, setIsGoogleScriptLoaded] = useState(false);
   const [loginAccount, setLoginAccount] = useState("creator@rednote.local");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -111,6 +143,10 @@ export default function Home() {
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
   const [statusMessage, setStatusMessage] = useState("正在连接后端工作台。");
   const currentPostDraftIdRef = useRef<string | null>(null);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const googleCredentialHandlerRef = useRef<
+    (response: GoogleCredentialResponse) => void
+  >(() => undefined);
   const pendingPostDraftIdRef = useRef<string | null>(null);
   const pendingPostDraftPatchRef = useRef<PostDraftPatch | null>(null);
   const postDraftPatchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -491,6 +527,54 @@ export default function Home() {
     setStatusMessage(message);
     await bootstrapWorkspace(session.accessToken);
   }
+
+  async function handleGoogleCredential(response: GoogleCredentialResponse) {
+    if (!response.credential) {
+      setLoginError("Google 登录失败，请重新选择邮箱。");
+      return;
+    }
+
+    setLoginError("");
+    setIsAuthSubmitting(true);
+
+    try {
+      const authResponse = await api.auth.google({
+        credential: response.credential,
+      });
+      await applyAuthResponse(authResponse, "已使用 Google 邮箱进入工作台。");
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error));
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  }
+
+  googleCredentialHandlerRef.current = (response) => {
+    void handleGoogleCredential(response);
+  };
+
+  useEffect(() => {
+    if (authUser || !GOOGLE_CLIENT_ID || !isGoogleScriptLoaded) return;
+
+    const googleButton = googleButtonRef.current;
+    const googleAccounts = window.google?.accounts.id;
+
+    if (!googleButton || !googleAccounts) return;
+
+    googleAccounts.initialize({
+      callback: (response) => googleCredentialHandlerRef.current(response),
+      client_id: GOOGLE_CLIENT_ID,
+    });
+
+    googleButton.replaceChildren();
+    googleAccounts.renderButton(googleButton, {
+      shape: "rectangular",
+      size: "large",
+      text: "continue_with",
+      theme: "outline",
+      width: googleButton.clientWidth || 360,
+    });
+  }, [authUser, isGoogleScriptLoaded]);
 
   function validateSeed() {
     if (seed.trim()) {
@@ -1135,6 +1219,11 @@ export default function Home() {
   if (!authUser) {
     return (
       <main className="login-shell">
+        <Script
+          onLoad={() => setIsGoogleScriptLoaded(true)}
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+        />
         <section className="login-panel" aria-labelledby="login-title">
           <div className="login-brand">
             <span className="brand-stamp">R</span>
@@ -1176,6 +1265,24 @@ export default function Home() {
               >
                 注册
               </button>
+            </div>
+
+            <div className="grid gap-2">
+              {GOOGLE_CLIENT_ID ? (
+                <div
+                  aria-label="使用 Google 邮箱登录"
+                  className="min-h-[42px]"
+                  ref={googleButtonRef}
+                />
+              ) : (
+                <button
+                  className="min-h-[42px] rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-black text-[var(--muted)]"
+                  disabled
+                  type="button"
+                >
+                  Google 登录未配置
+                </button>
+              )}
             </div>
 
             {authMode === "register" ? (

@@ -1,24 +1,62 @@
 import { BadRequestException } from '@nestjs/common';
+import type { Conversation, PostDraft } from '@prisma/client';
 import { ConversationsService } from './conversations.service';
 import type { GenerationService } from '../generation/generation.service';
+import type {
+  ImageGenerationInput,
+  ImageGenerationResult,
+} from '../image-generation/image-generation.types';
 import type { ImageGenerationService } from '../image-generation/image-generation.service';
 import type { PrismaService } from '../prisma/prisma.service';
+
+type DraftConversation = Pick<Conversation, 'topic' | 'userId'>;
+type PostDraftWithConversation = PostDraft & {
+  conversation: DraftConversation;
+};
+type SerializedPostDraft = Omit<PostDraft, 'sections' | 'tags'> & {
+  sections: string[];
+  tags: string[];
+};
+type PostDraftSerializer = {
+  toPostDraft(draft: PostDraft): SerializedPostDraft;
+};
+type PostDraftFindFirst = (
+  args: unknown,
+) => Promise<PostDraftWithConversation | null>;
+type PostDraftUpdate = (args: unknown) => Promise<PostDraft>;
+type GenerateCover = (
+  input: ImageGenerationInput,
+) => Promise<ImageGenerationResult>;
+type PrismaMock = {
+  postDraft: {
+    findFirst: jest.MockedFunction<PostDraftFindFirst>;
+    update: jest.MockedFunction<PostDraftUpdate>;
+  };
+};
 
 describe('ConversationsService post draft images', () => {
   function createService() {
     const generation = {} as GenerationService;
+    const generateCover = jest.fn<GenerateCover>();
     const images = {
-      generateCover: jest.fn(),
+      generateCover,
     } as unknown as jest.Mocked<ImageGenerationService>;
-    const prisma = {
-      postDraft: { findFirst: jest.fn(), update: jest.fn() },
-    } as unknown as PrismaService;
+    const prisma: PrismaMock = {
+      postDraft: {
+        findFirst: jest.fn<PostDraftFindFirst>(),
+        update: jest.fn<PostDraftUpdate>(),
+      },
+    };
 
-    const service = new ConversationsService(generation, images, prisma);
-    return { images, prisma: prisma as any, service };
+    const service = new ConversationsService(
+      generation,
+      images,
+      prisma as unknown as PrismaService,
+    );
+    return { generateCover, prisma, service };
   }
 
-  const baseDraft = {
+  const baseDraft: PostDraftWithConversation = {
     caption: '正文开场',
     conversation: { topic: '周末备餐', userId: 'user-1' },
     conversationId: 'conversation-1',
@@ -43,7 +81,7 @@ describe('ConversationsService post draft images', () => {
     const { service } = createService();
     const generatedAt = new Date('2026-06-06T00:02:00.000Z');
 
-    const result = (service as any).toPostDraft({
+    const result = (service as unknown as PostDraftSerializer).toPostDraft({
       ...baseDraft,
       imageGeneratedAt: generatedAt,
       imageProvider: 'mock',
@@ -61,7 +99,7 @@ describe('ConversationsService post draft images', () => {
   });
 
   it('generates a mock image for an owned post draft', async () => {
-    const { images, prisma, service } = createService();
+    const { generateCover, prisma, service } = createService();
     const generatedAt = new Date('2026-06-06T00:03:00.000Z');
     const imageUrl = 'data:image/svg+xml;base64,ready';
 
@@ -82,7 +120,7 @@ describe('ConversationsService post draft images', () => {
         imageStatus: 'ready',
         imageUrl,
       });
-    images.generateCover.mockResolvedValue({
+    generateCover.mockResolvedValue({
       generatedAt,
       imageUrl,
       provider: 'mock',
@@ -108,7 +146,7 @@ describe('ConversationsService post draft images', () => {
       },
       where: { id: 'draft-1' },
     });
-    expect(images.generateCover).toHaveBeenCalledWith({
+    expect(generateCover).toHaveBeenCalledWith({
       coverLine: '实用攻略 高保存率',
       imagePrompt: '自定义封面',
       postDraftId: 'draft-1',
@@ -126,7 +164,7 @@ describe('ConversationsService post draft images', () => {
   });
 
   it('does not rewrite imagePrompt when the prompt override is blank', async () => {
-    const { images, prisma, service } = createService();
+    const { generateCover, prisma, service } = createService();
     const generatedAt = new Date('2026-06-06T00:04:00.000Z');
     const imageUrl = 'data:image/svg+xml;base64,ready';
     const autosavedPrompt = '自动保存后的封面';
@@ -148,7 +186,7 @@ describe('ConversationsService post draft images', () => {
         imageStatus: 'ready',
         imageUrl,
       });
-    images.generateCover.mockResolvedValue({
+    generateCover.mockResolvedValue({
       generatedAt,
       imageUrl,
       provider: 'mock',
@@ -165,7 +203,7 @@ describe('ConversationsService post draft images', () => {
       },
       where: { id: 'draft-1' },
     });
-    expect(images.generateCover).toHaveBeenCalledWith(
+    expect(generateCover).toHaveBeenCalledWith(
       expect.objectContaining({
         imagePrompt: autosavedPrompt,
       }),
@@ -173,7 +211,7 @@ describe('ConversationsService post draft images', () => {
   });
 
   it('marks the draft failed when provider generation fails', async () => {
-    const { images, prisma, service } = createService();
+    const { generateCover, prisma, service } = createService();
 
     prisma.postDraft.findFirst.mockResolvedValue(baseDraft);
     prisma.postDraft.update.mockResolvedValueOnce({
@@ -181,7 +219,7 @@ describe('ConversationsService post draft images', () => {
       imageError: null,
       imageStatus: 'generating',
     });
-    images.generateCover.mockRejectedValue(new Error('provider unavailable'));
+    generateCover.mockRejectedValue(new Error('provider unavailable'));
 
     const promise = service.generatePostDraftImage('user-1', 'draft-1', {});
 
@@ -201,7 +239,7 @@ describe('ConversationsService post draft images', () => {
   });
 
   it('clears old ready image fields when provider generation fails', async () => {
-    const { images, prisma, service } = createService();
+    const { generateCover, prisma, service } = createService();
     const readyDraft = {
       ...baseDraft,
       imageGeneratedAt: new Date('2026-06-06T00:05:00.000Z'),
@@ -216,7 +254,7 @@ describe('ConversationsService post draft images', () => {
       imageError: null,
       imageStatus: 'generating',
     });
-    images.generateCover.mockRejectedValue(new Error('provider unavailable'));
+    generateCover.mockRejectedValue(new Error('provider unavailable'));
 
     await expect(
       service.generatePostDraftImage('user-1', 'draft-1', {}),

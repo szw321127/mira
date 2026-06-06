@@ -277,6 +277,8 @@ const request = <T>(path: string, options?: RequestOptions) =>
 export const api = {
   auth: {
     demo: () => request<AuthResponse>("/auth/demo", { method: "POST" }),
+    google: (body: { credential: string }) =>
+      request<AuthResponse>("/auth/google", { body, method: "POST" }),
     login: (body: { account: string; password: string }) =>
       request<AuthResponse>("/auth/login", { body, method: "POST" }),
     me: (token: string) => request<AuthUser>("/auth/me", { token }),
