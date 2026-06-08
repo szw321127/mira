@@ -58,7 +58,7 @@ export function OutlineWorkspace({
 
   return (
     <section
-      className="grid gap-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4"
+      className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3"
       aria-labelledby="outline-title"
     >
       <div className="flex items-start justify-between gap-3">
@@ -67,7 +67,7 @@ export function OutlineWorkspace({
             大纲
           </p>
           <h2
-            className="text-[1.08rem] font-bold leading-tight text-[var(--ink)]"
+            className="text-[1rem] font-bold leading-tight text-[var(--ink)]"
             id="outline-title"
           >
             选择并调整方向
@@ -90,7 +90,7 @@ export function OutlineWorkspace({
 
           return (
             <details
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3"
+              className="rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-2.5"
               key={batchKey}
               onToggle={(event) => {
                 // Ignore toggle events caused by React updating the controlled open prop.
@@ -113,7 +113,7 @@ export function OutlineWorkspace({
                 {isLatestBatch ? "最新一批" : `第 ${group.batch + 1} 批`}
                 ，{group.outlines.length} 个方向
               </summary>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {group.outlines.map((outline) => {
                   const meta = toneMeta[outline.tone];
                   const isSelected = outline.id === selectedId;
@@ -121,7 +121,7 @@ export function OutlineWorkspace({
                   return (
                     <button
                       aria-pressed={isSelected}
-                      className={`grid min-h-[164px] gap-2 rounded-md border p-3 text-left transition ${
+                      className={`grid min-h-[128px] gap-1.5 rounded-md border p-2.5 text-left transition ${
                         isSelected
                           ? "border-[var(--red)] bg-[var(--red-soft)]"
                           : "border-[var(--line)] bg-[var(--surface)] hover:border-[var(--red)] hover:bg-[var(--red-soft)]"
@@ -136,10 +136,10 @@ export function OutlineWorkspace({
                         </strong>
                         <em className="not-italic">{outline.label}</em>
                       </span>
-                      <span className="text-[0.94rem] font-bold leading-snug text-[var(--ink)]">
+                      <span className="text-[0.9rem] font-bold leading-snug text-[var(--ink)]">
                         {outline.title}
                       </span>
-                      <span className="line-clamp-3 text-[0.78rem] font-semibold leading-relaxed text-[var(--muted)]">
+                      <span className="line-clamp-2 text-[0.76rem] font-semibold leading-normal text-[var(--muted)]">
                         {outline.hook}
                       </span>
                     </button>
@@ -152,7 +152,7 @@ export function OutlineWorkspace({
       </div>
 
       {selectedOutline ? (
-        <article className="grid gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-3">
+        <article className="grid gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--surface-tint)] p-2.5">
           <div className="flex items-start justify-between gap-3">
             <div className="grid gap-1">
               <span className="text-[0.72rem] font-bold text-[var(--muted)]">
@@ -172,10 +172,10 @@ export function OutlineWorkspace({
             </button>
           </div>
 
-          <label className="grid gap-2 text-[0.82rem] font-extrabold text-[var(--muted)]">
+          <label className="grid gap-1.5 text-[0.82rem] font-extrabold text-[var(--muted)]">
             <span>标题</span>
             <input
-              className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[0.92rem] font-semibold text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
+              className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[0.9rem] font-semibold text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
               onChange={(event) =>
                 onUpdateOutline(selectedOutline.id, { title: event.target.value })
               }
@@ -183,10 +183,10 @@ export function OutlineWorkspace({
             />
           </label>
 
-          <label className="grid gap-2 text-[0.82rem] font-extrabold text-[var(--muted)]">
+          <label className="grid gap-1.5 text-[0.82rem] font-extrabold text-[var(--muted)]">
             <span>开场钩子</span>
             <textarea
-              className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[0.92rem] font-semibold leading-relaxed text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
+              className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[0.9rem] font-semibold leading-normal text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
               onChange={(event) =>
                 onUpdateOutline(selectedOutline.id, { hook: event.target.value })
               }
@@ -195,10 +195,10 @@ export function OutlineWorkspace({
             />
           </label>
 
-          <label className="grid gap-2 text-[0.82rem] font-extrabold text-[var(--muted)]">
+          <label className="grid gap-1.5 text-[0.82rem] font-extrabold text-[var(--muted)]">
             <span>内容结构</span>
             <textarea
-              className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[0.92rem] font-semibold leading-relaxed text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
+              className="resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-[0.9rem] font-semibold leading-normal text-[var(--ink)] outline-none transition focus-visible:border-[var(--red)] focus-visible:ring-2 focus-visible:ring-[var(--red-soft)]"
               onChange={(event) =>
                 onUpdateOutline(selectedOutline.id, {
                   points: event.target.value
@@ -207,7 +207,7 @@ export function OutlineWorkspace({
                     .filter(Boolean),
                 })
               }
-              rows={5}
+              rows={4}
               value={selectedOutline.points.join("\n")}
             />
           </label>

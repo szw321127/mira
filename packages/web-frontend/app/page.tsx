@@ -1267,24 +1267,6 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="grid gap-2">
-              {GOOGLE_CLIENT_ID ? (
-                <div
-                  aria-label="使用 Google 邮箱登录"
-                  className="min-h-[42px]"
-                  ref={googleButtonRef}
-                />
-              ) : (
-                <button
-                  className="min-h-[42px] rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-black text-[var(--muted)]"
-                  disabled
-                  type="button"
-                >
-                  Google 登录未配置
-                </button>
-              )}
-            </div>
-
             {authMode === "register" ? (
               <label className="login-field">
                 <span>昵称</span>
@@ -1354,6 +1336,24 @@ export default function Home() {
                 </button>
               ) : null}
             </div>
+
+            <div className="grid gap-2">
+              {GOOGLE_CLIENT_ID ? (
+                <div
+                  aria-label="使用 Google 邮箱登录"
+                  className="min-h-[42px]"
+                  ref={googleButtonRef}
+                />
+              ) : (
+                <button
+                  className="min-h-[42px] rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-black text-[var(--muted)]"
+                  disabled
+                  type="button"
+                >
+                  Google 登录未配置
+                </button>
+              )}
+            </div>
           </form>
         </section>
       </main>
@@ -1419,8 +1419,8 @@ export default function Home() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[248px_minmax(0,1fr)]">
-          <div className="order-1 grid min-w-0 gap-4 lg:order-2 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <div className="grid gap-4">
+          <div className="order-1 grid min-w-0 gap-3 lg:order-2 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="grid gap-3 self-start">
               <IdeaComposer
                 briefError={briefError}
                 isGenerating={isGenerating}

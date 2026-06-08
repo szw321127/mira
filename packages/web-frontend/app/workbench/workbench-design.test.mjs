@@ -27,7 +27,7 @@ test("conversation rail reads as history and keeps autosave status visible", () 
 test("mobile layout shows the creator workflow before history", () => {
   const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
   const workflowStart = source.indexOf(
-    '<div className="order-1 grid min-w-0 gap-4 lg:order-2',
+    '<div className="order-1 grid min-w-0 gap-3 lg:order-2',
   );
   const railStart = source.indexOf('<div className="order-2 lg:order-1">');
   const ideaComposerStart = source.indexOf("IdeaComposer", workflowStart);
@@ -50,6 +50,28 @@ test("outline disclosure captures open state before scheduling React updates", (
 
   assert.match(source, /const isOpen = event\.currentTarget\.open;/);
   assert.doesNotMatch(updaterSource, /event\.currentTarget\.open/);
+});
+
+test("idea and outline panels stay vertically compact", () => {
+  const idea = readWorkbenchFile("idea-composer.tsx");
+  const outline = readWorkbenchFile("outline-workspace.tsx");
+  const page = readFileSync(join(root, "..", "page.tsx"), "utf8");
+
+  assert.match(
+    idea,
+    /className="grid gap-3 rounded-lg border border-\[var\(--line\)\] bg-\[var\(--surface\)\] p-3"/,
+  );
+  assert.match(idea, /min-h-\[96px\]/);
+  assert.doesNotMatch(idea, /min-h-\[132px\]/);
+
+  assert.match(
+    outline,
+    /className="grid gap-3 rounded-lg border border-\[var\(--line\)\] bg-\[var\(--surface\)\] p-3"/,
+  );
+  assert.match(outline, /min-h-\[128px\]/);
+  assert.doesNotMatch(outline, /min-h-\[164px\]/);
+  assert.match(outline, /line-clamp-2/);
+  assert.match(page, /className="grid gap-3 self-start"/);
 });
 
 test("successful primary actions refresh history as best effort", () => {
@@ -180,6 +202,8 @@ test("page merges generated image fields without overwriting local copy", () => 
 test("login page supports Google email sign-in", () => {
   const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
   const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+  const loginActionsStart = source.indexOf('className="login-actions"');
+  const googleFallbackStart = source.indexOf("Google 登录未配置");
 
   assert.match(api, /google: \(body: \{ credential: string \}\)/);
   assert.match(api, /\/auth\/google/);
@@ -188,4 +212,6 @@ test("login page supports Google email sign-in", () => {
   assert.match(source, /handleGoogleCredential/);
   assert.match(source, /使用 Google 邮箱登录/);
   assert.match(source, /Google 登录未配置/);
+  assert.ok(loginActionsStart !== -1);
+  assert.ok(googleFallbackStart > loginActionsStart);
 });
