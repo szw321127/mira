@@ -6,13 +6,16 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { AdminApiKeyGuard } from '../admin-security/admin-api-key.guard';
 import { AdminProjectsService } from './admin-projects.service';
 import { CreateAdminProjectDto } from './dto/create-admin-project.dto';
 import { CreateAdminTaskDto } from './dto/create-admin-task.dto';
 import { UpdateAdminTaskDto } from './dto/update-admin-task.dto';
 
 @Controller('admin/projects')
+@UseGuards(AdminApiKeyGuard)
 export class AdminProjectsController {
   constructor(private readonly adminProjectsService: AdminProjectsService) {}
 

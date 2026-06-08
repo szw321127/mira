@@ -62,6 +62,13 @@ test("admin frontend API exposes audit log loading", () => {
   assert.match(api, /\/admin\/audit-logs/);
 });
 
+test("admin frontend can attach the deployment admin api key", () => {
+  const api = readSource("api.ts");
+
+  assert.match(api, /VITE_ADMIN_API_KEY/);
+  assert.match(api, /x-admin-api-key/);
+});
+
 test("admin frontend manages text and image model configs without exposing api keys", () => {
   const api = readSource("api.ts");
   const app = readSource("App.tsx");

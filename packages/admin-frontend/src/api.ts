@@ -1,5 +1,6 @@
 const API_BASE_URL =
   import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3001";
+const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY?.trim();
 
 export type ApiEnvelope<T> = {
   code: number;
@@ -182,6 +183,10 @@ async function request<T>(
 
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (ADMIN_API_KEY) {
+    headers.set("x-admin-api-key", ADMIN_API_KEY);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {

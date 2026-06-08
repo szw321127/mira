@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { AdminApiKeyGuard } from '../admin-security/admin-api-key.guard';
 import { AdminModelConfigsService } from './admin-model-configs.service';
 import { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
 
 @Controller('admin/model-configs')
+@UseGuards(AdminApiKeyGuard)
 export class AdminModelConfigsController {
   constructor(
     private readonly adminModelConfigsService: AdminModelConfigsService,
