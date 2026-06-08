@@ -116,6 +116,14 @@ export type AdminModelConfig = {
   updatedAt: string | null;
 };
 
+export type AdminModelConnectionTestResult = {
+  checkedAt: string;
+  endpoint: string;
+  modelName: string;
+  ok: true;
+  type: AdminModelConfigType;
+};
+
 export type SaveModelConfigInput = {
   apiKey?: string;
   baseUrl: string;
@@ -231,4 +239,13 @@ export function saveModelConfig(
     body,
     method: "PUT",
   });
+}
+
+export function testModelConfigConnection(type: AdminModelConfigType) {
+  return request<AdminModelConnectionTestResult>(
+    `/admin/model-configs/${type}/test`,
+    {
+      method: "POST",
+    },
+  );
 }

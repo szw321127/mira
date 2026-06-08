@@ -7,9 +7,16 @@ import {
   randomBytes,
 } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  createProviderEndpoint,
+  extractChatContent,
+  isRecord,
+  postProviderJson,
+} from '../model-provider/openai-compatible';
 import type { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
 import {
   adminModelConfigTypes,
+  type AdminModelConnectionTestResult,
   type AdminModelRuntimeConfig,
   type AdminModelConfigType,
   type AdminModelConfigView,
@@ -100,6 +107,64 @@ export class AdminModelConfigsService {
       modelName: config.modelName.trim(),
       type: modelType,
     };
+  }
+
+  async testConnection(type: string): Promise<AdminModelConnectionTestResult> {
+    const config = await this.getRuntimeConfig(type);
+    const endpoint =
+      config.type === 'text'
+        ? await this.testTextConnection(config)
+        : await this.testImageConnection(config);
+
+    return {
+      checkedAt: new Date().toISOString(),
+      endpoint,
+      modelName: config.modelName,
+      ok: true,
+      type: config.type,
+    };
+  }
+
+  private async testTextConnection(
+    config: AdminModelRuntimeConfig,
+  ): Promise<string> {
+    const endpoint = createProviderEndpoint(config.baseUrl, 'chat/completions');
+    const payload = await postProviderJson(endpoint, config.apiKey, {
+      max_tokens: 8,
+      messages: [
+        {
+          content: '只回复 ok，用于后台测试模型连接。',
+          role: 'user',
+        },
+      ],
+      model: config.modelName,
+      temperature: 0,
+    });
+
+    extractChatContent(payload);
+
+    return endpoint;
+  }
+
+  private async testImageConnection(
+    config: AdminModelRuntimeConfig,
+  ): Promise<string> {
+    const endpoint = createProviderEndpoint(
+      config.baseUrl,
+      'images/generations',
+    );
+    const payload = await postProviderJson(endpoint, config.apiKey, {
+      model: config.modelName,
+      prompt: '小红书封面图测试连接，简单红色圆形图标。',
+      response_format: 'b64_json',
+      size: '1024x1024',
+    });
+
+    if (!isRecord(payload) || !Array.isArray(payload.data)) {
+      throw new BadRequestException('图片模型响应格式无效。');
+    }
+
+    return endpoint;
   }
 
   private parseType(type: string): AdminModelConfigType {

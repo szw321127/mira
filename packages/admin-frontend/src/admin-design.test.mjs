@@ -62,7 +62,9 @@ test("admin frontend manages text and image model configs without exposing api k
   assert.match(api, /AdminModelConfig/);
   assert.match(api, /loadModelConfigs/);
   assert.match(api, /saveModelConfig/);
+  assert.match(api, /testModelConfigConnection/);
   assert.match(api, /\/admin\/model-configs/);
+  assert.match(api, /\/admin\/model-configs\/\$\{type\}\/test/);
   assert.match(app, /模型配置/);
   assert.match(app, /文本模型/);
   assert.match(app, /图片模型/);

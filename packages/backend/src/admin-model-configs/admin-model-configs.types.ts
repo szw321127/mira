@@ -9,6 +9,14 @@ export type AdminModelConfigView = {
   updatedAt: Date | null;
 };
 
+export type AdminModelConnectionTestResult = {
+  checkedAt: string;
+  endpoint: string;
+  modelName: string;
+  ok: true;
+  type: AdminModelConfigType;
+};
+
 export type AdminModelRuntimeConfig = {
   apiKey: string;
   baseUrl: string;

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { AdminModelConfigsService } from './admin-model-configs.service';
 import { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
 
@@ -16,5 +16,10 @@ export class AdminModelConfigsController {
   @Put(':type')
   save(@Param('type') type: string, @Body() dto: UpdateAdminModelConfigDto) {
     return this.adminModelConfigsService.save(type, dto);
+  }
+
+  @Post(':type/test')
+  testConnection(@Param('type') type: string) {
+    return this.adminModelConfigsService.testConnection(type);
   }
 }

@@ -11,6 +11,18 @@ type StoredConfig = {
 };
 
 describe('AdminModelConfigsService', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function mockFetchJson(payload: unknown, status = 200) {
+    return jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      json: async () => payload,
+      ok: status >= 200 && status < 300,
+      status,
+    } as Response);
+  }
+
   function createService(records: StoredConfig[] = []) {
     const prisma = {
       adminModelConfig: {
@@ -184,6 +196,123 @@ describe('AdminModelConfigsService', () => {
 
     await expect(service.getRuntimeConfig('text')).rejects.toThrow(
       '请先在后台配置文本模型。',
+    );
+  });
+
+  it('tests the saved text model connection without returning the api key', async () => {
+    const { prisma, service } = createService();
+    await service.save('text', {
+      apiKey: 'sk-runtime-secret',
+      baseUrl: 'https://text.example/v1',
+      modelName: 'text-model',
+    });
+    const apiKeyEncrypted =
+      prisma.adminModelConfig.upsert.mock.calls[0][0].create.apiKeyEncrypted;
+    const { service: runtimeService } = createService([
+      {
+        apiKeyEncrypted,
+        baseUrl: 'https://text.example/v1',
+        createdAt: new Date('2026-06-09T00:00:00.000Z'),
+        id: 'text-config',
+        modelName: 'text-model',
+        type: 'text',
+        updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+      },
+    ]);
+    const fetchMock = mockFetchJson({
+      choices: [{ message: { content: 'ok' } }],
+    });
+
+    const result = await runtimeService.testConnection('text');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://text.example/v1/chat/completions',
+      expect.objectContaining({
+        body: expect.stringContaining('"model":"text-model"'),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer sk-runtime-secret',
+          'Content-Type': 'application/json',
+        }),
+        method: 'POST',
+      }),
+    );
+    expect(result).toMatchObject({
+      endpoint: 'https://text.example/v1/chat/completions',
+      modelName: 'text-model',
+      ok: true,
+      type: 'text',
+    });
+    expect(result).not.toHaveProperty('apiKey');
+  });
+
+  it('tests the saved image model connection against the image endpoint', async () => {
+    const { prisma, service } = createService();
+    await service.save('image', {
+      apiKey: 'sk-image-secret',
+      baseUrl: 'https://image.example/v1',
+      modelName: 'image-model',
+    });
+    const apiKeyEncrypted =
+      prisma.adminModelConfig.upsert.mock.calls[0][0].create.apiKeyEncrypted;
+    const { service: runtimeService } = createService([
+      {
+        apiKeyEncrypted,
+        baseUrl: 'https://image.example/v1',
+        createdAt: new Date('2026-06-09T00:00:00.000Z'),
+        id: 'image-config',
+        modelName: 'image-model',
+        type: 'image',
+        updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+      },
+    ]);
+    const fetchMock = mockFetchJson({
+      data: [{ b64_json: 'iVBORw0KGgo=' }],
+    });
+
+    await expect(runtimeService.testConnection('image')).resolves.toMatchObject(
+      {
+        endpoint: 'https://image.example/v1/images/generations',
+        modelName: 'image-model',
+        ok: true,
+        type: 'image',
+      },
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://image.example/v1/images/generations',
+      expect.objectContaining({
+        body: expect.stringContaining('"model":"image-model"'),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer sk-image-secret',
+        }),
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('surfaces provider errors while testing model connections', async () => {
+    const { prisma, service } = createService();
+    await service.save('text', {
+      apiKey: 'sk-runtime-secret',
+      baseUrl: 'https://text.example/v1',
+      modelName: 'text-model',
+    });
+    const apiKeyEncrypted =
+      prisma.adminModelConfig.upsert.mock.calls[0][0].create.apiKeyEncrypted;
+    const { service: runtimeService } = createService([
+      {
+        apiKeyEncrypted,
+        baseUrl: 'https://text.example/v1',
+        createdAt: new Date('2026-06-09T00:00:00.000Z'),
+        id: 'text-config',
+        modelName: 'text-model',
+        type: 'text',
+        updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+      },
+    ]);
+    mockFetchJson({ error: { message: 'invalid api key' } }, 401);
+
+    await expect(runtimeService.testConnection('text')).rejects.toThrow(
+      'invalid api key',
     );
   });
 });
