@@ -42,6 +42,18 @@ test("admin frontend loads project management data through the backend API", () 
   assert.match(app, /\[projects, searchQuery, statusFilter\]/);
 });
 
+test("admin frontend API exposes task management mutations", () => {
+  const api = readSource("api.ts");
+
+  assert.match(api, /CreateAdminTaskInput/);
+  assert.match(api, /UpdateAdminTaskInput/);
+  assert.match(api, /createAdminTask/);
+  assert.match(api, /updateAdminTask/);
+  assert.match(api, /deleteAdminTask/);
+  assert.match(api, /\/admin\/projects\/tasks/);
+  assert.match(api, /\/admin\/projects\/tasks\/\$\{key\}/);
+});
+
 test("admin frontend manages text and image model configs without exposing api keys", () => {
   const api = readSource("api.ts");
   const app = readSource("App.tsx");

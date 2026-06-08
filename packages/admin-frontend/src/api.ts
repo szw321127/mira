@@ -47,8 +47,11 @@ export type AdminTask = {
   key: string;
   name: string;
   project: string;
-  status: "待开始" | "推进中" | "验收中" | "已完成";
+  projectKey: string | null;
+  status: AdminTaskStatus;
 };
+
+export type AdminTaskStatus = "待开始" | "推进中" | "验收中" | "已完成";
 
 export type AdminNotification = {
   createdAt: string;
@@ -85,6 +88,22 @@ export type CreateAdminProjectInput = {
   status?: AdminProjectStatus;
   team?: string[];
 };
+
+export type CreateAdminTaskInput = {
+  assignee: string;
+  dueDate: string;
+  key?: string;
+  name: string;
+  projectKey?: string;
+  status?: AdminTaskStatus;
+};
+
+export type UpdateAdminTaskInput = Partial<
+  Pick<
+    CreateAdminTaskInput,
+    "assignee" | "dueDate" | "name" | "projectKey" | "status"
+  >
+>;
 
 export type AdminModelConfigType = "text" | "image";
 
@@ -177,6 +196,26 @@ export function createAdminProject(body: CreateAdminProjectInput) {
   return request<AdminProject>("/admin/projects", {
     body,
     method: "POST",
+  });
+}
+
+export function createAdminTask(body: CreateAdminTaskInput) {
+  return request<AdminTask>("/admin/projects/tasks", {
+    body,
+    method: "POST",
+  });
+}
+
+export function updateAdminTask(key: string, body: UpdateAdminTaskInput) {
+  return request<AdminTask>(`/admin/projects/tasks/${key}`, {
+    body,
+    method: "PATCH",
+  });
+}
+
+export function deleteAdminTask(key: string) {
+  return request<{ key: string }>(`/admin/projects/tasks/${key}`, {
+    method: "DELETE",
   });
 }
 

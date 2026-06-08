@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { AdminProjectsService } from './admin-projects.service';
 import { CreateAdminProjectDto } from './dto/create-admin-project.dto';
+import { CreateAdminTaskDto } from './dto/create-admin-task.dto';
+import { UpdateAdminTaskDto } from './dto/update-admin-task.dto';
 
 @Controller('admin/projects')
 export class AdminProjectsController {
@@ -14,5 +24,20 @@ export class AdminProjectsController {
   @Post()
   createProject(@Body() dto: CreateAdminProjectDto) {
     return this.adminProjectsService.createProject(dto);
+  }
+
+  @Post('tasks')
+  createTask(@Body() dto: CreateAdminTaskDto) {
+    return this.adminProjectsService.createTask(dto);
+  }
+
+  @Patch('tasks/:key')
+  updateTask(@Param('key') key: string, @Body() dto: UpdateAdminTaskDto) {
+    return this.adminProjectsService.updateTask(key, dto);
+  }
+
+  @Delete('tasks/:key')
+  deleteTask(@Param('key') key: string) {
+    return this.adminProjectsService.deleteTask(key);
   }
 }

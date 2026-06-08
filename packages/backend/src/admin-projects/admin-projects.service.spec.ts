@@ -70,9 +70,58 @@ describe('AdminProjectsService real persistence', () => {
           updatedAt: new Date('2026-06-09T00:00:00.000Z'),
         })),
         findMany: jest.fn(async () => projects),
+        findUnique: jest.fn(async ({ where }) => {
+          const project = projects.find((item) => item.key === where.key);
+
+          if (!project) {
+            return null;
+          }
+
+          return {
+            id: project.id,
+            name: project.name,
+          };
+        }),
       },
       adminTask: {
+        create: jest.fn(async ({ data }) => ({
+          assignee: data.assignee,
+          dueDate: data.dueDate,
+          id: 'task-created',
+          key: data.key,
+          name: data.name,
+          project: data.projectId
+            ? { key: 'commercial-admin', name: '商业化后台' }
+            : null,
+          projectId: data.projectId ?? null,
+          status: data.status,
+          updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+        })),
+        delete: jest.fn(async ({ where }) => ({
+          assignee: 'Mia',
+          dueDate: '07/02',
+          id: 'task-deleted',
+          key: where.key,
+          name: '补齐任务管理',
+          project: null,
+          projectId: null,
+          status: '已完成',
+          updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+        })),
         findMany: jest.fn(async () => tasks),
+        update: jest.fn(async ({ data, where }) => ({
+          assignee: data.assignee ?? 'Mia',
+          dueDate: data.dueDate ?? '07/02',
+          id: 'task-updated',
+          key: where.key,
+          name: data.name ?? '补齐任务管理',
+          project: data.projectId
+            ? { key: 'commercial-admin', name: '商业化后台' }
+            : null,
+          projectId: data.projectId ?? null,
+          status: data.status ?? '推进中',
+          updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+        })),
       },
     };
 
@@ -272,5 +321,123 @@ describe('AdminProjectsService real persistence', () => {
         owner: '林舟',
       }),
     ).rejects.toThrow('项目 Key 已存在，请换一个。');
+  });
+
+  it('creates a persisted task linked to a project key', async () => {
+    const updatedAt = new Date('2026-06-09T00:00:00.000Z');
+    const { prisma, service } = createService([
+      {
+        budget: '8w',
+        dueDate: '07/01',
+        id: 'project-1',
+        key: 'commercial-admin',
+        name: '商业化后台',
+        owner: '阿遥',
+        priority: 'P1',
+        progress: 12,
+        riskEscalationOwner: null,
+        riskLatestUpdate: null,
+        riskNextAction: null,
+        riskReason: null,
+        riskSeverity: null,
+        status: '进行中',
+        tasks: [],
+        team: JSON.stringify(['阿遥']),
+        updatedAt,
+      },
+    ]);
+
+    const task = await service.createTask({
+      assignee: 'Mia',
+      dueDate: '07/02',
+      key: 'admin-task-crud',
+      name: '补齐任务管理',
+      projectKey: 'commercial-admin',
+      status: '推进中',
+    });
+
+    expect(prisma.adminProject.findUnique).toHaveBeenCalledWith({
+      select: { id: true, name: true },
+      where: { key: 'commercial-admin' },
+    });
+    expect(prisma.adminTask.create).toHaveBeenCalledWith({
+      data: {
+        assignee: 'Mia',
+        dueDate: '07/02',
+        key: 'admin-task-crud',
+        name: '补齐任务管理',
+        projectId: 'project-1',
+        status: '推进中',
+      },
+      include: { project: { select: { key: true, name: true } } },
+    });
+    expect(task).toEqual({
+      assignee: 'Mia',
+      dueDate: '07/02',
+      key: 'admin-task-crud',
+      name: '补齐任务管理',
+      project: '商业化后台',
+      projectKey: 'commercial-admin',
+      status: '推进中',
+    });
+  });
+
+  it('updates an existing task and can move it to another project', async () => {
+    const updatedAt = new Date('2026-06-09T00:00:00.000Z');
+    const { prisma, service } = createService([
+      {
+        budget: '8w',
+        dueDate: '07/01',
+        id: 'project-1',
+        key: 'commercial-admin',
+        name: '商业化后台',
+        owner: '阿遥',
+        priority: 'P1',
+        progress: 12,
+        riskEscalationOwner: null,
+        riskLatestUpdate: null,
+        riskNextAction: null,
+        riskReason: null,
+        riskSeverity: null,
+        status: '进行中',
+        tasks: [],
+        team: JSON.stringify(['阿遥']),
+        updatedAt,
+      },
+    ]);
+
+    const task = await service.updateTask('admin-task-crud', {
+      assignee: 'Kevin',
+      projectKey: 'commercial-admin',
+      status: '验收中',
+    });
+
+    expect(prisma.adminTask.update).toHaveBeenCalledWith({
+      data: {
+        assignee: 'Kevin',
+        projectId: 'project-1',
+        status: '验收中',
+      },
+      include: { project: { select: { key: true, name: true } } },
+      where: { key: 'admin-task-crud' },
+    });
+    expect(task).toMatchObject({
+      assignee: 'Kevin',
+      key: 'admin-task-crud',
+      project: '商业化后台',
+      projectKey: 'commercial-admin',
+      status: '验收中',
+    });
+  });
+
+  it('deletes a task by key and returns the deleted key', async () => {
+    const { prisma, service } = createService();
+
+    await expect(service.deleteTask('admin-task-crud')).resolves.toEqual({
+      key: 'admin-task-crud',
+    });
+    expect(prisma.adminTask.delete).toHaveBeenCalledWith({
+      where: { key: 'admin-task-crud' },
+    });
   });
 });

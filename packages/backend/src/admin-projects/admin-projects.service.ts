@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { AdminProject as StoredAdminProject } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateAdminProjectDto } from './dto/create-admin-project.dto';
+import type { CreateAdminTaskDto } from './dto/create-admin-task.dto';
+import type { UpdateAdminTaskDto } from './dto/update-admin-task.dto';
 import type {
   AdminNotification,
   AdminProject,
@@ -18,7 +20,7 @@ type StoredTaskWithProject = {
   dueDate: string;
   key: string;
   name: string;
-  project?: { name: string } | null;
+  project?: { key?: string; name: string } | null;
   status: string;
 };
 
@@ -92,6 +94,94 @@ export class AdminProjectsService {
     const project = await this.createProjectRecord(dto, name, owner);
 
     return this.toProject(project);
+  }
+
+  async createTask(dto: CreateAdminTaskDto): Promise<AdminTask> {
+    const name = this.requiredTrim(dto.name, '任务名称');
+    const project = await this.resolveProject(dto.projectKey);
+
+    try {
+      const task = await this.prisma.adminTask.create({
+        data: {
+          assignee: this.requiredTrim(dto.assignee, '负责人'),
+          dueDate: this.requiredTrim(dto.dueDate, '截止时间'),
+          key: dto.key?.trim() || this.createTaskKey(name),
+          name,
+          projectId: project?.id ?? null,
+          status: dto.status ?? '待开始',
+        },
+        include: { project: { select: { key: true, name: true } } },
+      });
+
+      return this.toTask(task);
+    } catch (error) {
+      if (this.isUniqueKeyError(error)) {
+        throw new BadRequestException('任务 Key 已存在，请换一个。');
+      }
+
+      throw error;
+    }
+  }
+
+  async updateTask(key: string, dto: UpdateAdminTaskDto): Promise<AdminTask> {
+    const taskKey = this.requiredTrim(key, '任务 Key');
+    const data: {
+      assignee?: string;
+      dueDate?: string;
+      name?: string;
+      projectId?: string | null;
+      status?: AdminTask['status'];
+    } = {};
+
+    if (dto.assignee !== undefined) {
+      data.assignee = this.requiredTrim(dto.assignee, '负责人');
+    }
+    if (dto.dueDate !== undefined) {
+      data.dueDate = this.requiredTrim(dto.dueDate, '截止时间');
+    }
+    if (dto.name !== undefined) {
+      data.name = this.requiredTrim(dto.name, '任务名称');
+    }
+    if (dto.projectKey !== undefined) {
+      const project = await this.resolveProject(dto.projectKey);
+
+      data.projectId = project?.id ?? null;
+    }
+    if (dto.status !== undefined) {
+      data.status = dto.status;
+    }
+
+    try {
+      const task = await this.prisma.adminTask.update({
+        data,
+        include: { project: { select: { key: true, name: true } } },
+        where: { key: taskKey },
+      });
+
+      return this.toTask(task);
+    } catch (error) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new BadRequestException('任务不存在。');
+      }
+
+      throw error;
+    }
+  }
+
+  async deleteTask(key: string): Promise<{ key: string }> {
+    const taskKey = this.requiredTrim(key, '任务 Key');
+
+    try {
+      await this.prisma.adminTask.delete({ where: { key: taskKey } });
+    } catch (error) {
+      if (this.isRecordNotFoundError(error)) {
+        throw new BadRequestException('任务不存在。');
+      }
+
+      throw error;
+    }
+
+    return { key: taskKey };
   }
 
   private async createProjectRecord(
@@ -172,6 +262,7 @@ export class AdminProjectsService {
       key: task.key,
       name: task.name,
       project: task.project?.name ?? '未关联项目',
+      projectKey: task.project?.key ?? null,
       status: this.toTaskStatus(task.status),
     };
   }
@@ -213,6 +304,16 @@ export class AdminProjectsService {
     return trimmed || null;
   }
 
+  private requiredTrim(value: string, fieldName: string): string {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      throw new BadRequestException(`${fieldName}不能为空。`);
+    }
+
+    return trimmed;
+  }
+
   private createProjectKey(name: string): string {
     const normalized = name
       .toLowerCase()
@@ -221,6 +322,37 @@ export class AdminProjectsService {
       .slice(0, 36);
 
     return normalized || `project-${Date.now()}`;
+  }
+
+  private createTaskKey(name: string): string {
+    const normalized = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 36);
+
+    return normalized || `task-${Date.now()}`;
+  }
+
+  private async resolveProject(
+    projectKey: string | undefined,
+  ): Promise<{ id: string; name: string } | null> {
+    const key = projectKey?.trim();
+
+    if (!key) {
+      return null;
+    }
+
+    const project = await this.prisma.adminProject.findUnique({
+      select: { id: true, name: true },
+      where: { key },
+    });
+
+    if (!project) {
+      throw new BadRequestException('关联项目不存在。');
+    }
+
+    return project;
   }
 
   private toStatus(status: string): AdminProject['status'] {
@@ -278,6 +410,14 @@ export class AdminProjectsService {
       record.code === 'P2002' &&
       Array.isArray(record.meta?.target) &&
       record.meta.target.includes('key')
+    );
+  }
+
+  private isRecordNotFoundError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === 'P2025'
     );
   }
 }

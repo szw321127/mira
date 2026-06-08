@@ -25,6 +25,7 @@ export type AdminTask = {
   key: string;
   name: string;
   project: string;
+  projectKey: string | null;
   status: '待开始' | '推进中' | '验收中' | '已完成';
 };
 
