@@ -6,13 +6,14 @@ import {
   createHash,
   randomBytes,
 } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
+import { AdminAuditLogsService } from '../admin-audit-logs/admin-audit-logs.service';
 import {
   createProviderEndpoint,
   extractChatContent,
   isRecord,
   postProviderJson,
 } from '../model-provider/openai-compatible';
+import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
 import {
   adminModelConfigTypes,
@@ -35,6 +36,7 @@ export class AdminModelConfigsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly auditLogs: AdminAuditLogsService,
   ) {}
 
   async list(): Promise<AdminModelConfigView[]> {
@@ -80,8 +82,21 @@ export class AdminModelConfigsService {
       },
       where: { type: modelType },
     });
+    const view = this.toView(modelType, saved);
 
-    return this.toView(modelType, saved);
+    await this.auditLogs.record({
+      action: 'model_config.saved',
+      metadata: {
+        apiKeyUpdated: Boolean(nextApiKey),
+        baseUrl: view.baseUrl,
+        hasApiKey: view.hasApiKey,
+        modelName: view.modelName,
+      },
+      targetKey: modelType,
+      targetType: 'model_config',
+    });
+
+    return view;
   }
 
   async getRuntimeConfig(type: string): Promise<AdminModelRuntimeConfig> {
@@ -115,6 +130,15 @@ export class AdminModelConfigsService {
       config.type === 'text'
         ? await this.testTextConnection(config)
         : await this.testImageConnection(config);
+    await this.auditLogs.record({
+      action: 'model_config.connection_tested',
+      metadata: {
+        endpoint,
+        modelName: config.modelName,
+      },
+      targetKey: config.type,
+      targetType: 'model_config',
+    });
 
     return {
       checkedAt: new Date().toISOString(),

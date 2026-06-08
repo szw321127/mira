@@ -53,18 +53,23 @@ describe('AdminModelConfigsService', () => {
         key === 'MODEL_CONFIG_SECRET' ? 'unit-test-secret' : undefined,
       ),
     };
+    const auditLogs = {
+      record: jest.fn(async () => undefined),
+    };
 
     return {
+      auditLogs,
       prisma,
       service: new AdminModelConfigsService(
         prisma as never,
         configService as never,
+        auditLogs as never,
       ),
     };
   }
 
   it('encrypts apiKey and returns only key status plus preview', async () => {
-    const { prisma, service } = createService();
+    const { auditLogs, prisma, service } = createService();
 
     const result = await service.save('text', {
       apiKey: 'sk-rednote-text-secret',
@@ -85,6 +90,17 @@ describe('AdminModelConfigsService', () => {
       type: 'text',
     });
     expect(result).not.toHaveProperty('apiKey');
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'model_config.saved',
+      metadata: {
+        apiKeyUpdated: true,
+        baseUrl: 'https://api.openai.example/v1',
+        hasApiKey: true,
+        modelName: 'gpt-rednote',
+      },
+      targetKey: 'text',
+      targetType: 'model_config',
+    });
   });
 
   it('keeps the existing encrypted key when apiKey is blank', async () => {
@@ -161,7 +177,7 @@ describe('AdminModelConfigsService', () => {
     });
     const apiKeyEncrypted =
       prisma.adminModelConfig.upsert.mock.calls[0][0].create.apiKeyEncrypted;
-    const { service: runtimeService } = createService([
+    const { auditLogs, service: runtimeService } = createService([
       {
         apiKeyEncrypted,
         baseUrl: 'https://text.example/v1',
@@ -208,7 +224,7 @@ describe('AdminModelConfigsService', () => {
     });
     const apiKeyEncrypted =
       prisma.adminModelConfig.upsert.mock.calls[0][0].create.apiKeyEncrypted;
-    const { service: runtimeService } = createService([
+    const { auditLogs, service: runtimeService } = createService([
       {
         apiKeyEncrypted,
         baseUrl: 'https://text.example/v1',
@@ -243,6 +259,15 @@ describe('AdminModelConfigsService', () => {
       type: 'text',
     });
     expect(result).not.toHaveProperty('apiKey');
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'model_config.connection_tested',
+      metadata: {
+        endpoint: 'https://text.example/v1/chat/completions',
+        modelName: 'text-model',
+      },
+      targetKey: 'text',
+      targetType: 'model_config',
+    });
   });
 
   it('tests the saved image model connection against the image endpoint', async () => {

@@ -54,6 +54,14 @@ test("admin frontend API exposes task management mutations", () => {
   assert.match(api, /\/admin\/projects\/tasks\/\$\{key\}/);
 });
 
+test("admin frontend API exposes audit log loading", () => {
+  const api = readSource("api.ts");
+
+  assert.match(api, /AdminAuditLog/);
+  assert.match(api, /loadAdminAuditLogs/);
+  assert.match(api, /\/admin\/audit-logs/);
+});
+
 test("admin frontend manages text and image model configs without exposing api keys", () => {
   const api = readSource("api.ts");
   const app = readSource("App.tsx");

@@ -124,10 +124,14 @@ describe('AdminProjectsService real persistence', () => {
         })),
       },
     };
+    const auditLogs = {
+      record: jest.fn(async () => undefined),
+    };
 
     return {
+      auditLogs,
       prisma,
-      service: new AdminProjectsService(prisma as never),
+      service: new AdminProjectsService(prisma as never, auditLogs as never),
     };
   }
 
@@ -259,7 +263,7 @@ describe('AdminProjectsService real persistence', () => {
   });
 
   it('creates a persisted project and serializes it for the admin UI', async () => {
-    const { prisma, service } = createService();
+    const { auditLogs, prisma, service } = createService();
 
     const project = await service.createProject({
       budget: '8w',
@@ -299,6 +303,17 @@ describe('AdminProjectsService real persistence', () => {
       taskTotal: 0,
       team: ['阿遥', 'Mia'],
     });
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'project.created',
+      metadata: expect.objectContaining({
+        name: '商业化后台',
+        owner: '阿遥',
+        priority: 'P1',
+        status: '进行中',
+      }),
+      targetKey: 'commercial-admin',
+      targetType: 'project',
+    });
   });
 
   it('returns a product-level error when the project key already exists', async () => {
@@ -325,7 +340,7 @@ describe('AdminProjectsService real persistence', () => {
 
   it('creates a persisted task linked to a project key', async () => {
     const updatedAt = new Date('2026-06-09T00:00:00.000Z');
-    const { prisma, service } = createService([
+    const { auditLogs, prisma, service } = createService([
       {
         budget: '8w',
         dueDate: '07/01',
@@ -380,11 +395,22 @@ describe('AdminProjectsService real persistence', () => {
       projectKey: 'commercial-admin',
       status: '推进中',
     });
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'task.created',
+      metadata: expect.objectContaining({
+        assignee: 'Mia',
+        name: '补齐任务管理',
+        projectKey: 'commercial-admin',
+        status: '推进中',
+      }),
+      targetKey: 'admin-task-crud',
+      targetType: 'task',
+    });
   });
 
   it('updates an existing task and can move it to another project', async () => {
     const updatedAt = new Date('2026-06-09T00:00:00.000Z');
-    const { prisma, service } = createService([
+    const { auditLogs, prisma, service } = createService([
       {
         budget: '8w',
         dueDate: '07/01',
@@ -428,16 +454,32 @@ describe('AdminProjectsService real persistence', () => {
       projectKey: 'commercial-admin',
       status: '验收中',
     });
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'task.updated',
+      metadata: expect.objectContaining({
+        assignee: 'Kevin',
+        projectKey: 'commercial-admin',
+        status: '验收中',
+      }),
+      targetKey: 'admin-task-crud',
+      targetType: 'task',
+    });
   });
 
   it('deletes a task by key and returns the deleted key', async () => {
-    const { prisma, service } = createService();
+    const { auditLogs, prisma, service } = createService();
 
     await expect(service.deleteTask('admin-task-crud')).resolves.toEqual({
       key: 'admin-task-crud',
     });
     expect(prisma.adminTask.delete).toHaveBeenCalledWith({
       where: { key: 'admin-task-crud' },
+    });
+    expect(auditLogs.record).toHaveBeenCalledWith({
+      action: 'task.deleted',
+      metadata: {},
+      targetKey: 'admin-task-crud',
+      targetType: 'task',
     });
   });
 });

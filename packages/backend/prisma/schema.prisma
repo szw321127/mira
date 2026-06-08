@@ -180,3 +180,16 @@ model AdminNotification {
 
   @@index([createdAt])
 }
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  targetType String
+  targetKey  String
+  actor      String
+  metadata   String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([targetType, targetKey, createdAt])
+}

@@ -60,6 +60,16 @@ export type AdminNotification = {
   title: string;
 };
 
+export type AdminAuditLog = {
+  action: string;
+  actor: string;
+  createdAt: string;
+  id: string;
+  metadata: Record<string, unknown>;
+  targetKey: string;
+  targetType: string;
+};
+
 export type AdminDashboard = {
   capabilities: {
     canCreateProject: boolean;
@@ -198,6 +208,10 @@ async function request<T>(
 
 export function loadProjectManagementDashboard() {
   return request<AdminDashboard>("/admin/projects/dashboard");
+}
+
+export function loadAdminAuditLogs(limit = 50) {
+  return request<AdminAuditLog[]>(`/admin/audit-logs?limit=${limit}`);
 }
 
 export function createAdminProject(body: CreateAdminProjectInput) {

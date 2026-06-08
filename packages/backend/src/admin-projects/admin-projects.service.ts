@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { AdminProject as StoredAdminProject } from '@prisma/client';
+import { AdminAuditLogsService } from '../admin-audit-logs/admin-audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateAdminProjectDto } from './dto/create-admin-project.dto';
 import type { CreateAdminTaskDto } from './dto/create-admin-task.dto';
@@ -33,7 +34,10 @@ type StoredNotification = {
 
 @Injectable()
 export class AdminProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogs: AdminAuditLogsService,
+  ) {}
 
   async getDashboard(): Promise<AdminProjectsDashboard> {
     const [projects, tasks, notifications] = await Promise.all([
@@ -92,8 +96,21 @@ export class AdminProjectsService {
     const name = dto.name.trim();
     const owner = dto.owner.trim();
     const project = await this.createProjectRecord(dto, name, owner);
+    const view = this.toProject(project);
 
-    return this.toProject(project);
+    await this.auditLogs.record({
+      action: 'project.created',
+      metadata: {
+        name: view.name,
+        owner: view.owner,
+        priority: view.priority,
+        status: view.status,
+      },
+      targetKey: view.key,
+      targetType: 'project',
+    });
+
+    return view;
   }
 
   async createTask(dto: CreateAdminTaskDto): Promise<AdminTask> {
@@ -113,7 +130,21 @@ export class AdminProjectsService {
         include: { project: { select: { key: true, name: true } } },
       });
 
-      return this.toTask(task);
+      const view = this.toTask(task);
+
+      await this.auditLogs.record({
+        action: 'task.created',
+        metadata: {
+          assignee: view.assignee,
+          name: view.name,
+          projectKey: view.projectKey,
+          status: view.status,
+        },
+        targetKey: view.key,
+        targetType: 'task',
+      });
+
+      return view;
     } catch (error) {
       if (this.isUniqueKeyError(error)) {
         throw new BadRequestException('任务 Key 已存在，请换一个。');
@@ -158,7 +189,21 @@ export class AdminProjectsService {
         where: { key: taskKey },
       });
 
-      return this.toTask(task);
+      const view = this.toTask(task);
+
+      await this.auditLogs.record({
+        action: 'task.updated',
+        metadata: {
+          assignee: view.assignee,
+          name: view.name,
+          projectKey: view.projectKey,
+          status: view.status,
+        },
+        targetKey: view.key,
+        targetType: 'task',
+      });
+
+      return view;
     } catch (error) {
       if (this.isRecordNotFoundError(error)) {
         throw new BadRequestException('任务不存在。');
@@ -173,6 +218,12 @@ export class AdminProjectsService {
 
     try {
       await this.prisma.adminTask.delete({ where: { key: taskKey } });
+      await this.auditLogs.record({
+        action: 'task.deleted',
+        metadata: {},
+        targetKey: taskKey,
+        targetType: 'task',
+      });
     } catch (error) {
       if (this.isRecordNotFoundError(error)) {
         throw new BadRequestException('任务不存在。');
