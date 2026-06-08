@@ -23,6 +23,19 @@ test("admin frontend exposes an Ant Design project management shell", () => {
   assert.match(app, /Drawer/);
 });
 
+test("admin frontend loads project management data through the backend API", () => {
+  const api = readSource("api.ts");
+  const app = readSource("App.tsx");
+
+  assert.match(api, /VITE_BACKEND_URL/);
+  assert.match(api, /ApiEnvelope/);
+  assert.match(api, /AdminDashboard/);
+  assert.match(api, /\/admin\/projects\/dashboard/);
+  assert.match(app, /loadProjectManagementDashboard/);
+  assert.match(app, /dashboardState/);
+  assert.match(app, /\[projects, searchQuery, statusFilter\]/);
+});
+
 test("admin shell has real search state, filtered tasks, and empty states", () => {
   const app = readSource("App.tsx");
 

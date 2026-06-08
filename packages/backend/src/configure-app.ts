@@ -4,7 +4,7 @@ import { ApiResponseInterceptor } from './common/api-response.interceptor';
 
 export function configureApp(app: INestApplication): void {
   const frontendOrigins = (
-    process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000'
+    process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000,http://localhost:3002'
   )
     .split(',')
     .map((origin) => origin.trim())

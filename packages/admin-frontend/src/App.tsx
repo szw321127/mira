@@ -37,137 +37,21 @@ import {
   SettingOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getApiErrorMessage,
+  loadProjectManagementDashboard,
+  type AdminDashboard,
+  type AdminProject as Project,
+  type AdminProjectStatus as ProjectStatus,
+  type AdminTask as Task,
+} from "./api";
 
 const { Content, Header, Sider } = Layout;
 const { Text, Title } = Typography;
 
-type ProjectStatus = "进行中" | "规划中" | "风险" | "已上线";
 type NavigationKey = "overview" | "projects" | "tasks" | "members" | "settings";
 type ExportStatus = "idle" | "done";
-
-type Project = {
-  budget: string;
-  dueDate: string;
-  key: string;
-  name: string;
-  owner: string;
-  priority: "P0" | "P1" | "P2";
-  progress: number;
-  riskEscalationOwner?: string;
-  riskLatestUpdate?: string;
-  riskNextAction?: string;
-  riskReason?: string;
-  riskSeverity?: "高" | "中" | "低";
-  status: ProjectStatus;
-  taskDone: number;
-  taskTotal: number;
-  team: string[];
-};
-
-type Task = {
-  assignee: string;
-  dueDate: string;
-  key: string;
-  name: string;
-  project: string;
-  status: "待开始" | "推进中" | "验收中" | "已完成";
-};
-
-const projects: Project[] = [
-  {
-    budget: "18.4w",
-    dueDate: "06/28",
-    key: "rednote-admin",
-    name: "RedNote 后台项目管理系统",
-    owner: "林舟",
-    priority: "P0",
-    progress: 68,
-    status: "进行中",
-    taskDone: 21,
-    taskTotal: 31,
-    team: ["林舟", "阿遥", "Mia"],
-  },
-  {
-    budget: "9.6w",
-    dueDate: "07/05",
-    key: "creator-workbench",
-    name: "创作工作台体验优化",
-    owner: "阿遥",
-    priority: "P1",
-    progress: 82,
-    status: "进行中",
-    taskDone: 36,
-    taskTotal: 44,
-    team: ["阿遥", "Kevin"],
-  },
-  {
-    budget: "12.8w",
-    dueDate: "07/18",
-    key: "asset-pipeline",
-    name: "封面资产生成链路",
-    owner: "Mia",
-    priority: "P1",
-    progress: 46,
-    riskEscalationOwner: "林舟",
-    riskLatestUpdate: "今天 14:20 Mia 标记重试失败率上升",
-    riskNextAction: "今晚前补齐失败重试与告警阈值",
-    riskReason: "封面生成失败后的重试链路未闭环，可能影响 07/18 联调",
-    riskSeverity: "高",
-    status: "风险",
-    taskDone: 14,
-    taskTotal: 30,
-    team: ["Mia", "林舟", "Eli"],
-  },
-  {
-    budget: "6.1w",
-    dueDate: "08/02",
-    key: "ops-insight",
-    name: "运营数据看板",
-    owner: "Kevin",
-    priority: "P2",
-    progress: 24,
-    status: "规划中",
-    taskDone: 5,
-    taskTotal: 21,
-    team: ["Kevin", "Eli"],
-  },
-];
-
-const tasks: Task[] = [
-  {
-    assignee: "林舟",
-    dueDate: "今天",
-    key: "t-1",
-    name: "定义后台项目详情抽屉信息结构",
-    project: "RedNote 后台项目管理系统",
-    status: "推进中",
-  },
-  {
-    assignee: "阿遥",
-    dueDate: "明天",
-    key: "t-2",
-    name: "压缩工作台想法和大纲垂直间距",
-    project: "创作工作台体验优化",
-    status: "验收中",
-  },
-  {
-    assignee: "Mia",
-    dueDate: "06/12",
-    key: "t-3",
-    name: "补齐封面生成失败后的重试状态",
-    project: "封面资产生成链路",
-    status: "待开始",
-  },
-  {
-    assignee: "Kevin",
-    dueDate: "06/18",
-    key: "t-4",
-    name: "整理运营指标口径",
-    project: "运营数据看板",
-    status: "已完成",
-  },
-];
 
 const statusColor: Record<ProjectStatus, string> = {
   已上线: "green",
@@ -223,6 +107,29 @@ function buildProjectCsv(rows: Project[]) {
   return [headers.join(","), ...body].join("\n");
 }
 
+const emptyDashboard: AdminDashboard = {
+  capabilities: {
+    canCreateProject: false,
+  },
+  metrics: {
+    activeProjects: 0,
+    averageProgress: 0,
+    riskProjects: 0,
+    totalProjects: 0,
+    weeklyCompletedTasks: 0,
+  },
+  notifications: [],
+  projects: [],
+  riskQueue: [],
+  tasks: [],
+};
+
+type DashboardState = {
+  data: AdminDashboard;
+  errorMessage: string | null;
+  status: "error" | "loading" | "ready";
+};
+
 export default function App() {
   return (
     <ConfigProvider
@@ -248,6 +155,11 @@ export default function App() {
 function AdminWorkspace() {
   const [activeMenu, setActiveMenu] = useState<NavigationKey>("overview");
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [dashboardState, setDashboardState] = useState<DashboardState>({
+    data: emptyDashboard,
+    errorMessage: null,
+    status: "loading",
+  });
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -255,6 +167,48 @@ function AdminWorkspace() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "全部">("全部");
+
+  useEffect(() => {
+    let active = true;
+
+    loadProjectManagementDashboard()
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+
+        setDashboardState({
+          data,
+          errorMessage: null,
+          status: "ready",
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        setDashboardState({
+          data: emptyDashboard,
+          errorMessage: getApiErrorMessage(error),
+          status: "error",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const {
+    capabilities,
+    metrics,
+    notifications,
+    projects,
+    riskQueue,
+    tasks,
+  } = dashboardState.data;
+  const dashboardLoading = dashboardState.status === "loading";
 
   const filteredProjects = useMemo(
     () =>
@@ -276,15 +230,22 @@ function AdminWorkspace() {
 
         return statusMatched && searchMatched;
       }),
-    [searchQuery, statusFilter],
+    [projects, searchQuery, statusFilter],
   );
 
   const filteredTasks = useMemo(() => {
-    const visibleProjectNames = new Set(filteredProjects.map((project) => project.name));
+    const statusProjectNames = new Set(
+      projects
+        .filter(
+          (project) =>
+            statusFilter === "全部" || project.status === statusFilter,
+        )
+        .map((project) => project.name),
+    );
 
     return tasks.filter((task) => {
       const statusMatched =
-        statusFilter === "全部" || visibleProjectNames.has(task.project);
+        statusFilter === "全部" || statusProjectNames.has(task.project);
       const searchMatched = matchesQuery(
         [task.name, task.project, task.assignee, task.status, task.dueDate],
         searchQuery,
@@ -292,11 +253,11 @@ function AdminWorkspace() {
 
       return statusMatched && searchMatched;
     });
-  }, [filteredProjects, searchQuery, statusFilter]);
+  }, [projects, searchQuery, statusFilter, tasks]);
 
   const riskQueueProjects = useMemo(
     () =>
-      projects.filter(
+      riskQueue.filter(
         (project) =>
           project.status === "风险" &&
           matchesQuery(
@@ -311,7 +272,7 @@ function AdminWorkspace() {
             searchQuery,
           ),
       ),
-    [searchQuery],
+    [riskQueue, searchQuery],
   );
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
@@ -490,6 +451,15 @@ function AdminWorkspace() {
         </Header>
 
         <Content className="admin-content">
+          {dashboardState.status === "error" ? (
+            <Alert
+              message="项目管理接口加载失败"
+              description={dashboardState.errorMessage}
+              showIcon
+              type="error"
+            />
+          ) : null}
+
           {operationNotice ? (
             <Alert
               className="operation-alert"
@@ -503,20 +473,24 @@ function AdminWorkspace() {
 
           <div className="metric-grid">
             <Card>
-              <Statistic title="进行中项目" value={3} suffix="/ 4" />
+              <Statistic
+                title="进行中项目"
+                value={metrics.activeProjects}
+                suffix={`/ ${metrics.totalProjects}`}
+              />
             </Card>
             <Card>
-              <Statistic title="本周完成任务" value={42} />
+              <Statistic title="本周完成任务" value={metrics.weeklyCompletedTasks} />
             </Card>
             <Card>
               <Statistic
                 styles={{ content: { color: "#b20d2a" } }}
                 title="风险项目"
-                value={1}
+                value={metrics.riskProjects}
               />
             </Card>
             <Card>
-              <Statistic title="平均进度" value={55} suffix="%" />
+              <Statistic title="平均进度" value={metrics.averageProgress} suffix="%" />
             </Card>
           </div>
 
@@ -597,6 +571,7 @@ function AdminWorkspace() {
                   columns={projectColumns}
                   dataSource={filteredProjects}
                   locale={{ emptyText: <Empty description="没有匹配的项目" /> }}
+                  loading={dashboardLoading}
                   pagination={false}
                   rowKey="key"
                   size="middle"
@@ -610,6 +585,7 @@ function AdminWorkspace() {
                   columns={taskColumns}
                   dataSource={filteredTasks}
                   locale={{ emptyText: <Empty description="没有匹配的任务" /> }}
+                  loading={dashboardLoading}
                   pagination={false}
                   rowKey="key"
                   size="middle"
@@ -637,20 +613,42 @@ function AdminWorkspace() {
         size="large"
         title="通知中心"
       >
-        <Empty description="暂无新通知" />
+        {notifications.length > 0 ? (
+          <Timeline
+            items={notifications.map((notification) => ({
+              children: (
+                <Space direction="vertical" size={2}>
+                  <Text strong>{notification.title}</Text>
+                  <Text>{notification.description}</Text>
+                  <Text type="secondary">{notification.createdAt}</Text>
+                </Space>
+              ),
+            }))}
+          />
+        ) : (
+          <Empty description="暂无新通知" />
+        )}
       </Drawer>
 
       <Modal
         cancelText="关闭"
-        okButtonProps={{ disabled: true }}
-        okText="等待接口"
+        okButtonProps={{ disabled: !capabilities.canCreateProject }}
+        okText={capabilities.canCreateProject ? "创建项目" : "等待接口"}
         onCancel={() => setCreateProjectOpen(false)}
         open={createProjectOpen}
         title="新建项目"
       >
         <Alert
-          description="当前先保留入口状态，接入后端项目接口后会开放提交。"
-          message="新建项目需要后端接口"
+          description={
+            capabilities.canCreateProject
+              ? "项目创建接口已开放，可以继续接入表单提交。"
+              : "当前后端返回暂未开放创建权限，先保留入口状态。"
+          }
+          message={
+            capabilities.canCreateProject
+              ? "新建项目接口已开放"
+              : "新建项目需要后端接口"
+          }
           showIcon
           type="info"
         />
