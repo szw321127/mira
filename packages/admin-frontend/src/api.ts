@@ -20,13 +20,15 @@ export class ApiError extends Error {
 
 export type AdminProjectStatus = "进行中" | "规划中" | "风险" | "已上线";
 
+export type AdminProjectPriority = "P0" | "P1" | "P2";
+
 export type AdminProject = {
   budget: string;
   dueDate: string;
   key: string;
   name: string;
   owner: string;
-  priority: "P0" | "P1" | "P2";
+  priority: AdminProjectPriority;
   progress: number;
   riskEscalationOwner?: string;
   riskLatestUpdate?: string;
@@ -72,6 +74,35 @@ export type AdminDashboard = {
   tasks: AdminTask[];
 };
 
+export type CreateAdminProjectInput = {
+  budget?: string;
+  dueDate?: string;
+  key?: string;
+  name: string;
+  owner: string;
+  priority?: AdminProjectPriority;
+  progress?: number;
+  status?: AdminProjectStatus;
+  team?: string[];
+};
+
+export type AdminModelConfigType = "text" | "image";
+
+export type AdminModelConfig = {
+  apiKeyPreview: string | null;
+  baseUrl: string;
+  hasApiKey: boolean;
+  modelName: string;
+  type: AdminModelConfigType;
+  updatedAt: string | null;
+};
+
+export type SaveModelConfigInput = {
+  apiKey?: string;
+  baseUrl: string;
+  modelName: string;
+};
+
 function isApiEnvelope(value: unknown): value is ApiEnvelope<unknown> {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -101,8 +132,26 @@ export function getApiErrorMessage(error: unknown) {
   return normalizeApiError(error).message;
 }
 
-async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+type RequestOptions = {
+  body?: unknown;
+  method?: string;
+};
+
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const headers = new Headers();
+
+  if (options.body !== undefined) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    headers,
+    method: options.method ?? "GET",
+  });
   const payload: unknown = await response.json().catch(() => null);
 
   if (!isApiEnvelope(payload)) {
@@ -110,7 +159,11 @@ async function request<T>(path: string): Promise<T> {
   }
 
   if (!response.ok || payload.code !== 0) {
-    throw new ApiError(payload.code || response.status, payload.msg, response.status);
+    throw new ApiError(
+      payload.code || response.status,
+      payload.msg,
+      response.status,
+    );
   }
 
   return payload.data as T;
@@ -118,4 +171,25 @@ async function request<T>(path: string): Promise<T> {
 
 export function loadProjectManagementDashboard() {
   return request<AdminDashboard>("/admin/projects/dashboard");
+}
+
+export function createAdminProject(body: CreateAdminProjectInput) {
+  return request<AdminProject>("/admin/projects", {
+    body,
+    method: "POST",
+  });
+}
+
+export function loadModelConfigs() {
+  return request<AdminModelConfig[]>("/admin/model-configs");
+}
+
+export function saveModelConfig(
+  type: AdminModelConfigType,
+  body: SaveModelConfigInput,
+) {
+  return request<AdminModelConfig>(`/admin/model-configs/${type}`, {
+    body,
+    method: "PUT",
+  });
 }

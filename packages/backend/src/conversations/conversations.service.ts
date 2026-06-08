@@ -197,7 +197,10 @@ export class ConversationsService {
       where: { conversationId },
     });
     const batchNo = (latestBatch?.batchNo ?? -1) + 1;
-    const generatedOutlines = this.generation.createOutlines(prompt, batchNo);
+    const generatedOutlines = await this.generation.createOutlines(
+      prompt,
+      batchNo,
+    );
 
     const batch = await this.prisma.outlineBatch.create({
       data: {
@@ -301,7 +304,7 @@ export class ConversationsService {
       where: { conversationId },
     });
 
-    const generated = this.generation.createPostDraft(
+    const generated = await this.generation.createPostDraft(
       conversation.topic,
       this.toOutlineForDraft(outline),
     );

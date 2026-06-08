@@ -120,3 +120,63 @@ model ConversationSnapshot {
 
   @@index([conversationId, createdAt])
 }
+
+model AdminModelConfig {
+  id              String   @id @default(cuid())
+  type            String   @unique
+  baseUrl         String
+  modelName       String
+  apiKeyEncrypted String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AdminProject {
+  id                  String   @id @default(cuid())
+  key                 String   @unique
+  name                String
+  owner               String
+  status              String
+  priority            String
+  budget              String
+  dueDate             String
+  progress            Int      @default(0)
+  team                String
+  riskReason          String?
+  riskSeverity        String?
+  riskLatestUpdate    String?
+  riskNextAction      String?
+  riskEscalationOwner String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tasks AdminTask[]
+
+  @@index([status, updatedAt])
+}
+
+model AdminTask {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  projectId String?
+  name      String
+  assignee  String
+  dueDate   String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project AdminProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, updatedAt])
+  @@index([status, updatedAt])
+}
+
+model AdminNotification {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

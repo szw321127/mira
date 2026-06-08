@@ -10,12 +10,14 @@ import {
   Drawer,
   Empty,
   Flex,
+  Form,
   Input,
+  InputNumber,
   Layout,
   Menu,
-  Modal,
   Progress,
   Segmented,
+  Select,
   Space,
   Statistic,
   Table,
@@ -30,18 +32,26 @@ import {
   CheckCircleOutlined,
   DashboardOutlined,
   ExportOutlined,
+  KeyOutlined,
   MenuOutlined,
   PlusOutlined,
   ProjectOutlined,
+  SaveOutlined,
   SearchOutlined,
   SettingOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  createAdminProject,
   getApiErrorMessage,
+  loadModelConfigs,
   loadProjectManagementDashboard,
+  saveModelConfig,
   type AdminDashboard,
+  type AdminModelConfig,
+  type AdminModelConfigType,
+  type AdminProjectPriority,
   type AdminProject as Project,
   type AdminProjectStatus as ProjectStatus,
   type AdminTask as Task,
@@ -52,6 +62,18 @@ const { Text, Title } = Typography;
 
 type NavigationKey = "overview" | "projects" | "tasks" | "members" | "settings";
 type ExportStatus = "idle" | "done";
+
+type CreateProjectForm = {
+  budget?: string;
+  dueDate?: string;
+  key?: string;
+  name: string;
+  owner: string;
+  priority: AdminProjectPriority;
+  progress: number;
+  status: ProjectStatus;
+  team?: string;
+};
 
 const statusColor: Record<ProjectStatus, string> = {
   已上线: "green",
@@ -75,8 +97,36 @@ const menuItems: MenuProps["items"] = [
   { icon: <ProjectOutlined />, key: "projects", label: "项目列表" },
   { icon: <CheckCircleOutlined />, key: "tasks", label: "任务看板" },
   { icon: <TeamOutlined />, key: "members", label: "成员管理" },
-  { icon: <SettingOutlined />, key: "settings", label: "系统设置" },
+  { icon: <SettingOutlined />, key: "settings", label: "模型配置" },
 ];
+
+const modelConfigTypes: AdminModelConfigType[] = ["text", "image"];
+
+const modelConfigLabels: Record<AdminModelConfigType, string> = {
+  image: "图片模型",
+  text: "文本模型",
+};
+
+type ModelConfigForm = {
+  apiKey: string;
+  baseUrl: string;
+  modelName: string;
+};
+
+type ModelConfigFormState = Record<AdminModelConfigType, ModelConfigForm>;
+
+const emptyModelConfigForm: ModelConfigFormState = {
+  image: {
+    apiKey: "",
+    baseUrl: "",
+    modelName: "",
+  },
+  text: {
+    apiKey: "",
+    baseUrl: "",
+    modelName: "",
+  },
+};
 
 function matchesQuery(values: Array<string | number>, query: string) {
   if (!query) {
@@ -130,6 +180,32 @@ type DashboardState = {
   status: "error" | "loading" | "ready";
 };
 
+type ModelConfigState = {
+  data: AdminModelConfig[];
+  errorMessage: string | null;
+  status: "error" | "loading" | "ready";
+};
+
+function createModelConfigFormState(configs: AdminModelConfig[]) {
+  return modelConfigTypes.reduce<ModelConfigFormState>(
+    (formState, type) => {
+      const config = configs.find((item) => item.type === type);
+
+      formState[type] = {
+        apiKey: "",
+        baseUrl: config?.baseUrl ?? "",
+        modelName: config?.modelName ?? "",
+      };
+
+      return formState;
+    },
+    {
+      image: { ...emptyModelConfigForm.image },
+      text: { ...emptyModelConfigForm.text },
+    },
+  );
+}
+
 export default function App() {
   return (
     <ConfigProvider
@@ -154,7 +230,9 @@ export default function App() {
 
 function AdminWorkspace() {
   const [activeMenu, setActiveMenu] = useState<NavigationKey>("overview");
+  const [createProjectForm] = Form.useForm<CreateProjectForm>();
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
   const [dashboardState, setDashboardState] = useState<DashboardState>({
     data: emptyDashboard,
     errorMessage: null,
@@ -162,11 +240,22 @@ function AdminWorkspace() {
   });
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [modelConfigForms, setModelConfigForms] =
+    useState<ModelConfigFormState>(emptyModelConfigForm);
+  const [modelConfigState, setModelConfigState] = useState<ModelConfigState>({
+    data: [],
+    errorMessage: null,
+    status: "loading",
+  });
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
+  const [savingModelConfig, setSavingModelConfig] =
+    useState<AdminModelConfigType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "全部">("全部");
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "全部">(
+    "全部",
+  );
 
   useEffect(() => {
     let active = true;
@@ -200,15 +289,148 @@ function AdminWorkspace() {
     };
   }, []);
 
-  const {
-    capabilities,
-    metrics,
-    notifications,
-    projects,
-    riskQueue,
-    tasks,
-  } = dashboardState.data;
+  useEffect(() => {
+    let active = true;
+
+    loadModelConfigs()
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+
+        setModelConfigState({
+          data,
+          errorMessage: null,
+          status: "ready",
+        });
+        setModelConfigForms(createModelConfigFormState(data));
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        setModelConfigState({
+          data: [],
+          errorMessage: getApiErrorMessage(error),
+          status: "error",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const { capabilities, metrics, notifications, projects, riskQueue, tasks } =
+    dashboardState.data;
   const dashboardLoading = dashboardState.status === "loading";
+  const modelConfigLoading = modelConfigState.status === "loading";
+  const modelConfigByType = useMemo(
+    () =>
+      new Map(
+        modelConfigState.data.map((config) => [config.type, config] as const),
+      ),
+    [modelConfigState.data],
+  );
+
+  const updateModelConfigForm = (
+    type: AdminModelConfigType,
+    field: keyof ModelConfigForm,
+    value: string,
+  ) => {
+    setModelConfigForms((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSaveModelConfig = async (type: AdminModelConfigType) => {
+    const form = modelConfigForms[type];
+
+    setSavingModelConfig(type);
+    try {
+      const saved = await saveModelConfig(type, {
+        apiKey: form.apiKey.trim() || undefined,
+        baseUrl: form.baseUrl,
+        modelName: form.modelName,
+      });
+
+      setModelConfigState((current) => {
+        const others = current.data.filter((item) => item.type !== type);
+
+        return {
+          data: [...others, saved].sort(
+            (left, right) =>
+              modelConfigTypes.indexOf(left.type) -
+              modelConfigTypes.indexOf(right.type),
+          ),
+          errorMessage: null,
+          status: "ready",
+        };
+      });
+      setModelConfigForms((current) => ({
+        ...current,
+        [type]: {
+          apiKey: "",
+          baseUrl: saved.baseUrl,
+          modelName: saved.modelName,
+        },
+      }));
+      setOperationNotice(`${modelConfigLabels[type]}已保存`);
+    } catch (error) {
+      setOperationNotice(getApiErrorMessage(error));
+    } finally {
+      setSavingModelConfig(null);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    try {
+      const values = await createProjectForm.validateFields();
+
+      setCreatingProject(true);
+      const created = await createAdminProject({
+        budget: values.budget,
+        dueDate: values.dueDate,
+        key: values.key,
+        name: values.name,
+        owner: values.owner,
+        priority: values.priority,
+        progress: values.progress,
+        status: values.status,
+        team: values.team
+          ?.split(/[，,\n]/)
+          .map((member) => member.trim())
+          .filter(Boolean),
+      });
+      const data = await loadProjectManagementDashboard();
+
+      setDashboardState({
+        data,
+        errorMessage: null,
+        status: "ready",
+      });
+      setCreateProjectOpen(false);
+      createProjectForm.resetFields();
+      setOperationNotice(`${created.name}已创建`);
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "errorFields" in error
+      ) {
+        return;
+      }
+
+      setOperationNotice(getApiErrorMessage(error));
+    } finally {
+      setCreatingProject(false);
+    }
+  };
 
   const filteredProjects = useMemo(
     () =>
@@ -290,17 +512,21 @@ function AdminWorkspace() {
       return;
     }
 
+    if (nextKey === "settings") {
+      document
+        .getElementById("model-configs")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setOperationNotice("已跳转到模型配置");
+      return;
+    }
+
     if (nextKey === "overview") {
       window.scrollTo({ top: 0, behavior: "smooth" });
       setOperationNotice("已回到项目总览");
       return;
     }
 
-    setOperationNotice(
-      nextKey === "members"
-        ? "成员管理入口已记录，等待权限接口接入后开放"
-        : "系统设置入口已记录，等待后台配置接口接入后开放",
-    );
+    setOperationNotice("成员管理入口已记录，待权限功能上线后开放");
   };
 
   const handleExport = () => {
@@ -453,9 +679,9 @@ function AdminWorkspace() {
         <Content className="admin-content">
           {dashboardState.status === "error" ? (
             <Alert
-              message="项目管理接口加载失败"
               description={dashboardState.errorMessage}
               showIcon
+              title="项目管理接口加载失败"
               type="error"
             />
           ) : null}
@@ -463,12 +689,128 @@ function AdminWorkspace() {
           {operationNotice ? (
             <Alert
               className="operation-alert"
-              closable
-              message={operationNotice}
-              onClose={() => setOperationNotice(null)}
+              closable={{ onClose: () => setOperationNotice(null) }}
               showIcon
+              title={operationNotice}
               type={exportStatus === "done" ? "success" : "info"}
             />
+          ) : null}
+
+          {createProjectOpen ? (
+            <Card
+              className="admin-card create-project-panel"
+              extra={
+                <Button
+                  onClick={() => {
+                    setCreateProjectOpen(false);
+                    createProjectForm.resetFields();
+                  }}
+                >
+                  收起
+                </Button>
+              }
+              title="新建项目"
+            >
+              <Form
+                form={createProjectForm}
+                initialValues={{
+                  priority: "P1",
+                  progress: 0,
+                  status: "规划中",
+                }}
+                layout="vertical"
+              >
+                <Form.Item
+                  label="项目名称"
+                  name="name"
+                  rules={[{ message: "请输入项目名称", required: true }]}
+                >
+                  <Input placeholder="例如：生成链路真实化" />
+                </Form.Item>
+                <Form.Item
+                  label="负责人"
+                  name="owner"
+                  rules={[{ message: "请输入负责人", required: true }]}
+                >
+                  <Input placeholder="例如：林舟" />
+                </Form.Item>
+                <Flex gap={12} wrap>
+                  <Form.Item
+                    className="project-form-item"
+                    label="状态"
+                    name="status"
+                  >
+                    <Select
+                      options={["规划中", "进行中", "风险", "已上线"].map(
+                        (value) => ({
+                          label: value,
+                          value,
+                        }),
+                      )}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    className="project-form-item"
+                    label="优先级"
+                    name="priority"
+                  >
+                    <Select
+                      options={["P0", "P1", "P2"].map((value) => ({
+                        label: value,
+                        value,
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    className="project-form-item"
+                    label="进度"
+                    name="progress"
+                  >
+                    <InputNumber max={100} min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Flex>
+                <Flex gap={12} wrap>
+                  <Form.Item
+                    className="project-form-item"
+                    label="预算"
+                    name="budget"
+                  >
+                    <Input placeholder="例如：8w" />
+                  </Form.Item>
+                  <Form.Item
+                    className="project-form-item"
+                    label="截止日期"
+                    name="dueDate"
+                  >
+                    <Input placeholder="例如：07/01" />
+                  </Form.Item>
+                </Flex>
+                <Form.Item label="成员" name="team">
+                  <Input placeholder="用逗号分隔，例如：林舟，Mia，Kevin" />
+                </Form.Item>
+                <Form.Item label="项目 Key" name="key">
+                  <Input placeholder="可选，例如：real-runtime" />
+                </Form.Item>
+                <Flex gap={8} justify="end">
+                  <Button
+                    onClick={() => {
+                      setCreateProjectOpen(false);
+                      createProjectForm.resetFields();
+                    }}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    disabled={!capabilities.canCreateProject}
+                    loading={creatingProject}
+                    onClick={() => void handleCreateProject()}
+                    type="primary"
+                  >
+                    创建项目
+                  </Button>
+                </Flex>
+              </Form>
+            </Card>
           ) : null}
 
           <div className="metric-grid">
@@ -480,7 +822,10 @@ function AdminWorkspace() {
               />
             </Card>
             <Card>
-              <Statistic title="本周完成任务" value={metrics.weeklyCompletedTasks} />
+              <Statistic
+                title="本周完成任务"
+                value={metrics.weeklyCompletedTasks}
+              />
             </Card>
             <Card>
               <Statistic
@@ -490,7 +835,11 @@ function AdminWorkspace() {
               />
             </Card>
             <Card>
-              <Statistic title="平均进度" value={metrics.averageProgress} suffix="%" />
+              <Statistic
+                title="平均进度"
+                value={metrics.averageProgress}
+                suffix="%"
+              />
             </Card>
           </div>
 
@@ -547,6 +896,117 @@ function AdminWorkspace() {
             ) : (
               <Empty description="当前没有匹配的风险项目" />
             )}
+          </Card>
+
+          {modelConfigState.status === "error" ? (
+            <Alert
+              description={modelConfigState.errorMessage}
+              showIcon
+              title="模型配置接口加载失败"
+              type="error"
+            />
+          ) : null}
+
+          <Card
+            className="admin-card model-config-section"
+            id="model-configs"
+            title={
+              <Flex align="center" gap={8} wrap>
+                <KeyOutlined />
+                <span>模型配置</span>
+                <Tag>API Key 不明文回显</Tag>
+              </Flex>
+            }
+          >
+            <div className="model-config-grid">
+              {modelConfigTypes.map((type) => {
+                const config = modelConfigByType.get(type);
+                const form = modelConfigForms[type];
+                const saveDisabled =
+                  modelConfigLoading ||
+                  !form.baseUrl.trim() ||
+                  !form.modelName.trim();
+
+                return (
+                  <Card
+                    className="model-config-card"
+                    key={type}
+                    loading={modelConfigLoading}
+                    title={modelConfigLabels[type]}
+                  >
+                    <div className="model-config-fields">
+                      <label>
+                        <Text strong>Base URL</Text>
+                        <Input
+                          onChange={(event) =>
+                            updateModelConfigForm(
+                              type,
+                              "baseUrl",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="https://api.example.com/v1"
+                          value={form.baseUrl}
+                        />
+                      </label>
+                      <label>
+                        <Text strong>模型名称</Text>
+                        <Input
+                          onChange={(event) =>
+                            updateModelConfigForm(
+                              type,
+                              "modelName",
+                              event.target.value,
+                            )
+                          }
+                          placeholder={
+                            type === "text" ? "gpt-4.1-mini" : "gpt-image-1"
+                          }
+                          value={form.modelName}
+                        />
+                      </label>
+                      <label>
+                        <Text strong>API Key</Text>
+                        <Input.Password
+                          onChange={(event) =>
+                            updateModelConfigForm(
+                              type,
+                              "apiKey",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="留空表示不更新"
+                          value={form.apiKey}
+                        />
+                      </label>
+                    </div>
+
+                    <Flex
+                      align="center"
+                      className="model-config-footer"
+                      gap={10}
+                      justify="space-between"
+                      wrap
+                    >
+                      <Text type="secondary">
+                        {config?.hasApiKey
+                          ? `已保存：${config.apiKeyPreview}`
+                          : "尚未保存 API Key"}
+                      </Text>
+                      <Button
+                        disabled={saveDisabled}
+                        icon={<SaveOutlined />}
+                        loading={savingModelConfig === type}
+                        onClick={() => void handleSaveModelConfig(type)}
+                        type="primary"
+                      >
+                        保存配置
+                      </Button>
+                    </Flex>
+                  </Card>
+                );
+              })}
+            </div>
           </Card>
 
           <div className="admin-grid">
@@ -630,30 +1090,6 @@ function AdminWorkspace() {
         )}
       </Drawer>
 
-      <Modal
-        cancelText="关闭"
-        okButtonProps={{ disabled: !capabilities.canCreateProject }}
-        okText={capabilities.canCreateProject ? "创建项目" : "等待接口"}
-        onCancel={() => setCreateProjectOpen(false)}
-        open={createProjectOpen}
-        title="新建项目"
-      >
-        <Alert
-          description={
-            capabilities.canCreateProject
-              ? "项目创建接口已开放，可以继续接入表单提交。"
-              : "当前后端返回暂未开放创建权限，先保留入口状态。"
-          }
-          message={
-            capabilities.canCreateProject
-              ? "新建项目接口已开放"
-              : "新建项目需要后端接口"
-          }
-          showIcon
-          type="info"
-        />
-      </Modal>
-
       <Drawer
         onClose={() => setSelectedProject(null)}
         open={Boolean(selectedProject)}
@@ -692,9 +1128,9 @@ function AdminWorkspace() {
             {selectedProject.status === "风险" ? (
               <div className="risk-detail-panel">
                 <Alert
-                  message="风险处置"
                   description={selectedProject.riskReason}
                   showIcon
+                  title="风险处置"
                   type="error"
                 />
                 <Descriptions column={1} size="small">

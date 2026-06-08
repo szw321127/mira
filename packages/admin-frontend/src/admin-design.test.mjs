@@ -31,9 +31,33 @@ test("admin frontend loads project management data through the backend API", () 
   assert.match(api, /ApiEnvelope/);
   assert.match(api, /AdminDashboard/);
   assert.match(api, /\/admin\/projects\/dashboard/);
+  assert.match(api, /CreateAdminProjectInput/);
+  assert.match(api, /createAdminProject/);
+  assert.match(api, /\/admin\/projects/);
   assert.match(app, /loadProjectManagementDashboard/);
+  assert.match(app, /handleCreateProject/);
+  assert.match(app, /项目名称/);
+  assert.match(app, /创建项目/);
   assert.match(app, /dashboardState/);
   assert.match(app, /\[projects, searchQuery, statusFilter\]/);
+});
+
+test("admin frontend manages text and image model configs without exposing api keys", () => {
+  const api = readSource("api.ts");
+  const app = readSource("App.tsx");
+  const css = readSource("styles.css");
+
+  assert.match(api, /AdminModelConfig/);
+  assert.match(api, /loadModelConfigs/);
+  assert.match(api, /saveModelConfig/);
+  assert.match(api, /\/admin\/model-configs/);
+  assert.match(app, /模型配置/);
+  assert.match(app, /文本模型/);
+  assert.match(app, /图片模型/);
+  assert.match(app, /baseUrl/);
+  assert.match(app, /apiKeyPreview/);
+  assert.match(app, /留空表示不更新/);
+  assert.match(css, /model-config-grid/);
 });
 
 test("admin shell has real search state, filtered tasks, and empty states", () => {
@@ -53,6 +77,8 @@ test("primary header actions expose operator feedback instead of silent buttons"
   assert.match(app, /exportStatus/);
   assert.match(app, /已导出当前筛选结果/);
   assert.match(app, /暂无新通知/);
+  assert.doesNotMatch(app, /等待权限接口接入后开放/);
+  assert.doesNotMatch(app, /新建项目需要后端接口/);
 });
 
 test("mobile admin layout has navigation and horizontal overflow controls", () => {
@@ -68,11 +94,17 @@ test("mobile admin layout has navigation and horizontal overflow controls", () =
 
 test("admin shell avoids deprecated Ant Design props", () => {
   const app = readSource("App.tsx");
+  const alertBlocks = app.match(/<Alert\b[\s\S]*?\/>/g) ?? [];
 
   assert.doesNotMatch(app, /valueStyle=/);
   assert.doesNotMatch(app, /<Drawer[\s\S]*width=/);
+  for (const alertBlock of alertBlocks) {
+    assert.doesNotMatch(alertBlock, /message=/);
+    assert.doesNotMatch(alertBlock, /onClose=/);
+  }
   assert.match(app, /styles=\{\{\s*content:/);
   assert.match(app, /size="large"/);
+  assert.match(app, /title="模型配置接口加载失败"/);
 });
 
 test("risk projects are promoted into an actionable queue", () => {

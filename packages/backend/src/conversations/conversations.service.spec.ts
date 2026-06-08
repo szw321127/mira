@@ -84,24 +84,24 @@ describe('ConversationsService post draft images', () => {
     const result = (service as unknown as PostDraftSerializer).toPostDraft({
       ...baseDraft,
       imageGeneratedAt: generatedAt,
-      imageProvider: 'mock',
+      imageProvider: 'rednote-image-model',
       imageStatus: 'ready',
-      imageUrl: 'data:image/svg+xml;base64,abc',
+      imageUrl: 'data:image/png;base64,abc',
     });
 
     expect(result).toMatchObject({
       imageError: null,
       imageGeneratedAt: generatedAt,
-      imageProvider: 'mock',
+      imageProvider: 'rednote-image-model',
       imageStatus: 'ready',
-      imageUrl: 'data:image/svg+xml;base64,abc',
+      imageUrl: 'data:image/png;base64,abc',
     });
   });
 
-  it('generates a mock image for an owned post draft', async () => {
+  it('generates a provider image for an owned post draft', async () => {
     const { generateCover, prisma, service } = createService();
     const generatedAt = new Date('2026-06-06T00:03:00.000Z');
-    const imageUrl = 'data:image/svg+xml;base64,ready';
+    const imageUrl = 'data:image/png;base64,ready';
 
     prisma.postDraft.findFirst.mockResolvedValue(baseDraft);
     prisma.postDraft.update
@@ -116,14 +116,14 @@ describe('ConversationsService post draft images', () => {
         imageError: null,
         imageGeneratedAt: generatedAt,
         imagePrompt: '自定义封面',
-        imageProvider: 'mock',
+        imageProvider: 'rednote-image-model',
         imageStatus: 'ready',
         imageUrl,
       });
     generateCover.mockResolvedValue({
       generatedAt,
       imageUrl,
-      provider: 'mock',
+      provider: 'rednote-image-model',
     });
 
     const result = await service.generatePostDraftImage('user-1', 'draft-1', {
@@ -157,7 +157,7 @@ describe('ConversationsService post draft images', () => {
     expect(result).toMatchObject({
       imageError: null,
       imageGeneratedAt: generatedAt,
-      imageProvider: 'mock',
+      imageProvider: 'rednote-image-model',
       imageStatus: 'ready',
       imageUrl,
     });
@@ -166,7 +166,7 @@ describe('ConversationsService post draft images', () => {
   it('does not rewrite imagePrompt when the prompt override is blank', async () => {
     const { generateCover, prisma, service } = createService();
     const generatedAt = new Date('2026-06-06T00:04:00.000Z');
-    const imageUrl = 'data:image/svg+xml;base64,ready';
+    const imageUrl = 'data:image/png;base64,ready';
     const autosavedPrompt = '自动保存后的封面';
 
     prisma.postDraft.findFirst.mockResolvedValue(baseDraft);
@@ -182,14 +182,14 @@ describe('ConversationsService post draft images', () => {
         imageError: null,
         imageGeneratedAt: generatedAt,
         imagePrompt: autosavedPrompt,
-        imageProvider: 'mock',
+        imageProvider: 'rednote-image-model',
         imageStatus: 'ready',
         imageUrl,
       });
     generateCover.mockResolvedValue({
       generatedAt,
       imageUrl,
-      provider: 'mock',
+      provider: 'rednote-image-model',
     });
 
     await service.generatePostDraftImage('user-1', 'draft-1', {
@@ -243,9 +243,9 @@ describe('ConversationsService post draft images', () => {
     const readyDraft = {
       ...baseDraft,
       imageGeneratedAt: new Date('2026-06-06T00:05:00.000Z'),
-      imageProvider: 'mock',
+      imageProvider: 'rednote-image-model',
       imageStatus: 'ready',
-      imageUrl: 'data:image/svg+xml;base64,old',
+      imageUrl: 'data:image/png;base64,old',
     };
 
     prisma.postDraft.findFirst.mockResolvedValue(readyDraft);

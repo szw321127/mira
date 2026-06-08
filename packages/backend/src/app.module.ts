@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AdminModelConfigsModule } from './admin-model-configs/admin-model-configs.module';
 import { AdminProjectsModule } from './admin-projects/admin-projects.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -12,6 +13,7 @@ import { ConversationsModule } from './conversations/conversations.module';
       envFilePath: ['.env.local', '.env', '../../.env'],
       isGlobal: true,
     }),
+    AdminModelConfigsModule,
     AdminProjectsModule,
     AuthModule,
     ConversationsModule,

@@ -1,137 +1,161 @@
+import { BadRequestException } from '@nestjs/common';
+import type { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import { GenerationService } from './generation.service';
 import type { OutlineForDraft } from './generation.types';
 
-describe('GenerationService post drafts', () => {
-  const service = new GenerationService();
-  const generatedTopic = '租房厨房改造省钱清单';
-  const generatedOutlineCases: Array<[string, number, number]> = [
-    0, 1, 2,
-  ].flatMap((batchNo) =>
-    service
-      .createOutlines(generatedTopic, batchNo)
-      .map((_, outlineIndex): [string, number, number] => [
-        generatedTopic,
-        batchNo,
-        outlineIndex,
-      ]),
-  );
-  const writerFacingPattern =
-    /写 2 到 3 句|用定调的方式|避免空泛形容|直接写出|不要堆概念|第一屏|结尾把行动收回来|提醒读者|给读者|讲清楚|第一屏直接展示|用一句话定义|每一页只解决|定义这篇内容|拆开/;
-  const generatedMetaLabelPattern =
-    /痛点场景|准备清单|操作步骤|避坑提醒|结尾互动|开场画面|情绪铺垫|关键选择|结果反差|温柔收束|适合谁|不适合谁|核心步骤|替代方案|保存提示|真实开头|现场细节|尝试过程|关键发现|给读者的建议|原始状态|目标效果|工具材料|分步说明|最终复盘|必做三件事|可选加分项|预算控制|时间安排|失败补救|准备前|进行中|完成后|常见问题|评论引导|封面钩子|问题拆解|方法展开|例子证明|行动清单|人物状态|环境气味|动作细节|情绪变化|余味结尾/;
-
-  const outline: OutlineForDraft = {
-    hook: '先给读者一个立刻想收藏的理由。',
-    id: 'outline-1',
-    label: '高保存率',
-    points: ['痛点场景', '准备清单', '操作步骤', '避坑提醒', '结尾互动'],
-    title: '周末备餐也能很好看',
-    tone: 'guide',
+describe('GenerationService real text provider', () => {
+  const runtimeConfig = {
+    apiKey: 'sk-text-runtime',
+    baseUrl: 'https://text.example/v1',
+    modelName: 'rednote-text-model',
+    type: 'text' as const,
   };
 
-  it('returns publish-ready prose instead of writing instructions', () => {
-    const draft = service.createPostDraft(
-      '小红书新手如何把周末备餐做得好看又省心',
-      outline,
-    );
+  function createService() {
+    const modelConfigs = {
+      getRuntimeConfig: jest.fn(async () => runtimeConfig),
+    } satisfies Partial<AdminModelConfigsService>;
 
-    const body = [draft.caption, ...draft.sections].join('\n');
+    return {
+      modelConfigs,
+      service: new GenerationService(modelConfigs as AdminModelConfigsService),
+    };
+  }
 
-    expect(draft.title).toContain('周末备餐');
-    expect(draft.coverLine.length).toBeLessThanOrEqual(18);
-    expect(draft.sections).toHaveLength(5);
-    expect(body).toContain('小红书新手');
-    expect(draft.caption).not.toContain(outline.hook);
-    expect(body).not.toMatch(writerFacingPattern);
-    expect(body).not.toMatch(generatedMetaLabelPattern);
-    expect(draft.tags).toEqual(
-      expect.arrayContaining(['小红书图文', '实用攻略', '高保存率']),
+  function mockFetchJson(payload: unknown, status = 200) {
+    return jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        headers: { 'Content-Type': 'application/json' },
+        status,
+      }),
     );
-    expect(draft.imagePrompt).toContain('标题区域');
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
-  it.each(generatedOutlineCases)(
-    'does not leak generated outline prompt text into publish-ready drafts',
-    (topic, batchNo, outlineIndex) => {
-      const generatedOutline = service.createOutlines(topic, batchNo)[
-        outlineIndex
-      ];
-
-      const draft = service.createPostDraft(topic, {
-        ...generatedOutline,
-        id: `generated-outline-${outlineIndex}`,
-      });
-
-      const body = [draft.caption, ...draft.sections].join('\n');
-      const publishableText = [draft.title, body].join('\n');
-
-      expect(draft.sections).toHaveLength(5);
-      expect(draft.caption).not.toContain(generatedOutline.hook);
-      expect(publishableText).not.toMatch(writerFacingPattern);
-      expect(body).not.toMatch(generatedMetaLabelPattern);
-      for (const point of generatedOutline.points) {
-        expect(body).not.toContain(point);
-      }
-      expect(draft.title.match(/租房厨房改造省钱清单/g)).toHaveLength(1);
-    },
-  );
-
-  it('does not carry a hard-cut outline title into the publish-ready title', () => {
-    const topic = '小红书新手如何把周末备餐做得好看又省心';
-    const generatedOutline = service.createOutlines(topic, 0)[0];
-
-    const draft = service.createPostDraft(topic, {
-      ...generatedOutline,
-      id: 'generated-outline-1',
-    });
-
-    expect(generatedOutline.title).toContain('...');
-    expect(draft.title).toContain('周末备餐');
-    expect(draft.title).toContain('省心');
-    expect(draft.title).not.toMatch(/好看又省($|｜)/);
-  });
-
-  it('varies section lead-ins so the final copy does not read like a template', () => {
-    const draft = service.createPostDraft(
-      '小红书新手如何把周末备餐做得好看又省心',
-      outline,
-    );
-
-    const leadIns = draft.sections.map(
-      (section) => section.split('：')[1]?.split('。')[0],
-    );
-
-    expect(new Set(leadIns).size).toBe(draft.sections.length);
-    expect(draft.sections.join('\n')).not.toMatch(
-      /这一点可以马上用起来.*这一点可以马上用起来/s,
-    );
-  });
-
-  it.each([
-    {
-      expectedPoints: [
-        '一个点',
-        '准备好材料',
-        '照着做步骤',
-        '少踩坑做法',
-        '保存后开做',
+  it('generates exactly three outlines through the configured text model', async () => {
+    const fetchMock = mockFetchJson({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              outlines: [
+                {
+                  hook: '先让读者看到改造前后的差别。',
+                  label: '高收藏',
+                  points: ['预算', '材料', '步骤', '避坑', '复盘'],
+                  title: '出租屋阳台早餐角改造',
+                  tone: 'guide',
+                },
+                {
+                  hook: '从第一次坐下来吃早餐的画面切入。',
+                  label: '生活感',
+                  points: ['起因', '布置', '细节', '变化', '互动'],
+                  title: '把阳台变成早晨的小角落',
+                  tone: 'story',
+                },
+                {
+                  hook: '把所有选择整理成清单。',
+                  label: '快读',
+                  points: ['适合谁', '预算', '尺寸', '购买', '维护'],
+                  title: '阳台早餐角采购清单',
+                  tone: 'checklist',
+                },
+              ],
+            }),
+          },
+        },
       ],
-      points: ['一个点'],
-    },
-    {
-      expectedPoints: ['一', '二', '三', '四', '五'],
-      points: ['一', '二', '三', '四', '五', '六'],
-    },
-  ])('normalizes edited outline points to exactly five sections', (example) => {
-    const draft = service.createPostDraft('通勤包整理', {
-      ...outline,
-      points: example.points,
     });
+    const { modelConfigs, service } = createService();
 
-    expect(draft.sections).toHaveLength(5);
-    expect(draft.sections.map((section) => section.split('：')[0])).toEqual(
-      example.expectedPoints.map((point, index) => `${index + 1}. ${point}`),
+    const outlines = await service.createOutlines('出租屋阳台早餐角', 2);
+
+    expect(modelConfigs.getRuntimeConfig).toHaveBeenCalledWith('text');
+    expect(outlines).toHaveLength(3);
+    expect(outlines[0]).toMatchObject({
+      label: '高收藏',
+      title: '出租屋阳台早餐角改造',
+      tone: 'guide',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://text.example/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer sk-text-runtime',
+          'Content-Type': 'application/json',
+        }),
+        method: 'POST',
+      }),
     );
-    expect(draft.sections.join('\n')).not.toMatch(generatedMetaLabelPattern);
+    const requestBody = JSON.parse(
+      fetchMock.mock.calls[0][1]?.body as string,
+    ) as { messages: Array<{ content: string; role: string }>; model: string };
+    expect(requestBody.model).toBe('rednote-text-model');
+    expect(JSON.stringify(requestBody.messages)).toContain('一次生成 3 个大纲');
+    expect(JSON.stringify(requestBody.messages)).toContain('第 3 批');
+  });
+
+  it('generates a publish-ready post draft through the configured text model', async () => {
+    mockFetchJson({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              caption:
+                '把阳台早餐角做出来后，最明显的变化是早晨不再只剩赶时间。',
+              coverLine: '阳台早餐角',
+              imagePrompt:
+                '竖版小红书封面，真实出租屋阳台，早餐盘，柔和自然光，标题留白。',
+              sections: [
+                '1. 预算：先定 300 元以内，避免越买越多。',
+                '2. 尺寸：量好阳台宽度，桌面别挡动线。',
+                '3. 采买：优先选可折叠和好清洁的单品。',
+                '4. 布置：把杯子、餐盘和绿植集中在一侧。',
+                '5. 复盘：拍完照后留下每天真的会用的东西。',
+              ],
+              tags: ['小红书家居', '出租屋改造', '早餐角'],
+              title: '出租屋阳台早餐角，300 元内就能开始',
+            }),
+          },
+        },
+      ],
+    });
+    const outline: OutlineForDraft = {
+      hook: '给读者一个能马上开始的理由。',
+      id: 'outline-1',
+      label: '高收藏',
+      points: ['预算', '尺寸', '采买', '布置', '复盘'],
+      title: '出租屋阳台早餐角改造',
+      tone: 'guide',
+    };
+    const { service } = createService();
+
+    const draft = await service.createPostDraft('出租屋阳台早餐角', outline);
+
+    expect(draft.title).toBe('出租屋阳台早餐角，300 元内就能开始');
+    expect(draft.coverLine).toBe('阳台早餐角');
+    expect(draft.sections).toHaveLength(5);
+    expect(draft.tags).toEqual(['小红书家居', '出租屋改造', '早餐角']);
+    expect(draft.imagePrompt).toContain('标题留白');
+  });
+
+  it('rejects malformed provider JSON instead of falling back to templates', async () => {
+    mockFetchJson({
+      choices: [
+        {
+          message: {
+            content: '这不是 JSON',
+          },
+        },
+      ],
+    });
+    const { service } = createService();
+
+    await expect(service.createOutlines('出租屋阳台早餐角', 0)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
