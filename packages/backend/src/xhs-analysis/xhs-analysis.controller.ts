@@ -1,5 +1,7 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { AuthenticatedUser } from '../auth/auth.types';
 import { AnalyzeXhsAccountDto } from './dto/analyze-xhs-account.dto';
 import { AnalyzeXhsPostDto } from './dto/analyze-xhs-post.dto';
 import { BuildXhsCommercialWorkflowDto } from './dto/build-xhs-commercial-workflow.dto';
@@ -20,8 +22,11 @@ export class XhsAnalysisController {
   }
 
   @Post('posts/import')
-  importPost(@Body() dto: ImportXhsPostDto) {
-    return this.xhsAnalysisService.importAndAnalyzePost(dto);
+  importPost(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ImportXhsPostDto,
+  ) {
+    return this.xhsAnalysisService.importAndAnalyzePost(dto, user.id);
   }
 
   @Post('accounts/analyze')
@@ -30,8 +35,11 @@ export class XhsAnalysisController {
   }
 
   @Post('accounts/import')
-  importAccount(@Body() dto: ImportXhsAccountDto) {
-    return this.xhsAnalysisService.importAndAnalyzeAccount(dto);
+  importAccount(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ImportXhsAccountDto,
+  ) {
+    return this.xhsAnalysisService.importAndAnalyzeAccount(dto, user.id);
   }
 
   @Post('generation-brief')

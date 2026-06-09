@@ -271,6 +271,8 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(source, /referenceImport/);
   assert.match(source, /api\.xhs\.importPost/);
   assert.match(source, /api\.xhs\.importAccount/);
+  assert.match(source, /const currentConversationId = await ensureConversation/);
+  assert.match(source, /conversationId: currentConversationId/);
   assert.match(source, /api\.xhs\.buildGenerationBrief/);
   assert.match(source, /buildReferenceBrief/);
   assert.match(source, /const referenceBrief = await buildReferenceBrief/);

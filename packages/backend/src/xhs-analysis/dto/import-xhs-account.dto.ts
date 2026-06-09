@@ -10,6 +10,11 @@ import type { AdminContentProviderType } from '../../admin-content-providers/adm
 
 export class ImportXhsAccountDto {
   @IsOptional()
+  @IsString()
+  @MinLength(1)
+  conversationId?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   limit?: number;

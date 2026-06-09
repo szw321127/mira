@@ -13,13 +13,56 @@ const contentProviders = {
   ),
 };
 
+type XhsReferenceUpsertArgs = {
+  create: {
+    analysis: string;
+    conversationId: string;
+    imported: string;
+    kind: string;
+    sourceId: string;
+    title: string;
+  };
+  where: {
+    conversationId_kind_sourceId: {
+      conversationId: string;
+      kind: string;
+      sourceId: string;
+    };
+  };
+};
+
+const prisma = {
+  conversation: {
+    findFirst: jest.fn(() => Promise.resolve({ id: 'conversation-1' })),
+  },
+  xhsReference: {
+    upsert: jest.fn((args: XhsReferenceUpsertArgs) => {
+      const { create } = args;
+
+      return Promise.resolve({
+        conversationId: create.conversationId,
+        createdAt: new Date('2026-06-10T00:00:00.000Z'),
+        id: 'xhs-reference-1',
+        kind: create.kind,
+        sourceId: create.sourceId,
+        title: create.title,
+      });
+    }),
+  },
+};
+
 describe('XhsAnalysisService', () => {
   let service: XhsAnalysisService;
 
   beforeEach(() => {
     jest.restoreAllMocks();
     contentProviders.getRuntimeConfig.mockClear();
-    service = new XhsAnalysisService(contentProviders as never);
+    prisma.conversation.findFirst.mockClear();
+    prisma.xhsReference.upsert.mockClear();
+    service = new XhsAnalysisService(
+      contentProviders as never,
+      prisma as never,
+    );
   });
 
   it('analyzes a Xiaohongshu post with normalized engagement signals', () => {
@@ -223,6 +266,73 @@ describe('XhsAnalysisService', () => {
     expect(result.provider).toMatchObject({
       endpoint: 'https://provider.example/xhs/posts/import',
       type: 'custom',
+    });
+  });
+
+  it('persists an imported post reference for an owned conversation', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            collected_count: '8800',
+            comment_count: 128,
+            desc: '把通勤包里的东西拆成三个模块，早上直接照着拿。',
+            image_list: ['https://example.com/cover.jpg'],
+            liked_count: '1.6万',
+            note_id: 'note-42',
+            tag_list: ['通勤包', '效率工具'],
+            title: '通勤包这样收纳，早八少慌 10 分钟',
+          },
+        }),
+      ok: true,
+    } as Response);
+
+    const result = await service.importAndAnalyzePost(
+      {
+        conversationId: 'conversation-1',
+        providerType: 'custom',
+        url: 'https://www.xiaohongshu.com/explore/note-42',
+      },
+      'user-1',
+    );
+    const upsertArgs = prisma.xhsReference.upsert.mock.calls[0]?.[0];
+    const importedPayload = upsertArgs
+      ? (JSON.parse(upsertArgs.create.imported) as {
+          posts: Array<{ title: string }>;
+        })
+      : undefined;
+    const analysisPayload = upsertArgs
+      ? (JSON.parse(upsertArgs.create.analysis) as {
+          viralSignals: string[];
+        })
+      : undefined;
+
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { id: 'conversation-1', userId: 'user-1' },
+    });
+    expect(upsertArgs).toBeDefined();
+    if (!upsertArgs || !importedPayload || !analysisPayload) {
+      throw new Error('Expected xhsReference.upsert to be called.');
+    }
+    expect(upsertArgs.where).toEqual({
+      conversationId_kind_sourceId: {
+        conversationId: 'conversation-1',
+        kind: 'post',
+        sourceId: 'note-42',
+      },
+    });
+    expect(importedPayload.posts[0]?.title).toBe(
+      '通勤包这样收纳，早八少慌 10 分钟',
+    );
+    expect(analysisPayload.viralSignals).toEqual(
+      expect.arrayContaining(['高收藏价值']),
+    );
+    expect(result.reference).toMatchObject({
+      conversationId: 'conversation-1',
+      id: 'xhs-reference-1',
+      kind: 'post',
+      sourceId: 'note-42',
     });
   });
 

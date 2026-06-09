@@ -670,6 +670,7 @@ export const api = {
     importAccount: (
       token: string,
       body: {
+        conversationId?: string;
         limit?: number;
         providerType?: XhsProviderImportSummary["type"];
         url?: string;
@@ -684,6 +685,7 @@ export const api = {
     importPost: (
       token: string,
       body: {
+        conversationId?: string;
         noteId?: string;
         providerType?: XhsProviderImportSummary["type"];
         url?: string;

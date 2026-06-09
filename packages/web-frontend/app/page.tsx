@@ -989,8 +989,13 @@ export default function Home() {
     setReferenceImport((current) => ({ ...current, error: "" }));
 
     try {
+      const currentConversationId = await ensureConversation(accessToken);
+
       if (referenceImport.mode === "post") {
-        const importedPost = await api.xhs.importPost(accessToken, { url });
+        const importedPost = await api.xhs.importPost(accessToken, {
+          conversationId: currentConversationId,
+          url,
+        });
 
         setReferenceImport((current) => ({
           ...current,
@@ -1003,6 +1008,7 @@ export default function Home() {
         setStatusMessage("已导入帖子参考，生成时会吸收爆点信号。");
       } else {
         const importedAccount = await api.xhs.importAccount(accessToken, {
+          conversationId: currentConversationId,
           limit: 12,
           url,
         });

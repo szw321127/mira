@@ -5,6 +5,11 @@ export class ImportXhsPostDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  conversationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
   noteId?: string;
 
   @IsOptional()

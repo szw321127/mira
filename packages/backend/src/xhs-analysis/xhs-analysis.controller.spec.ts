@@ -25,4 +25,24 @@ describe('XhsAnalysisController', () => {
       RequestMethod.POST,
     );
   });
+
+  it('passes the authenticated user when importing a post reference', () => {
+    const service = {
+      importAndAnalyzePost: jest.fn(),
+    };
+    const controller = new XhsAnalysisController(service as never);
+    const dto = {
+      conversationId: 'conversation-1',
+      url: 'https://www.xiaohongshu.com/explore/note-42',
+    };
+    const user = {
+      account: 'creator@rednote.local',
+      id: 'user-1',
+      name: '内容创作者',
+    };
+
+    void controller.importPost(user, dto);
+
+    expect(service.importAndAnalyzePost).toHaveBeenCalledWith(dto, 'user-1');
+  });
 });
