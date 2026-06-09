@@ -156,6 +156,8 @@ export type UpdateAdminTaskInput = Partial<
 
 export type AdminModelConfigType = "text" | "image";
 
+export type AdminContentProviderType = "tikhub" | "custom";
+
 export type AdminModelApiKey = {
   apiKeyPreview: string | null;
   createdAt: string;
@@ -176,6 +178,29 @@ export type AdminModelConfig = {
   updatedAt: string | null;
 };
 
+export type AdminContentProviderApiKey = {
+  apiKeyPreview: string | null;
+  createdAt: string;
+  enabled: boolean;
+  id: string;
+  name: string;
+  type: AdminContentProviderType;
+  updatedAt: string;
+};
+
+export type AdminContentProviderConfig = {
+  apiKeys: AdminContentProviderApiKey[];
+  apiKeyPreview: string | null;
+  baseUrl: string;
+  complianceNote: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  name: string;
+  rateLimitPerMinute: number | null;
+  type: AdminContentProviderType;
+  updatedAt: string | null;
+};
+
 export type AdminModelConnectionTestResult = {
   checkedAt: string;
   endpoint: string;
@@ -190,6 +215,14 @@ export type SaveModelConfigInput = {
   modelName: string;
 };
 
+export type SaveContentProviderInput = {
+  baseUrl: string;
+  complianceNote?: string;
+  enabled: boolean;
+  name: string;
+  rateLimitPerMinute?: number;
+};
+
 export type CreateModelApiKeyInput = {
   apiKey: string;
   enabled?: boolean;
@@ -197,6 +230,18 @@ export type CreateModelApiKeyInput = {
 };
 
 export type UpdateModelApiKeyInput = {
+  apiKey?: string;
+  enabled?: boolean;
+  name?: string;
+};
+
+export type CreateContentProviderApiKeyInput = {
+  apiKey: string;
+  enabled?: boolean;
+  name: string;
+};
+
+export type UpdateContentProviderApiKeyInput = {
   apiKey?: string;
   enabled?: boolean;
   name?: string;
@@ -405,6 +450,62 @@ export function testModelConfigConnection(type: AdminModelConfigType) {
     `/admin/model-configs/${type}/test`,
     {
       method: "POST",
+    },
+  );
+}
+
+export function loadContentProviders() {
+  return request<AdminContentProviderConfig[]>("/admin/content-providers");
+}
+
+export function saveContentProvider(
+  type: AdminContentProviderType,
+  body: SaveContentProviderInput,
+) {
+  return request<AdminContentProviderConfig>(
+    `/admin/content-providers/${type}`,
+    {
+      body,
+      method: "PUT",
+    },
+  );
+}
+
+export function createContentProviderApiKey(
+  type: AdminContentProviderType,
+  body: CreateContentProviderApiKeyInput,
+) {
+  return request<AdminContentProviderApiKey>(
+    `/admin/content-providers/${type}/api-keys`,
+    {
+      body,
+      method: "POST",
+    },
+  );
+}
+
+export function updateContentProviderApiKey(
+  type: AdminContentProviderType,
+  keyId: string,
+  body: UpdateContentProviderApiKeyInput,
+) {
+  return request<AdminContentProviderApiKey>(
+    `/admin/content-providers/${type}/api-keys/${keyId}`,
+    {
+      body,
+      method: "PATCH",
+    },
+  );
+}
+
+export function deleteContentProviderApiKey(
+  type: AdminContentProviderType,
+  keyId: string,
+) {
+  return request<AdminContentProviderApiKey>(
+    `/admin/content-providers/${type}/api-keys/${keyId}`,
+    {
+      method: "DELETE",
     },
   );
 }

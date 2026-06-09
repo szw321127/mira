@@ -30,6 +30,7 @@ function run(command, args) {
   }
 }
 
+run('pnpm', ['--filter', '@rednote/agent', 'build']);
 run('prisma', ['generate']);
 run('prisma', ['migrate', 'deploy']);
 run('nest', ['start', '--watch']);

@@ -163,6 +163,38 @@ test("admin frontend manages text and image model configs without exposing api k
   assert.match(css, /api-key-list/);
 });
 
+test("admin frontend manages xhs content provider configs and api keys", () => {
+  const api = readSource("api.ts");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const navigation = readSource("admin/navigation.tsx");
+  const providers = `${readSource("admin/adminTypes.ts")}\n${readSource(
+    "admin/pages/ContentProvidersPage.tsx",
+  )}`;
+  const css = readSource("styles.css");
+  const source = `${workspace}\n${navigation}\n${providers}`;
+
+  assert.match(api, /AdminContentProviderConfig/);
+  assert.match(api, /AdminContentProviderApiKey/);
+  assert.match(api, /loadContentProviders/);
+  assert.match(api, /saveContentProvider/);
+  assert.match(api, /createContentProviderApiKey/);
+  assert.match(api, /updateContentProviderApiKey/);
+  assert.match(api, /deleteContentProviderApiKey/);
+  assert.match(api, /\/admin\/content-providers\/\$\{type\}\/api-keys/);
+  assert.match(api, /\/admin\/content-providers/);
+  assert.match(source, /内容来源/);
+  assert.match(source, /TikHub 兼容服务/);
+  assert.match(source, /自定义小红书数据服务/);
+  assert.match(source, /rateLimitPerMinute/);
+  assert.match(source, /complianceNote/);
+  assert.match(source, /providerApiKeyForms/);
+  assert.match(source, /onSaveContentProvider/);
+  assert.match(source, /Switch/);
+  assert.match(source, /Popconfirm/);
+  assert.match(css, /content-provider-grid/);
+  assert.match(css, /provider-status-strip/);
+});
+
 test("admin sidebar can collapse to icon-only navigation", () => {
   const workspace = readSource("admin/AdminWorkspace.tsx");
   const css = readSource("styles.css");

@@ -1,4 +1,6 @@
 import type {
+  AdminContentProviderConfig,
+  AdminContentProviderType,
   AdminDashboard,
   AdminModelConfig,
   AdminModelConfigType,
@@ -52,6 +54,29 @@ export type ModelApiKeyFormState = Record<
   ModelApiKeyForm
 >;
 
+export type ContentProviderForm = {
+  baseUrl: string;
+  complianceNote: string;
+  enabled: boolean;
+  name: string;
+  rateLimitPerMinute: string;
+};
+
+export type ContentProviderFormState = Record<
+  AdminContentProviderType,
+  ContentProviderForm
+>;
+
+export type ContentProviderApiKeyForm = {
+  apiKey: string;
+  name: string;
+};
+
+export type ContentProviderApiKeyFormState = Record<
+  AdminContentProviderType,
+  ContentProviderApiKeyForm
+>;
+
 export type DashboardState = {
   data: AdminDashboard;
   errorMessage: string | null;
@@ -60,6 +85,12 @@ export type DashboardState = {
 
 export type ModelConfigState = {
   data: AdminModelConfig[];
+  errorMessage: string | null;
+  status: "error" | "loading" | "ready";
+};
+
+export type ContentProviderState = {
+  data: AdminContentProviderConfig[];
   errorMessage: string | null;
   status: "error" | "loading" | "ready";
 };
@@ -83,9 +114,19 @@ export const taskColor = {
 
 export const modelConfigTypes: AdminModelConfigType[] = ["text", "image"];
 
+export const contentProviderTypes: AdminContentProviderType[] = [
+  "tikhub",
+  "custom",
+];
+
 export const modelConfigLabels: Record<AdminModelConfigType, string> = {
   image: "图片模型",
   text: "文本模型",
+};
+
+export const contentProviderLabels: Record<AdminContentProviderType, string> = {
+  custom: "自定义小红书数据服务",
+  tikhub: "TikHub 兼容服务",
 };
 
 export const emptyModelConfigForm: ModelConfigFormState = {
@@ -105,6 +146,34 @@ export const emptyModelApiKeyForm: ModelApiKeyFormState = {
     name: "",
   },
   text: {
+    apiKey: "",
+    name: "",
+  },
+};
+
+export const emptyContentProviderForm: ContentProviderFormState = {
+  custom: {
+    baseUrl: "",
+    complianceNote: "仅接入用户授权或自行导入的小红书内容样本。",
+    enabled: false,
+    name: "自定义小红书数据服务",
+    rateLimitPerMinute: "",
+  },
+  tikhub: {
+    baseUrl: "",
+    complianceNote: "仅用于用户授权的笔记、账号和搜索结果导入。",
+    enabled: false,
+    name: "TikHub 兼容服务",
+    rateLimitPerMinute: "",
+  },
+};
+
+export const emptyContentProviderApiKeyForm: ContentProviderApiKeyFormState = {
+  custom: {
+    apiKey: "",
+    name: "",
+  },
+  tikhub: {
     apiKey: "",
     name: "",
   },
@@ -142,6 +211,36 @@ export function createModelConfigFormState(configs: AdminModelConfig[]) {
     {
       image: { ...emptyModelConfigForm.image },
       text: { ...emptyModelConfigForm.text },
+    },
+  );
+}
+
+export function createContentProviderFormState(
+  configs: AdminContentProviderConfig[],
+) {
+  return contentProviderTypes.reduce<ContentProviderFormState>(
+    (formState, type) => {
+      const config = configs.find((item) => item.type === type);
+
+      formState[type] = {
+        baseUrl: config?.baseUrl ?? emptyContentProviderForm[type].baseUrl,
+        complianceNote:
+          config?.complianceNote ??
+          emptyContentProviderForm[type].complianceNote,
+        enabled: config?.enabled ?? emptyContentProviderForm[type].enabled,
+        name: config?.name ?? emptyContentProviderForm[type].name,
+        rateLimitPerMinute:
+          config?.rateLimitPerMinute === null ||
+          config?.rateLimitPerMinute === undefined
+            ? ""
+            : String(config.rateLimitPerMinute),
+      };
+
+      return formState;
+    },
+    {
+      custom: { ...emptyContentProviderForm.custom },
+      tikhub: { ...emptyContentProviderForm.tikhub },
     },
   );
 }

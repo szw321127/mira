@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   DashboardOutlined,
+  DatabaseOutlined,
   ProjectOutlined,
   SettingOutlined,
   TeamOutlined,
@@ -14,6 +15,7 @@ export type NavigationKey =
   | "tasks"
   | "members"
   | "settings"
+  | "contentProviders"
   | "adminProfile";
 
 export const menuItems: MenuProps["items"] = [
@@ -22,11 +24,13 @@ export const menuItems: MenuProps["items"] = [
   { icon: <CheckCircleOutlined />, key: "tasks", label: "任务看板" },
   { icon: <TeamOutlined />, key: "members", label: "成员管理" },
   { icon: <SettingOutlined />, key: "settings", label: "模型配置" },
+  { icon: <DatabaseOutlined />, key: "contentProviders", label: "内容来源" },
   { icon: <UserOutlined />, key: "adminProfile", label: "管理员信息" },
 ];
 
 export const activeMenuTitles: Record<NavigationKey, string> = {
   adminProfile: "管理员信息",
+  contentProviders: "内容来源",
   members: "成员管理",
   overview: "项目总览",
   projects: "项目列表",

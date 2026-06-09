@@ -32,15 +32,22 @@ import type { MenuProps, TableProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import {
   changeAdminPassword,
+  createContentProviderApiKey,
   createAdminProject,
   createModelApiKey,
+  deleteContentProviderApiKey,
   deleteModelApiKey,
   getApiErrorMessage,
+  loadContentProviders,
   loadModelConfigs,
   loadProjectManagementDashboard,
+  saveContentProvider,
   saveModelConfig,
   updateAdminProfile,
+  updateContentProviderApiKey,
   updateModelApiKey,
+  type AdminContentProviderApiKey,
+  type AdminContentProviderType,
   type AdminModelApiKey,
   type AdminModelConfigType,
   type AdminProfile,
@@ -49,8 +56,13 @@ import {
   type AdminTask as Task,
 } from "../api";
 import {
+  contentProviderLabels,
   buildProjectCsv,
+  contentProviderTypes,
+  createContentProviderFormState,
   createModelConfigFormState,
+  emptyContentProviderApiKeyForm,
+  emptyContentProviderForm,
   emptyDashboard,
   emptyModelApiKeyForm,
   emptyModelConfigForm,
@@ -61,6 +73,11 @@ import {
   type AdminPasswordForm,
   type AdminProfileForm,
   type CreateProjectForm,
+  type ContentProviderApiKeyForm,
+  type ContentProviderApiKeyFormState,
+  type ContentProviderForm,
+  type ContentProviderFormState,
+  type ContentProviderState,
   type DashboardState,
   type ExportStatus,
   type ModelApiKeyForm,
@@ -71,6 +88,7 @@ import {
 } from "./adminTypes";
 import { activeMenuTitles, menuItems, type NavigationKey } from "./navigation";
 import { AdminProfilePage } from "./pages/AdminProfilePage";
+import { ContentProvidersPage } from "./pages/ContentProvidersPage";
 import { MembersPage } from "./pages/MembersPage";
 import { ModelConfigsPage } from "./pages/ModelConfigsPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -109,22 +127,39 @@ export function AdminWorkspace({
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [creatingApiKey, setCreatingApiKey] =
     useState<AdminModelConfigType | null>(null);
+  const [creatingProviderApiKey, setCreatingProviderApiKey] =
+    useState<AdminContentProviderType | null>(null);
   const [mutatingApiKeyId, setMutatingApiKeyId] = useState<string | null>(null);
+  const [mutatingProviderApiKeyId, setMutatingProviderApiKeyId] = useState<
+    string | null
+  >(null);
   const [modelApiKeyForms, setModelApiKeyForms] =
     useState<ModelApiKeyFormState>(emptyModelApiKeyForm);
+  const [contentProviderApiKeyForms, setContentProviderApiKeyForms] =
+    useState<ContentProviderApiKeyFormState>(emptyContentProviderApiKeyForm);
   const [modelConfigForms, setModelConfigForms] =
     useState<ModelConfigFormState>(emptyModelConfigForm);
+  const [contentProviderForms, setContentProviderForms] =
+    useState<ContentProviderFormState>(emptyContentProviderForm);
   const [modelConfigState, setModelConfigState] = useState<ModelConfigState>({
     data: [],
     errorMessage: null,
     status: "loading",
   });
+  const [contentProviderState, setContentProviderState] =
+    useState<ContentProviderState>({
+      data: [],
+      errorMessage: null,
+      status: "loading",
+    });
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
   const [savingAdminPassword, setSavingAdminPassword] = useState(false);
   const [savingAdminProfile, setSavingAdminProfile] = useState(false);
   const [savingModelConfig, setSavingModelConfig] =
     useState<AdminModelConfigType | null>(null);
+  const [savingContentProvider, setSavingContentProvider] =
+    useState<AdminContentProviderType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "全部">(
@@ -219,16 +254,63 @@ export function AdminWorkspace({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    loadContentProviders()
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+
+        setContentProviderState({
+          data,
+          errorMessage: null,
+          status: "ready",
+        });
+        setContentProviderForms(createContentProviderFormState(data));
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        if (onUnauthorized(error)) {
+          return;
+        }
+
+        setContentProviderState({
+          data: [],
+          errorMessage: getApiErrorMessage(error),
+          status: "error",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const { capabilities, metrics, notifications, projects, riskQueue, tasks } =
     dashboardState.data;
   const dashboardLoading = dashboardState.status === "loading";
   const modelConfigLoading = modelConfigState.status === "loading";
+  const contentProviderLoading = contentProviderState.status === "loading";
   const modelConfigByType = useMemo(
     () =>
       new Map(
         modelConfigState.data.map((config) => [config.type, config] as const),
       ),
     [modelConfigState.data],
+  );
+  const contentProviderByType = useMemo(
+    () =>
+      new Map(
+        contentProviderState.data.map(
+          (config) => [config.type, config] as const,
+        ),
+      ),
+    [contentProviderState.data],
   );
 
   const updateModelConfigForm = (
@@ -251,6 +333,34 @@ export function AdminWorkspace({
     value: string,
   ) => {
     setModelApiKeyForms((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateContentProviderForm = (
+    type: AdminContentProviderType,
+    field: keyof ContentProviderForm,
+    value: boolean | string,
+  ) => {
+    setContentProviderForms((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateContentProviderApiKeyForm = (
+    type: AdminContentProviderType,
+    field: keyof ContentProviderApiKeyForm,
+    value: string,
+  ) => {
+    setContentProviderApiKeyForms((current) => ({
       ...current,
       [type]: {
         ...current[type],
@@ -284,6 +394,34 @@ export function AdminWorkspace({
           apiKeyPreview: firstVisibleKey?.apiKeyPreview ?? legacyPreview,
           apiKeys,
           hasApiKey: Boolean(legacyPreview) || apiKeys.length > 0,
+        };
+      }),
+    }));
+  };
+
+  const updateContentProviderApiKeys = (
+    type: AdminContentProviderType,
+    updater: (
+      apiKeys: AdminContentProviderApiKey[],
+    ) => AdminContentProviderApiKey[],
+  ) => {
+    setContentProviderState((current) => ({
+      ...current,
+      data: current.data.map((config) => {
+        if (config.type !== type) {
+          return config;
+        }
+
+        const oldApiKeys = config.apiKeys ?? [];
+        const apiKeys = updater(oldApiKeys);
+        const firstVisibleKey =
+          apiKeys.find((apiKey) => apiKey.enabled) ?? apiKeys[0] ?? null;
+
+        return {
+          ...config,
+          apiKeyPreview: firstVisibleKey?.apiKeyPreview ?? null,
+          apiKeys,
+          hasApiKey: apiKeys.length > 0,
         };
       }),
     }));
@@ -396,6 +534,130 @@ export function AdminWorkspace({
       handleAdminApiError(error);
     } finally {
       setMutatingApiKeyId(null);
+    }
+  };
+
+  const handleSaveContentProvider = async (type: AdminContentProviderType) => {
+    const form = contentProviderForms[type];
+    const rateLimit = form.rateLimitPerMinute.trim()
+      ? Number(form.rateLimitPerMinute)
+      : undefined;
+
+    setSavingContentProvider(type);
+    try {
+      const saved = await saveContentProvider(type, {
+        baseUrl: form.baseUrl,
+        complianceNote: form.complianceNote,
+        enabled: form.enabled,
+        name: form.name,
+        rateLimitPerMinute: rateLimit,
+      });
+
+      setContentProviderState((current) => {
+        const others = current.data.filter((item) => item.type !== type);
+
+        return {
+          data: [...others, saved].sort(
+            (left, right) =>
+              contentProviderTypes.indexOf(left.type) -
+              contentProviderTypes.indexOf(right.type),
+          ),
+          errorMessage: null,
+          status: "ready",
+        };
+      });
+      setContentProviderForms((current) => ({
+        ...current,
+        [type]: {
+          baseUrl: saved.baseUrl,
+          complianceNote: saved.complianceNote,
+          enabled: saved.enabled,
+          name: saved.name,
+          rateLimitPerMinute:
+            saved.rateLimitPerMinute === null
+              ? ""
+              : String(saved.rateLimitPerMinute),
+        },
+      }));
+      setOperationNotice(`${contentProviderLabels[type]}已保存`);
+    } catch (error) {
+      handleAdminApiError(error);
+    } finally {
+      setSavingContentProvider(null);
+    }
+  };
+
+  const handleCreateContentProviderApiKey = async (
+    type: AdminContentProviderType,
+  ) => {
+    const form = contentProviderApiKeyForms[type];
+    const name = form.name.trim();
+    const apiKey = form.apiKey.trim();
+
+    if (!name || !apiKey) {
+      setOperationNotice("请填写 API Key 名称和值");
+      return;
+    }
+
+    setCreatingProviderApiKey(type);
+    try {
+      const created = await createContentProviderApiKey(type, {
+        apiKey,
+        enabled: true,
+        name,
+      });
+
+      updateContentProviderApiKeys(type, (apiKeys) => [...apiKeys, created]);
+      setContentProviderApiKeyForms((current) => ({
+        ...current,
+        [type]: { ...emptyContentProviderApiKeyForm[type] },
+      }));
+      setOperationNotice(`${contentProviderLabels[type]} API Key 已新增`);
+    } catch (error) {
+      handleAdminApiError(error);
+    } finally {
+      setCreatingProviderApiKey(null);
+    }
+  };
+
+  const handleToggleContentProviderApiKey = async (
+    type: AdminContentProviderType,
+    apiKey: AdminContentProviderApiKey,
+    enabled: boolean,
+  ) => {
+    setMutatingProviderApiKeyId(apiKey.id);
+    try {
+      const updated = await updateContentProviderApiKey(type, apiKey.id, {
+        enabled,
+      });
+
+      updateContentProviderApiKeys(type, (apiKeys) =>
+        apiKeys.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setOperationNotice(`${updated.name}已${enabled ? "启用" : "停用"}`);
+    } catch (error) {
+      handleAdminApiError(error);
+    } finally {
+      setMutatingProviderApiKeyId(null);
+    }
+  };
+
+  const handleDeleteContentProviderApiKey = async (
+    type: AdminContentProviderType,
+    apiKey: AdminContentProviderApiKey,
+  ) => {
+    setMutatingProviderApiKeyId(apiKey.id);
+    try {
+      await deleteContentProviderApiKey(type, apiKey.id);
+
+      updateContentProviderApiKeys(type, (apiKeys) =>
+        apiKeys.filter((item) => item.id !== apiKey.id),
+      );
+      setOperationNotice(`${apiKey.name}已删除`);
+    } catch (error) {
+      handleAdminApiError(error);
+    } finally {
+      setMutatingProviderApiKeyId(null);
     }
   };
 
@@ -724,6 +986,25 @@ export function AdminWorkspace({
             savingModelConfig={savingModelConfig}
             updateModelApiKeyForm={updateModelApiKeyForm}
             updateModelConfigForm={updateModelConfigForm}
+          />
+        );
+      case "contentProviders":
+        return (
+          <ContentProvidersPage
+            contentProviderByType={contentProviderByType}
+            contentProviderForms={contentProviderForms}
+            contentProviderLoading={contentProviderLoading}
+            contentProviderState={contentProviderState}
+            creatingProviderApiKey={creatingProviderApiKey}
+            mutatingProviderApiKeyId={mutatingProviderApiKeyId}
+            onCreateContentProviderApiKey={handleCreateContentProviderApiKey}
+            onDeleteContentProviderApiKey={handleDeleteContentProviderApiKey}
+            onSaveContentProvider={handleSaveContentProvider}
+            onToggleContentProviderApiKey={handleToggleContentProviderApiKey}
+            providerApiKeyForms={contentProviderApiKeyForms}
+            savingContentProvider={savingContentProvider}
+            updateContentProviderApiKeyForm={updateContentProviderApiKeyForm}
+            updateContentProviderForm={updateContentProviderForm}
           />
         );
       case "adminProfile":

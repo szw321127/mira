@@ -4,10 +4,12 @@ import {
   analyzeXhsPost,
   buildXhsCommercialWorkflow,
   buildXhsOutlineCandidates,
-  type XhsAccountInput,
-  type XhsCommercialWorkflowInput,
-  type XhsOutlineCandidateInput,
-  type XhsPostInput,
+} from '@rednote/agent/dist/index.js';
+import type {
+  XhsAccountInput,
+  XhsCommercialWorkflowInput,
+  XhsOutlineCandidateInput,
+  XhsPostInput,
 } from '@rednote/agent';
 
 @Injectable()

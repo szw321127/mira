@@ -363,7 +363,17 @@ body {
   border-color: #d9e2ef;
 }
 
+.content-provider-section {
+  border-color: #d9e2ef;
+}
+
 .model-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.content-provider-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -374,7 +384,17 @@ body {
   background: #fbfcff;
 }
 
+.content-provider-card {
+  min-width: 0;
+  background: #fbfcff;
+}
+
 .model-config-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.content-provider-fields {
   display: grid;
   gap: 12px;
 }
@@ -384,7 +404,40 @@ body {
   gap: 6px;
 }
 
+.content-provider-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.content-provider-fields .ant-input-number {
+  width: 100%;
+}
+
+.provider-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e7ebf2;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.provider-status-strip > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
 .model-config-footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e7ebf2;
+}
+
+.content-provider-footer {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid #e7ebf2;
@@ -465,6 +518,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .content-provider-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-profile-grid {
     grid-template-columns: 1fr;
   }
@@ -533,6 +590,11 @@ body {
   }
 
   .api-key-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .provider-status-strip {
     align-items: flex-start;
     flex-direction: column;
   }
