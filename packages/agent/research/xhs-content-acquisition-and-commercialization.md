@@ -111,6 +111,9 @@ Implemented in `packages/agent/src/xhs-analysis`:
   - blockers
   - warnings
   - repair actions
+- `buildXhsCommercialWorkflow`: composes import normalization, account/post
+  analysis, reference brief generation, publish package construction, and
+  readiness audit into one backend-friendly workflow.
 
 Exports were added from `packages/agent/src/index.ts` so backend/product layers
 can import these primitives later.
@@ -154,6 +157,58 @@ The normalizer handles common field aliases such as:
 It intentionally does not fetch, sign, scroll, bypass captcha, or automate
 publishing. Those concerns belong to explicit adapters with user/admin
 configuration and compliance controls.
+
+## Commercial Workflow Contract
+
+For the first backend integration, prefer one composed workflow endpoint before
+splitting the internals into many UI-facing calls:
+
+```ts
+buildXhsCommercialWorkflow({
+  account: optionalImportedAccount,
+  posts: optionalImportedReferencePosts,
+  idea: userIdea,
+  audience,
+  outline: selectedOutline,
+  pageCount: 5,
+});
+```
+
+The workflow returns:
+
+- normalized standalone post imports
+- optional normalized account import
+- account analysis
+- deduplicated reference post analyses
+- generation brief
+- structured publish package
+- publish readiness audit
+- compact summary for UI badges and backend logs
+
+Recommended API shape:
+
+- `POST /xhs/workflows/commercial-draft`
+- Request body:
+  - `idea`
+  - `audience`
+  - `outline`
+  - `accountImport`
+  - `postImports`
+  - `pageCount`
+  - `tone`
+- Response body:
+  - wrapped in the existing `{ code, data, msg }` envelope
+  - `data.workflow` should be the full workflow result
+  - persist `data.workflow.publishPackage` and `data.workflow.audit`
+
+The workflow can power a mature commercial loop:
+
+1. Generate outlines.
+2. User selects/edits one outline.
+3. Import account or reference notes.
+4. Run `buildXhsCommercialWorkflow`.
+5. If `audit.ready` is false, use `repairActions` for automatic model repair.
+6. If ready, show editable publish package and copy/export controls.
 
 ## Publish Package Contract
 

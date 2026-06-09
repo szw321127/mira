@@ -2,6 +2,7 @@ import {
   analyzeXhsAccount,
   analyzeXhsPost,
   auditXhsImageTextPublishPackage,
+  buildXhsCommercialWorkflow,
   buildXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
   normalizeXhsImportedAccount,
@@ -335,6 +336,88 @@ describe('xhs analysis primitives', () => {
     expect(account.source).toMatchObject({
       source: 'provider',
       sourceId: 'provider-user-1',
+    });
+  });
+
+  it('builds an end-to-end commercial workflow from imported account and posts', () => {
+    const workflow = buildXhsCommercialWorkflow({
+      account: {
+        source: 'provider',
+        sourceId: 'provider-user-1',
+        raw: {
+          desc: '小个子通勤穿搭，每周更新胶囊衣橱',
+          fans: '8.6万',
+          homepage: 'https://www.xiaohongshu.com/user/profile/user-1',
+          nickname: '阿鱼的衣橱',
+          notes: [
+            {
+              note_id: 'note-1',
+              title: '小个子通勤裤子这样买',
+              desc: '版型、长度、面料三个维度，照着买不踩雷。',
+              liked_count: '1.2万',
+              collected_count: '9800',
+              comment_count: 310,
+              share_count: 520,
+              tag_list: ['小个子穿搭', '通勤穿搭'],
+            },
+            {
+              note_id: 'note-2',
+              title: '12 件单品搭出一周通勤',
+              desc: '把颜色控制在三类，重复穿也不会被看出来。',
+              liked_count: '6800',
+              collected_count: '7200',
+              comment_count: 128,
+              tag_list: ['胶囊衣橱', '通勤穿搭'],
+            },
+          ],
+        },
+      },
+      audience: '初入职场女生',
+      idea: '给初入职场女生做低预算通勤穿搭',
+      outline: [
+        '正式场景用西装裤和针织衫打底',
+        '普通上班日用衬衫、半裙和乐福鞋',
+        '放松场景保留一件有记忆点的外套',
+        '买之前先看版型、面料和复穿率',
+      ],
+      pageCount: 5,
+      posts: [
+        {
+          source: 'browser',
+          sourceId: 'browser-note-1',
+          raw: {
+            author: '阿鱼的衣橱',
+            id: 'note-1',
+            title: '小个子通勤裤子这样买',
+          },
+        },
+        {
+          source: 'manual',
+          sourceId: 'manual-note-3',
+          raw: {
+            author: '阿鱼的衣橱',
+            content: '哪些值得买，哪些只是看起来精致。',
+            metrics: { likes: '4200', collects: '5900', comments: 88 },
+            tags: '#普通女生 #省钱穿搭',
+            title: '普通女生的低预算衣橱复盘',
+          },
+        },
+      ],
+    });
+
+    expect(workflow.accountAnalysis?.snapshot.followers).toBe(86000);
+    expect(workflow.accountAnalysis?.contentPillars[0]?.name).toBe('通勤穿搭');
+    expect(workflow.importedPosts.posts).toHaveLength(2);
+    expect(workflow.referencePosts).toHaveLength(3);
+    expect(workflow.brief.promptAdditions).toEqual(
+      expect.arrayContaining([expect.stringContaining('保持账号内容支柱')]),
+    );
+    expect(workflow.publishPackage.pages[0]?.role).toBe('cover');
+    expect(workflow.audit.ready).toBe(true);
+    expect(workflow.summary).toMatchObject({
+      ready: true,
+      referenceCount: 3,
+      score: workflow.audit.score,
     });
   });
 });

@@ -180,6 +180,36 @@ export interface XhsImportedAccountNormalization {
   sources: XhsImportSourceRecord[];
 }
 
+export interface XhsCommercialWorkflowInput {
+  account?: XhsImportedAccountRecord;
+  audience?: string;
+  idea: string;
+  outline: string[];
+  pageCount?: number;
+  posts?: XhsImportedPostRecord[];
+  tone?: string;
+}
+
+export interface XhsCommercialWorkflowSummary {
+  importedAccountPostCount: number;
+  importedStandalonePostCount: number;
+  ready: boolean;
+  referenceCount: number;
+  score: number;
+  topContentPillars: string[];
+}
+
+export interface XhsCommercialWorkflow {
+  accountAnalysis?: XhsAccountAnalysis;
+  audit: XhsPublishPackageAudit;
+  brief: XhsGenerationBrief;
+  importedAccount?: XhsImportedAccountNormalization;
+  importedPosts: XhsImportedPostsNormalization;
+  publishPackage: XhsImageTextPublishPackage;
+  referencePosts: XhsPostAnalysis[];
+  summary: XhsCommercialWorkflowSummary;
+}
+
 const COUNT_UNIT_PATTERN = /^([\d.]+)\s*([万wW])$/;
 
 export function normalizeXhsCount(value: XhsMetricValue): number {
@@ -470,6 +500,58 @@ export function normalizeXhsImportedAccount(
       url,
     },
     sources: postsNormalization.sources,
+  };
+}
+
+export function buildXhsCommercialWorkflow(
+  input: XhsCommercialWorkflowInput,
+): XhsCommercialWorkflow {
+  const importedAccount = input.account
+    ? normalizeXhsImportedAccount(input.account)
+    : undefined;
+  const importedPosts = normalizeXhsImportedPosts(input.posts ?? []);
+  const accountAnalysis = importedAccount
+    ? analyzeXhsAccount(importedAccount.account)
+    : undefined;
+  const referencePostInputs = dedupeReferencePosts([
+    ...(importedAccount?.account.posts ?? []),
+    ...importedPosts.posts,
+  ]);
+  const referencePosts = referencePostInputs.map(analyzeXhsPost);
+  const brief = buildXhsGenerationBrief({
+    account: accountAnalysis,
+    idea: input.idea,
+    references: referencePosts,
+  });
+  const publishPackage = buildXhsImageTextPublishPackage({
+    audience: input.audience,
+    brief,
+    idea: input.idea,
+    outline: input.outline,
+    pageCount: input.pageCount,
+    tone: input.tone,
+  });
+  const audit = auditXhsImageTextPublishPackage(publishPackage);
+
+  return {
+    accountAnalysis,
+    audit,
+    brief,
+    importedAccount,
+    importedPosts,
+    publishPackage,
+    referencePosts,
+    summary: {
+      importedAccountPostCount: importedAccount?.account.posts.length ?? 0,
+      importedStandalonePostCount: importedPosts.posts.length,
+      ready: audit.ready,
+      referenceCount: referencePosts.length,
+      score: audit.score,
+      topContentPillars:
+        accountAnalysis?.contentPillars
+          .slice(0, 3)
+          .map((pillar) => pillar.name) ?? [],
+    },
   };
 }
 
@@ -1280,4 +1362,29 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function dedupeReferencePosts(posts: XhsPostInput[]) {
+  const seen = new Set<string>();
+  const uniquePosts: XhsPostInput[] = [];
+
+  for (const post of posts) {
+    const key = buildReferencePostKey(post);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    uniquePosts.push(post);
+  }
+
+  return uniquePosts;
+}
+
+function buildReferencePostKey(post: XhsPostInput) {
+  if (post.url) {
+    return `url:${post.url}`;
+  }
+
+  return `title:${post.title.trim()}`;
 }
