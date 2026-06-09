@@ -36,7 +36,9 @@ import {
   DeleteOutlined,
   ExportOutlined,
   KeyOutlined,
+  MenuFoldOutlined,
   MenuOutlined,
+  MenuUnfoldOutlined,
   PlusOutlined,
   ProjectOutlined,
   SaveOutlined,
@@ -783,6 +785,7 @@ function AdminWorkspace() {
         collapsed={siderCollapsed}
         collapsedWidth={72}
         onCollapse={setSiderCollapsed}
+        trigger={null}
         width={siderCollapsed ? 72 : 232}
       >
         <div
@@ -802,6 +805,14 @@ function AdminWorkspace() {
       <Layout className="admin-main-layout">
         <Header className="admin-header">
           <div className="admin-title-row">
+            <Button
+              aria-label={siderCollapsed ? "展开侧边栏" : "收起侧边栏"}
+              className="desktop-sider-toggle"
+              icon={
+                siderCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
+              }
+              onClick={() => setSiderCollapsed((current) => !current)}
+            />
             <Button
               aria-label="打开后台导航"
               className="mobile-nav-button"

@@ -107,8 +107,19 @@ test("admin sidebar can collapse to icon-only navigation", () => {
   assert.match(app, /siderCollapsed/);
   assert.match(app, /collapsible/);
   assert.match(app, /collapsed=\{siderCollapsed\}/);
+  assert.match(app, /trigger=\{null\}/);
+  assert.match(app, /desktop-sider-toggle/);
   assert.match(app, /inlineCollapsed=\{siderCollapsed\}/);
   assert.match(css, /admin-brand-collapsed/);
+});
+
+test("admin desktop shell keeps header fixed and scrolls only main content", () => {
+  const css = readSource("styles.css");
+
+  assert.match(css, /\.admin-shell\s*\{[\s\S]*height:\s*100vh/);
+  assert.match(css, /\.admin-main-layout\s*\{[\s\S]*overflow:\s*hidden/);
+  assert.match(css, /\.admin-header\s*\{[\s\S]*height:\s*64px/);
+  assert.match(css, /\.admin-content\s*\{[\s\S]*overflow-y:\s*auto/);
 });
 
 test("admin shell has real search state, filtered tasks, and empty states", () => {
