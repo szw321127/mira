@@ -4,6 +4,7 @@ export { SessionStore, type SessionEntry } from './session';
 export {
   analyzeXhsAccount,
   analyzeXhsPost,
+  auditXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
   buildXhsImageTextPublishPackage,
   normalizeXhsCount,
@@ -17,4 +18,7 @@ export {
   type XhsPostAnalysis,
   type XhsPostInput,
   type XhsPostMetrics,
+  type XhsPublishAuditIssue,
+  type XhsPublishPackageAudit,
+  type XhsPublishReadinessCheck,
 } from './xhs-analysis';

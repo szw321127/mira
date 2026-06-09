@@ -98,6 +98,14 @@ Implemented in `packages/agent/src/xhs-analysis`:
   - per-page image prompts
   - copy-ready publish text
   - publishing checklist
+- `auditXhsImageTextPublishPackage`: checks whether a publish package is ready
+  for commercial product use. It returns:
+  - readiness boolean
+  - numeric score
+  - passed checks
+  - blockers
+  - warnings
+  - repair actions
 
 Exports were added from `packages/agent/src/index.ts` so backend/product layers
 can import these primitives later.
@@ -132,6 +140,30 @@ hashtags, and image prompts.
 The current agent package produces deterministic scaffold content. Production
 model output can replace or enrich page bodies later, but should keep the same
 contract so API consumers and saved conversation records stay stable.
+
+## Publish Quality Gate
+
+Before showing final output as ready to copy or export, backend should run
+`auditXhsImageTextPublishPackage`.
+
+Recommended gate:
+
+- `ready = true`: allow copy/export, still let the user edit every field.
+- `ready = false` with blockers: show repair actions and trigger a model repair
+  pass before presenting the result as final.
+- warnings only: show non-blocking suggestions in the editor.
+
+The first production gate should require:
+
+- cover page exists and has a meaningful headline
+- 4-7 image-text pages
+- each page has headline, body, and image prompt
+- publish text includes title, caption, and hashtags
+- caption has concrete steps and light interaction
+- at least 3 hashtags covering audience, scene, and category
+
+This keeps the product from shipping prompt-like intermediate text as if it were
+publish-ready Xiaohongshu content.
 
 ## Future Product Work
 

@@ -1,6 +1,7 @@
 import {
   analyzeXhsAccount,
   analyzeXhsPost,
+  auditXhsImageTextPublishPackage,
   buildXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
   normalizeXhsCount,
@@ -164,6 +165,60 @@ describe('xhs analysis primitives', () => {
       expect.arrayContaining([
         expect.stringContaining('封面'),
         expect.stringContaining('不要照搬'),
+      ]),
+    );
+  });
+
+  it('audits a Xiaohongshu publish package for commercial publish readiness', () => {
+    const publishPackage = buildXhsImageTextPublishPackage({
+      audience: '初入职场女生',
+      idea: '给初入职场女生做低预算通勤穿搭',
+      outline: [
+        '正式场景用西装裤和针织衫打底',
+        '普通上班日用衬衫、半裙和乐福鞋',
+        '放松场景保留一件有记忆点的外套',
+        '买之前先看版型、面料和复穿率',
+      ],
+      pageCount: 6,
+    });
+
+    const audit = auditXhsImageTextPublishPackage(publishPackage);
+
+    expect(audit.ready).toBe(true);
+    expect(audit.score).toBeGreaterThanOrEqual(85);
+    expect(audit.passedChecks).toEqual(
+      expect.arrayContaining(['cover', 'pages', 'copy', 'visuals', 'hashtags']),
+    );
+    expect(audit.blockers).toHaveLength(0);
+  });
+
+  it('reports actionable blockers for an incomplete publish package', () => {
+    const publishPackage = buildXhsImageTextPublishPackage({
+      idea: '职场穿搭',
+      outline: ['穿白衬衫'],
+      pageCount: 4,
+    });
+
+    publishPackage.pages = publishPackage.pages.slice(1, 3);
+    publishPackage.imagePromptPack = [];
+    publishPackage.hashtags = [];
+    publishPackage.copyBlocks.publishText = '职场穿搭';
+
+    const audit = auditXhsImageTextPublishPackage(publishPackage);
+
+    expect(audit.ready).toBe(false);
+    expect(audit.score).toBeLessThan(70);
+    expect(audit.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'cover' }),
+        expect.objectContaining({ check: 'visuals' }),
+        expect.objectContaining({ check: 'hashtags' }),
+      ]),
+    );
+    expect(audit.repairActions).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('封面'),
+        expect.stringContaining('图片提示词'),
       ]),
     );
   });
