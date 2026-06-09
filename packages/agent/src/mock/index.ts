@@ -418,6 +418,8 @@ export function createMockModel() {
     },
 
     async doStream({ prompt }: any) {
+      const text = extractUserText(prompt);
+
       if (text.includes('测试重试') || text.includes('test retry')) {
         retryTestCount++;
         if (retryTestCount <= 2) {

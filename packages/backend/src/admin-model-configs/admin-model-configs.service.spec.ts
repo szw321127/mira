@@ -10,6 +10,16 @@ type StoredConfig = {
   updatedAt: Date;
 };
 
+type StoredApiKey = {
+  apiKeyEncrypted: string;
+  createdAt: Date;
+  enabled: boolean;
+  id: string;
+  name: string;
+  type: string;
+  updatedAt: Date;
+};
+
 describe('AdminModelConfigsService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -23,8 +33,73 @@ describe('AdminModelConfigsService', () => {
     } as Response);
   }
 
-  function createService(records: StoredConfig[] = []) {
+  function createService(
+    records: StoredConfig[] = [],
+    apiKeyRecords: StoredApiKey[] = [],
+  ) {
     const prisma = {
+      adminModelApiKey: {
+        create: jest.fn(async ({ data }) => {
+          const record = {
+            createdAt: new Date('2026-06-09T00:02:00.000Z'),
+            enabled: data.enabled ?? true,
+            id: `api-key-${apiKeyRecords.length + 1}`,
+            updatedAt: new Date('2026-06-09T00:02:00.000Z'),
+            ...data,
+          };
+
+          apiKeyRecords.push(record);
+          return record;
+        }),
+        delete: jest.fn(async ({ where }: { where: { id: string } }) => {
+          const index = apiKeyRecords.findIndex(
+            (record) => record.id === where.id,
+          );
+          const [record] = apiKeyRecords.splice(index, 1);
+          return record;
+        }),
+        findFirst: jest.fn(
+          async ({
+            where,
+          }: {
+            where: { enabled?: boolean; id?: string; type: string };
+          }) =>
+            apiKeyRecords.find(
+              (record) =>
+                record.type === where.type &&
+                (where.id === undefined || record.id === where.id) &&
+                (where.enabled === undefined ||
+                  record.enabled === where.enabled),
+            ) ?? null,
+        ),
+        findMany: jest.fn(
+          async ({ where }: { where?: { type?: string } } = {}) =>
+            apiKeyRecords.filter(
+              (record) => !where?.type || record.type === where.type,
+            ),
+        ),
+        update: jest.fn(
+          async ({
+            data,
+            where,
+          }: {
+            data: Partial<StoredApiKey>;
+            where: { id: string };
+          }) => {
+            const record = apiKeyRecords.find((item) => item.id === where.id);
+
+            if (!record) {
+              throw new Error('api key not found');
+            }
+
+            Object.assign(record, data, {
+              updatedAt: new Date('2026-06-09T00:03:00.000Z'),
+            });
+
+            return record;
+          },
+        ),
+      },
       adminModelConfig: {
         findMany: jest.fn(async () => records),
         findUnique: jest.fn(
@@ -339,5 +414,108 @@ describe('AdminModelConfigsService', () => {
     await expect(runtimeService.testConnection('text')).rejects.toThrow(
       'invalid api key',
     );
+  });
+
+  it('adds multiple api keys without exposing their values', async () => {
+    const { service } = createService([
+      {
+        apiKeyEncrypted: null,
+        baseUrl: 'https://text.example/v1',
+        createdAt: new Date('2026-06-09T00:00:00.000Z'),
+        id: 'text-config',
+        modelName: 'text-model',
+        type: 'text',
+        updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+      },
+    ]);
+
+    const first = await service.addApiKey('text', {
+      apiKey: 'sk-first-secret',
+      enabled: true,
+      name: '主 Key',
+    });
+    const second = await service.addApiKey('text', {
+      apiKey: 'sk-second-secret',
+      enabled: false,
+      name: '备用 Key',
+    });
+    const [config] = await service.list();
+
+    expect(first).toMatchObject({
+      apiKeyPreview: '****************cret',
+      enabled: true,
+      name: '主 Key',
+      type: 'text',
+    });
+    expect(second).toMatchObject({
+      enabled: false,
+      name: '备用 Key',
+      type: 'text',
+    });
+    expect(config.apiKeys).toHaveLength(2);
+    expect(JSON.stringify(config.apiKeys)).not.toContain('sk-first-secret');
+    expect(JSON.stringify(config.apiKeys)).not.toContain('sk-second-secret');
+  });
+
+  it('uses the first enabled key for runtime provider calls', async () => {
+    const { service } = createService(
+      [
+        {
+          apiKeyEncrypted: null,
+          baseUrl: 'https://text.example/v1',
+          createdAt: new Date('2026-06-09T00:00:00.000Z'),
+          id: 'text-config',
+          modelName: 'text-model',
+          type: 'text',
+          updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+        },
+      ],
+      [
+        {
+          apiKeyEncrypted: '',
+          createdAt: new Date('2026-06-09T00:00:00.000Z'),
+          enabled: false,
+          id: 'disabled-key',
+          name: '停用 Key',
+          type: 'text',
+          updatedAt: new Date('2026-06-09T00:00:00.000Z'),
+        },
+      ],
+    );
+    const enabled = await service.addApiKey('text', {
+      apiKey: 'sk-enabled-secret',
+      enabled: true,
+      name: '启用 Key',
+    });
+
+    const runtimeConfig = await service.getRuntimeConfig('text');
+
+    expect(enabled.enabled).toBe(true);
+    expect(runtimeConfig.apiKey).toBe('sk-enabled-secret');
+  });
+
+  it('updates and deletes api keys by id', async () => {
+    const { service } = createService();
+    const created = await service.addApiKey('image', {
+      apiKey: 'sk-image-secret',
+      enabled: true,
+      name: '图片 Key',
+    });
+
+    const disabled = await service.updateApiKey('image', created.id, {
+      enabled: false,
+      name: '图片备用 Key',
+    });
+    const deleted = await service.deleteApiKey('image', created.id);
+    const imageConfig = (await service.list()).find(
+      (config) => config.type === 'image',
+    );
+
+    expect(disabled).toMatchObject({
+      enabled: false,
+      name: '图片备用 Key',
+    });
+    expect(deleted.id).toBe(created.id);
+    expect(imageConfig?.apiKeys).toHaveLength(0);
   });
 });

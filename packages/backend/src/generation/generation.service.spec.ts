@@ -99,7 +99,7 @@ describe('GenerationService real text provider', () => {
   });
 
   it('generates a publish-ready post draft through the configured text model', async () => {
-    mockFetchJson({
+    const fetchMock = mockFetchJson({
       choices: [
         {
           message: {
@@ -140,6 +140,14 @@ describe('GenerationService real text provider', () => {
     expect(draft.sections).toHaveLength(5);
     expect(draft.tags).toEqual(['小红书家居', '出租屋改造', '早餐角']);
     expect(draft.imagePrompt).toContain('标题留白');
+    const requestBody = JSON.parse(
+      fetchMock.mock.calls[0][1]?.body as string,
+    ) as { messages: Array<{ content: string; role: string }> };
+    const promptText = JSON.stringify(requestBody.messages);
+
+    expect(promptText).toContain('最终可以直接发布');
+    expect(promptText).toContain('sections 必须是正文段落');
+    expect(promptText).toContain('不要返回大纲要点');
   });
 
   it('rejects malformed provider JSON instead of falling back to templates', async () => {

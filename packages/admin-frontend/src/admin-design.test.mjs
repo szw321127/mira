@@ -13,6 +13,7 @@ function readSource(name) {
 
 test("admin frontend exposes an Ant Design project management shell", () => {
   const app = readSource("App.tsx");
+  const index = readFileSync(join(root, "..", "index.html"), "utf8");
 
   assert.match(app, /antd/);
   assert.match(app, /Layout/);
@@ -21,6 +22,8 @@ test("admin frontend exposes an Ant Design project management shell", () => {
   assert.match(app, /项目列表/);
   assert.match(app, /任务看板/);
   assert.match(app, /Drawer/);
+  assert.match(index, /<title>后台项目管理系统 \| RedNote<\/title>/);
+  assert.doesNotMatch(app, /<Title level=\{2\}>后台项目管理系统<\/Title>/);
 });
 
 test("admin frontend loads project management data through the backend API", () => {
@@ -75,8 +78,13 @@ test("admin frontend manages text and image model configs without exposing api k
   const css = readSource("styles.css");
 
   assert.match(api, /AdminModelConfig/);
+  assert.match(api, /AdminModelApiKey/);
   assert.match(api, /loadModelConfigs/);
   assert.match(api, /saveModelConfig/);
+  assert.match(api, /createModelApiKey/);
+  assert.match(api, /updateModelApiKey/);
+  assert.match(api, /deleteModelApiKey/);
+  assert.match(api, /\/admin\/model-configs\/\$\{type\}\/api-keys/);
   assert.match(api, /testModelConfigConnection/);
   assert.match(api, /\/admin\/model-configs/);
   assert.match(api, /\/admin\/model-configs\/\$\{type\}\/test/);
@@ -84,9 +92,23 @@ test("admin frontend manages text and image model configs without exposing api k
   assert.match(app, /文本模型/);
   assert.match(app, /图片模型/);
   assert.match(app, /baseUrl/);
-  assert.match(app, /apiKeyPreview/);
-  assert.match(app, /留空表示不更新/);
+  assert.match(app, /apiKeys/);
+  assert.match(app, /新增 API Key/);
+  assert.match(app, /Switch/);
+  assert.match(app, /Popconfirm/);
   assert.match(css, /model-config-grid/);
+  assert.match(css, /api-key-list/);
+});
+
+test("admin sidebar can collapse to icon-only navigation", () => {
+  const app = readSource("App.tsx");
+  const css = readSource("styles.css");
+
+  assert.match(app, /siderCollapsed/);
+  assert.match(app, /collapsible/);
+  assert.match(app, /collapsed=\{siderCollapsed\}/);
+  assert.match(app, /inlineCollapsed=\{siderCollapsed\}/);
+  assert.match(css, /admin-brand-collapsed/);
 });
 
 test("admin shell has real search state, filtered tasks, and empty states", () => {

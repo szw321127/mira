@@ -65,9 +65,9 @@ export class GenerationService {
         content: [
           `用户想法：${this.normalizeTopic(topic)}`,
           `已选大纲：${JSON.stringify(outline)}`,
-          '请生成可以直接复制发布的小红书图文内容。',
+          '请生成最终可以直接发布的小红书图文内容。',
           '返回 JSON 格式：{"title":"...","coverLine":"...","caption":"...","sections":["..."],"tags":["..."],"imagePrompt":"..."}。',
-          '要求：title 可直接发布；coverLine 不超过 18 个中文字符；sections 适合图文分页；tags 不带 #；imagePrompt 用于生成竖版封面图。',
+          '要求：title 可直接发布；coverLine 不超过 18 个中文字符；sections 必须是正文段落或图文分页文案；不要返回大纲要点、创作建议、执行说明或写给 AI 的提示；tags 不带 #；imagePrompt 用于生成竖版封面图。',
         ].join('\n'),
         role: 'user',
       },

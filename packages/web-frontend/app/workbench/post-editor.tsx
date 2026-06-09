@@ -56,6 +56,8 @@ export function PostEditor({
   const [sectionsText, setSectionsText] = useState(sourceSectionsText);
   const [tagsText, setTagsText] = useState(sourceTagsText);
   const canDownloadImage = Boolean(postDraft?.imageUrl && onDownloadImage);
+  const publishTags =
+    postDraft?.tags.map((tag) => (tag.startsWith("#") ? tag : `#${tag}`)) ?? [];
 
   useEffect(() => {
     const syncDraftText = window.setTimeout(() => {
@@ -101,82 +103,137 @@ export function PostEditor({
             postDraft={postDraft}
           />
 
-          <label className={labelClass}>
-            <span>标题</span>
-            <input
-              className={fieldClass}
-              onChange={(event) => onDraftChange({ title: event.target.value })}
-              value={postDraft.title}
-            />
-          </label>
+          <section
+            aria-labelledby="final-note-title"
+            className="grid gap-3 border-y border-[var(--line)] py-3"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3
+                className="m-0 text-[0.9rem] font-extrabold text-[var(--ink)]"
+                id="final-note-title"
+              >
+                最终笔记
+              </h3>
+              <span className="rounded-full bg-[var(--red-soft)] px-2.5 py-1 text-[0.72rem] font-bold text-[var(--red-strong)]">
+                可直接复制
+              </span>
+            </div>
 
-          <label className={labelClass}>
-            <span>封面文案</span>
-            <input
-              className={fieldClass}
-              onChange={(event) => onDraftChange({ coverLine: event.target.value })}
-              value={postDraft.coverLine}
-            />
-          </label>
+            <article className="grid gap-2 text-[0.92rem] leading-relaxed text-[var(--ink)]">
+              <h4 className="m-0 text-[1.02rem] font-extrabold leading-snug">
+                {postDraft.title}
+              </h4>
+              <p className="m-0 whitespace-pre-wrap font-semibold text-[var(--ink)]">
+                {postDraft.caption}
+              </p>
+              <div className="grid gap-2" aria-label="正文段落预览">
+                {postDraft.sections.map((section, index) => (
+                  <p className="m-0 whitespace-pre-wrap" key={index}>
+                    {section}
+                  </p>
+                ))}
+              </div>
+              {publishTags.length ? (
+                <p className="m-0 flex flex-wrap gap-1.5 text-[0.82rem] font-bold text-[var(--red-strong)]">
+                  {publishTags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </p>
+              ) : null}
+            </article>
+          </section>
 
-          <label className={labelClass}>
-            <span>正文开场</span>
-            <textarea
-              className={`${fieldClass} min-h-[96px] resize-y`}
-              onChange={(event) => onDraftChange({ caption: event.target.value })}
-              rows={4}
-              value={postDraft.caption}
-            />
-          </label>
+          <section className="grid gap-3" aria-label="编辑发布内容">
+            <h3 className="m-0 text-[0.9rem] font-extrabold text-[var(--ink)]">
+              编辑内容
+            </h3>
 
-          <label className={labelClass}>
-            <span>正文结构</span>
-            <textarea
-              className={`${fieldClass} min-h-[132px] resize-y`}
-              onBlur={(event) =>
-                onDraftChange({
-                  sections: event.target.value
-                    .split("\n")
-                    .map((section) => section.trim())
-                    .filter(Boolean),
-                })
-              }
-              onChange={(event) =>
-                setSectionsText(event.target.value)
-              }
-              rows={6}
-              value={sectionsText}
-            />
-          </label>
+            <label className={labelClass}>
+              <span>标题</span>
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  onDraftChange({ title: event.target.value })
+                }
+                value={postDraft.title}
+              />
+            </label>
 
-          <label className={labelClass}>
-            <span>标签</span>
-            <input
-              className={fieldClass}
-              onBlur={(event) =>
-                onDraftChange({
-                  tags: event.target.value
-                    .split(/\s+/)
-                    .map((tag) => tag.replace(/^#+/, "").trim())
-                    .filter(Boolean),
-                })
-              }
-              onChange={(event) =>
-                setTagsText(event.target.value)
-              }
-              value={tagsText}
-            />
-          </label>
+            <label className={labelClass}>
+              <span>封面文案</span>
+              <input
+                className={fieldClass}
+                onChange={(event) =>
+                  onDraftChange({ coverLine: event.target.value })
+                }
+                value={postDraft.coverLine}
+              />
+            </label>
 
-          <label className={labelClass}>
-            <span>封面提示</span>
-            <textarea
-              className={`${fieldClass} min-h-[112px] resize-y`}
-              onChange={(event) => onDraftChange({ imagePrompt: event.target.value })}
-              rows={5}
-              value={postDraft.imagePrompt}
-            />
-          </label>
+            <label className={labelClass}>
+              <span>开场文案</span>
+              <textarea
+                className={`${fieldClass} min-h-[88px] resize-y`}
+                onChange={(event) =>
+                  onDraftChange({ caption: event.target.value })
+                }
+                rows={3}
+                value={postDraft.caption}
+              />
+            </label>
+
+            <label className={labelClass}>
+              <span>正文段落</span>
+              <textarea
+                className={`${fieldClass} min-h-[120px] resize-y`}
+                onBlur={(event) =>
+                  onDraftChange({
+                    sections: event.target.value
+                      .split("\n")
+                      .map((section) => section.trim())
+                      .filter(Boolean),
+                  })
+                }
+                onChange={(event) => setSectionsText(event.target.value)}
+                rows={5}
+                value={sectionsText}
+              />
+            </label>
+
+            <label className={labelClass}>
+              <span>标签</span>
+              <input
+                className={fieldClass}
+                onBlur={(event) =>
+                  onDraftChange({
+                    tags: event.target.value
+                      .split(/\s+/)
+                      .map((tag) => tag.replace(/^#+/, "").trim())
+                      .filter(Boolean),
+                  })
+                }
+                onChange={(event) => setTagsText(event.target.value)}
+                value={tagsText}
+              />
+            </label>
+
+            <details className="rounded-md border border-[var(--line)] bg-[var(--surface-tint)]">
+              <summary className="cursor-pointer px-3 py-2 text-[0.82rem] font-extrabold text-[var(--ink)]">
+                封面生成参数
+              </summary>
+              <label className={`${labelClass} px-3 pb-3`}>
+                <span>图片提示词</span>
+                <textarea
+                  className={`${fieldClass} min-h-[104px] resize-y`}
+                  onChange={(event) =>
+                    onDraftChange({ imagePrompt: event.target.value })
+                  }
+                  rows={4}
+                  value={postDraft.imagePrompt}
+                />
+              </label>
+            </details>
+          </section>
         </div>
       ) : (
         <div className="grid min-h-[220px] place-items-center rounded-lg border border-dashed border-[var(--line)] bg-[var(--surface-tint)] p-5 text-center">

@@ -15,8 +15,11 @@ import {
 } from '../model-provider/openai-compatible';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
+import type { CreateAdminModelApiKeyDto } from './dto/create-admin-model-api-key.dto';
+import type { UpdateAdminModelApiKeyDto } from './dto/update-admin-model-api-key.dto';
 import {
   adminModelConfigTypes,
+  type AdminModelApiKeyView,
   type AdminModelConnectionTestResult,
   type AdminModelRuntimeConfig,
   type AdminModelConfigType,
@@ -31,6 +34,16 @@ type StoredModelConfig = {
   updatedAt: Date;
 };
 
+type StoredModelApiKey = {
+  apiKeyEncrypted: string;
+  createdAt: Date;
+  enabled: boolean;
+  id: string;
+  name: string;
+  type: string;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class AdminModelConfigsService {
   constructor(
@@ -40,11 +53,22 @@ export class AdminModelConfigsService {
   ) {}
 
   async list(): Promise<AdminModelConfigView[]> {
-    const configs = await this.prisma.adminModelConfig.findMany();
+    const [configs, apiKeys] = await Promise.all([
+      this.prisma.adminModelConfig.findMany(),
+      this.prisma.adminModelApiKey.findMany({
+        orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
+      }),
+    ]);
     const byType = new Map(configs.map((config) => [config.type, config]));
+    const keysByType = new Map<AdminModelConfigType, StoredModelApiKey[]>();
+
+    apiKeys.forEach((apiKey) => {
+      const keyType = this.parseType(apiKey.type);
+      keysByType.set(keyType, [...(keysByType.get(keyType) ?? []), apiKey]);
+    });
 
     return adminModelConfigTypes.map((type) =>
-      this.toView(type, byType.get(type) ?? null),
+      this.toView(type, byType.get(type) ?? null, keysByType.get(type) ?? []),
     );
   }
 
@@ -82,7 +106,11 @@ export class AdminModelConfigsService {
       },
       where: { type: modelType },
     });
-    const view = this.toView(modelType, saved);
+    const apiKeys = await this.prisma.adminModelApiKey.findMany({
+      orderBy: { createdAt: 'asc' },
+      where: { type: modelType },
+    });
+    const view = this.toView(modelType, saved, apiKeys);
 
     await this.auditLogs.record({
       action: 'model_config.saved',
@@ -99,14 +127,139 @@ export class AdminModelConfigsService {
     return view;
   }
 
+  async addApiKey(
+    type: string,
+    dto: CreateAdminModelApiKeyDto,
+  ): Promise<AdminModelApiKeyView> {
+    const modelType = this.parseType(type);
+    const name = dto.name.trim();
+    const apiKey = dto.apiKey.trim();
+
+    if (!name || !apiKey) {
+      throw new BadRequestException('name and apiKey are required.');
+    }
+
+    const created = await this.prisma.adminModelApiKey.create({
+      data: {
+        apiKeyEncrypted: this.encrypt(apiKey),
+        enabled: dto.enabled ?? true,
+        name,
+        type: modelType,
+      },
+    });
+    const view = this.toApiKeyView(created);
+
+    await this.auditLogs.record({
+      action: 'model_config.api_key_created',
+      metadata: {
+        enabled: view.enabled,
+        name: view.name,
+      },
+      targetKey: modelType,
+      targetType: 'model_config',
+    });
+
+    return view;
+  }
+
+  async updateApiKey(
+    type: string,
+    keyId: string,
+    dto: UpdateAdminModelApiKeyDto,
+  ): Promise<AdminModelApiKeyView> {
+    const modelType = this.parseType(type);
+    await this.ensureApiKeyBelongsToType(modelType, keyId);
+
+    const data: {
+      apiKeyEncrypted?: string;
+      enabled?: boolean;
+      name?: string;
+    } = {};
+    const nextName = dto.name?.trim();
+    const nextApiKey = dto.apiKey?.trim();
+
+    if (dto.name !== undefined) {
+      if (!nextName) {
+        throw new BadRequestException('name is required.');
+      }
+      data.name = nextName;
+    }
+
+    if (dto.apiKey !== undefined) {
+      if (!nextApiKey) {
+        throw new BadRequestException('apiKey is required.');
+      }
+      data.apiKeyEncrypted = this.encrypt(nextApiKey);
+    }
+
+    if (dto.enabled !== undefined) {
+      data.enabled = dto.enabled;
+    }
+
+    const updated = await this.prisma.adminModelApiKey.update({
+      data,
+      where: { id: keyId },
+    });
+    const view = this.toApiKeyView(updated);
+
+    await this.auditLogs.record({
+      action: 'model_config.api_key_updated',
+      metadata: {
+        enabled: view.enabled,
+        keyId,
+        name: view.name,
+        rotated: Boolean(nextApiKey),
+      },
+      targetKey: modelType,
+      targetType: 'model_config',
+    });
+
+    return view;
+  }
+
+  async deleteApiKey(
+    type: string,
+    keyId: string,
+  ): Promise<AdminModelApiKeyView> {
+    const modelType = this.parseType(type);
+    await this.ensureApiKeyBelongsToType(modelType, keyId);
+    const deleted = await this.prisma.adminModelApiKey.delete({
+      where: { id: keyId },
+    });
+    const view = this.toApiKeyView(deleted);
+
+    await this.auditLogs.record({
+      action: 'model_config.api_key_deleted',
+      metadata: {
+        keyId,
+        name: view.name,
+      },
+      targetKey: modelType,
+      targetType: 'model_config',
+    });
+
+    return view;
+  }
+
   async getRuntimeConfig(type: string): Promise<AdminModelRuntimeConfig> {
     const modelType = this.parseType(type);
-    const config = await this.prisma.adminModelConfig.findUnique({
-      where: { type: modelType },
-    });
-    const apiKey = config?.apiKeyEncrypted
-      ? this.decrypt(config.apiKeyEncrypted)
-      : null;
+    const [config, enabledKey, apiKeys] = await Promise.all([
+      this.prisma.adminModelConfig.findUnique({
+        where: { type: modelType },
+      }),
+      this.prisma.adminModelApiKey.findFirst({
+        orderBy: { createdAt: 'asc' },
+        where: { enabled: true, type: modelType },
+      }),
+      this.prisma.adminModelApiKey.findMany({
+        where: { type: modelType },
+      }),
+    ]);
+    const apiKey = enabledKey?.apiKeyEncrypted
+      ? this.decrypt(enabledKey.apiKeyEncrypted)
+      : apiKeys.length === 0 && config?.apiKeyEncrypted
+        ? this.decrypt(config.apiKeyEncrypted)
+        : null;
 
     if (!config?.baseUrl?.trim() || !config.modelName.trim() || !apiKey) {
       throw new BadRequestException(
@@ -202,12 +355,20 @@ export class AdminModelConfigsService {
   private toView(
     type: AdminModelConfigType,
     config: StoredModelConfig | null,
+    apiKeys: StoredModelApiKey[],
   ): AdminModelConfigView {
+    const apiKeyViews = apiKeys.map((apiKey) => this.toApiKeyView(apiKey));
+    const firstKeyPreview =
+      apiKeyViews.find((apiKey) => apiKey.enabled)?.apiKeyPreview ??
+      apiKeyViews[0]?.apiKeyPreview ??
+      null;
+
     if (!config) {
       return {
-        apiKeyPreview: null,
+        apiKeyPreview: firstKeyPreview,
+        apiKeys: apiKeyViews,
         baseUrl: '',
-        hasApiKey: false,
+        hasApiKey: apiKeyViews.length > 0,
         modelName: '',
         type,
         updatedAt: null,
@@ -217,13 +378,39 @@ export class AdminModelConfigsService {
     return {
       apiKeyPreview: config.apiKeyEncrypted
         ? this.previewApiKey(config.apiKeyEncrypted)
-        : null,
+        : firstKeyPreview,
+      apiKeys: apiKeyViews,
       baseUrl: config.baseUrl,
-      hasApiKey: Boolean(config.apiKeyEncrypted),
+      hasApiKey: Boolean(config.apiKeyEncrypted) || apiKeyViews.length > 0,
       modelName: config.modelName,
       type,
       updatedAt: config.updatedAt,
     };
+  }
+
+  private toApiKeyView(apiKey: StoredModelApiKey): AdminModelApiKeyView {
+    return {
+      apiKeyPreview: this.previewApiKey(apiKey.apiKeyEncrypted),
+      createdAt: apiKey.createdAt,
+      enabled: apiKey.enabled,
+      id: apiKey.id,
+      name: apiKey.name,
+      type: this.parseType(apiKey.type),
+      updatedAt: apiKey.updatedAt,
+    };
+  }
+
+  private async ensureApiKeyBelongsToType(
+    type: AdminModelConfigType,
+    keyId: string,
+  ) {
+    const apiKey = await this.prisma.adminModelApiKey.findFirst({
+      where: { id: keyId, type },
+    });
+
+    if (!apiKey) {
+      throw new BadRequestException('API Key not found.');
+    }
   }
 
   private encrypt(value: string): string {

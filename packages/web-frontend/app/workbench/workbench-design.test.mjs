@@ -78,7 +78,10 @@ test("successful primary actions refresh history as best effort", () => {
   const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
 
   assert.match(source, /async function refreshConversationRecordsSafely/);
-  assert.doesNotMatch(source, /await refreshConversationRecords\(accessToken\);/);
+  assert.doesNotMatch(
+    source,
+    /await refreshConversationRecords\(accessToken\);/,
+  );
 });
 
 test("publish package image fields are mapped and restored", () => {
@@ -118,8 +121,14 @@ test("publish package draft signature excludes generation timestamp metadata", (
 
   assert.doesNotMatch(signatureSource, /imageGeneratedAt/);
   assert.match(utils, /imageGeneratedAt: draft\.imageGeneratedAt/);
-  assert.match(utils, /imageGeneratedAt: optionalString\(snapshot\.imageGeneratedAt\)/);
-  assert.match(utils, /imageGeneratedAt: optionalString\(value\.imageGeneratedAt\)/);
+  assert.match(
+    utils,
+    /imageGeneratedAt: optionalString\(snapshot\.imageGeneratedAt\)/,
+  );
+  assert.match(
+    utils,
+    /imageGeneratedAt: optionalString\(value\.imageGeneratedAt\)/,
+  );
 });
 
 test("post editor presents a focused publish package with image actions", () => {
@@ -127,6 +136,10 @@ test("post editor presents a focused publish package with image actions", () => 
   const preview = readWorkbenchFile("post-cover-preview.tsx");
 
   assert.match(editor, /发布包/);
+  assert.match(editor, /最终笔记/);
+  assert.match(editor, /正文段落/);
+  assert.match(editor, /封面生成参数/);
+  assert.doesNotMatch(editor, /正文结构/);
   assert.match(editor, /PostCoverPreview/);
   assert.match(editor, /onGenerateImage/);
   assert.match(editor, /onDownloadImage/);
@@ -163,7 +176,10 @@ test("page merges generated image fields without overwriting local copy", () => 
   const mergeEnd = source.indexOf("\nexport default function Home", mergeStart);
   const mergeSource = source.slice(mergeStart, mergeEnd);
   const generationGuardStart = source.indexOf("if (generatingImageDraftId)");
-  const generationGuardEnd = source.indexOf("if (!postDraft)", generationGuardStart);
+  const generationGuardEnd = source.indexOf(
+    "if (!postDraft)",
+    generationGuardStart,
+  );
   const generationGuardSource = source.slice(
     generationGuardStart,
     generationGuardEnd,
@@ -190,13 +206,22 @@ test("page merges generated image fields without overwriting local copy", () => 
     generationGuardSource,
     /setStatusMessage\("已有封面图正在生成，请稍等。"\);[\s\S]*return;/,
   );
-  assert.match(source, /isGenerating: isGenerating \|\| Boolean\(generatingImageDraftId\)/);
+  assert.match(
+    source,
+    /isGenerating: isGenerating \|\| Boolean\(generatingImageDraftId\)/,
+  );
   assert.match(source, /草稿同步失败，封面图生成未开始。/);
-  assert.match(source, /api\.postDrafts\.generateImage\(\s*accessToken,\s*draftId,\s*\{\s*\}/);
+  assert.match(
+    source,
+    /api\.postDrafts\.generateImage\(\s*accessToken,\s*draftId,\s*\{\s*\}/,
+  );
   assert.match(source, /await flushPostDraftPatch\(\)/);
   assert.match(source, /onGenerateImage=\{generateImage\}/);
   assert.match(source, /onDownloadImage=\{downloadImage\}/);
-  assert.match(source, /isGeneratingImage=\{postDraft\?\.id === generatingImageDraftId\}/);
+  assert.match(
+    source,
+    /isGeneratingImage=\{postDraft\?\.id === generatingImageDraftId\}/,
+  );
 });
 
 test("login page supports Google email sign-in", () => {

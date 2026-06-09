@@ -118,7 +118,18 @@ export type UpdateAdminTaskInput = Partial<
 
 export type AdminModelConfigType = "text" | "image";
 
+export type AdminModelApiKey = {
+  apiKeyPreview: string | null;
+  createdAt: string;
+  enabled: boolean;
+  id: string;
+  name: string;
+  type: AdminModelConfigType;
+  updatedAt: string;
+};
+
 export type AdminModelConfig = {
+  apiKeys: AdminModelApiKey[];
   apiKeyPreview: string | null;
   baseUrl: string;
   hasApiKey: boolean;
@@ -139,6 +150,18 @@ export type SaveModelConfigInput = {
   apiKey?: string;
   baseUrl: string;
   modelName: string;
+};
+
+export type CreateModelApiKeyInput = {
+  apiKey: string;
+  enabled?: boolean;
+  name: string;
+};
+
+export type UpdateModelApiKeyInput = {
+  apiKey?: string;
+  enabled?: boolean;
+  name?: string;
 };
 
 function isApiEnvelope(value: unknown): value is ApiEnvelope<unknown> {
@@ -258,6 +281,39 @@ export function saveModelConfig(
     body,
     method: "PUT",
   });
+}
+
+export function createModelApiKey(
+  type: AdminModelConfigType,
+  body: CreateModelApiKeyInput,
+) {
+  return request<AdminModelApiKey>(`/admin/model-configs/${type}/api-keys`, {
+    body,
+    method: "POST",
+  });
+}
+
+export function updateModelApiKey(
+  type: AdminModelConfigType,
+  keyId: string,
+  body: UpdateModelApiKeyInput,
+) {
+  return request<AdminModelApiKey>(
+    `/admin/model-configs/${type}/api-keys/${keyId}`,
+    {
+      body,
+      method: "PATCH",
+    },
+  );
+}
+
+export function deleteModelApiKey(type: AdminModelConfigType, keyId: string) {
+  return request<AdminModelApiKey>(
+    `/admin/model-configs/${type}/api-keys/${keyId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function testModelConfigConnection(type: AdminModelConfigType) {

@@ -15,11 +15,13 @@ import {
   InputNumber,
   Layout,
   Menu,
+  Popconfirm,
   Progress,
   Segmented,
   Select,
   Space,
   Statistic,
+  Switch,
   Table,
   Tag,
   Timeline,
@@ -31,6 +33,7 @@ import {
   BellOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
+  DeleteOutlined,
   ExportOutlined,
   KeyOutlined,
   MenuOutlined,
@@ -43,12 +46,16 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  createModelApiKey,
   createAdminProject,
+  deleteModelApiKey,
   getApiErrorMessage,
   loadModelConfigs,
   loadProjectManagementDashboard,
   saveModelConfig,
+  updateModelApiKey,
   type AdminDashboard,
+  type AdminModelApiKey,
   type AdminModelConfig,
   type AdminModelConfigType,
   type AdminProjectPriority,
@@ -108,23 +115,36 @@ const modelConfigLabels: Record<AdminModelConfigType, string> = {
 };
 
 type ModelConfigForm = {
-  apiKey: string;
   baseUrl: string;
   modelName: string;
 };
 
 type ModelConfigFormState = Record<AdminModelConfigType, ModelConfigForm>;
+type ModelApiKeyForm = {
+  apiKey: string;
+  name: string;
+};
+type ModelApiKeyFormState = Record<AdminModelConfigType, ModelApiKeyForm>;
 
 const emptyModelConfigForm: ModelConfigFormState = {
   image: {
-    apiKey: "",
     baseUrl: "",
     modelName: "",
   },
   text: {
-    apiKey: "",
     baseUrl: "",
     modelName: "",
+  },
+};
+
+const emptyModelApiKeyForm: ModelApiKeyFormState = {
+  image: {
+    apiKey: "",
+    name: "",
+  },
+  text: {
+    apiKey: "",
+    name: "",
   },
 };
 
@@ -192,7 +212,6 @@ function createModelConfigFormState(configs: AdminModelConfig[]) {
       const config = configs.find((item) => item.type === type);
 
       formState[type] = {
-        apiKey: "",
         baseUrl: config?.baseUrl ?? "",
         modelName: config?.modelName ?? "",
       };
@@ -205,6 +224,14 @@ function createModelConfigFormState(configs: AdminModelConfig[]) {
     },
   );
 }
+
+const activeMenuTitles: Record<NavigationKey, string> = {
+  members: "成员管理",
+  overview: "项目总览",
+  projects: "项目列表",
+  settings: "模型配置",
+  tasks: "任务看板",
+};
 
 export default function App() {
   return (
@@ -240,6 +267,12 @@ function AdminWorkspace() {
   });
   const [exportStatus, setExportStatus] = useState<ExportStatus>("idle");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
+  const [creatingApiKey, setCreatingApiKey] =
+    useState<AdminModelConfigType | null>(null);
+  const [mutatingApiKeyId, setMutatingApiKeyId] = useState<string | null>(null);
+  const [modelApiKeyForms, setModelApiKeyForms] =
+    useState<ModelApiKeyFormState>(emptyModelApiKeyForm);
   const [modelConfigForms, setModelConfigForms] =
     useState<ModelConfigFormState>(emptyModelConfigForm);
   const [modelConfigState, setModelConfigState] = useState<ModelConfigState>({
@@ -348,13 +381,56 @@ function AdminWorkspace() {
     }));
   };
 
+  const updateModelApiKeyForm = (
+    type: AdminModelConfigType,
+    field: keyof ModelApiKeyForm,
+    value: string,
+  ) => {
+    setModelApiKeyForms((current) => ({
+      ...current,
+      [type]: {
+        ...current[type],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateModelConfigApiKeys = (
+    type: AdminModelConfigType,
+    updater: (apiKeys: AdminModelApiKey[]) => AdminModelApiKey[],
+  ) => {
+    setModelConfigState((current) => ({
+      ...current,
+      data: current.data.map((config) => {
+        if (config.type !== type) {
+          return config;
+        }
+
+        const oldApiKeys = config.apiKeys ?? [];
+        const apiKeys = updater(oldApiKeys);
+        const legacyPreview =
+          oldApiKeys.length === 0 && config.apiKeyPreview
+            ? config.apiKeyPreview
+            : null;
+        const firstVisibleKey =
+          apiKeys.find((apiKey) => apiKey.enabled) ?? apiKeys[0] ?? null;
+
+        return {
+          ...config,
+          apiKeyPreview: firstVisibleKey?.apiKeyPreview ?? legacyPreview,
+          apiKeys,
+          hasApiKey: Boolean(legacyPreview) || apiKeys.length > 0,
+        };
+      }),
+    }));
+  };
+
   const handleSaveModelConfig = async (type: AdminModelConfigType) => {
     const form = modelConfigForms[type];
 
     setSavingModelConfig(type);
     try {
       const saved = await saveModelConfig(type, {
-        apiKey: form.apiKey.trim() || undefined,
         baseUrl: form.baseUrl,
         modelName: form.modelName,
       });
@@ -375,7 +451,6 @@ function AdminWorkspace() {
       setModelConfigForms((current) => ({
         ...current,
         [type]: {
-          apiKey: "",
           baseUrl: saved.baseUrl,
           modelName: saved.modelName,
         },
@@ -385,6 +460,76 @@ function AdminWorkspace() {
       setOperationNotice(getApiErrorMessage(error));
     } finally {
       setSavingModelConfig(null);
+    }
+  };
+
+  const handleCreateModelApiKey = async (type: AdminModelConfigType) => {
+    const form = modelApiKeyForms[type];
+    const name = form.name.trim();
+    const apiKey = form.apiKey.trim();
+
+    if (!name || !apiKey) {
+      setOperationNotice("请填写 API Key 名称和值");
+      return;
+    }
+
+    setCreatingApiKey(type);
+    try {
+      const created = await createModelApiKey(type, {
+        apiKey,
+        enabled: true,
+        name,
+      });
+
+      updateModelConfigApiKeys(type, (apiKeys) => [...apiKeys, created]);
+      setModelApiKeyForms((current) => ({
+        ...current,
+        [type]: { ...emptyModelApiKeyForm[type] },
+      }));
+      setOperationNotice(`${modelConfigLabels[type]} API Key 已新增`);
+    } catch (error) {
+      setOperationNotice(getApiErrorMessage(error));
+    } finally {
+      setCreatingApiKey(null);
+    }
+  };
+
+  const handleToggleModelApiKey = async (
+    type: AdminModelConfigType,
+    apiKey: AdminModelApiKey,
+    enabled: boolean,
+  ) => {
+    setMutatingApiKeyId(apiKey.id);
+    try {
+      const updated = await updateModelApiKey(type, apiKey.id, { enabled });
+
+      updateModelConfigApiKeys(type, (apiKeys) =>
+        apiKeys.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setOperationNotice(`${updated.name}已${enabled ? "启用" : "停用"}`);
+    } catch (error) {
+      setOperationNotice(getApiErrorMessage(error));
+    } finally {
+      setMutatingApiKeyId(null);
+    }
+  };
+
+  const handleDeleteModelApiKey = async (
+    type: AdminModelConfigType,
+    apiKey: AdminModelApiKey,
+  ) => {
+    setMutatingApiKeyId(apiKey.id);
+    try {
+      await deleteModelApiKey(type, apiKey.id);
+
+      updateModelConfigApiKeys(type, (apiKeys) =>
+        apiKeys.filter((item) => item.id !== apiKey.id),
+      );
+      setOperationNotice(`${apiKey.name}已删除`);
+    } catch (error) {
+      setOperationNotice(getApiErrorMessage(error));
+    } finally {
+      setMutatingApiKeyId(null);
     }
   };
 
@@ -612,6 +757,16 @@ function AdminWorkspace() {
 
   const navigation = (
     <Menu
+      inlineCollapsed={siderCollapsed}
+      items={menuItems}
+      mode="inline"
+      onClick={handleMenuClick}
+      selectedKeys={[activeMenu]}
+      theme="dark"
+    />
+  );
+  const mobileNavigation = (
+    <Menu
       items={menuItems}
       mode="inline"
       onClick={handleMenuClick}
@@ -622,10 +777,21 @@ function AdminWorkspace() {
 
   return (
     <Layout className="admin-shell">
-      <Sider className="admin-sider" width={232}>
-        <div className="admin-brand">
+      <Sider
+        className="admin-sider"
+        collapsible
+        collapsed={siderCollapsed}
+        collapsedWidth={72}
+        onCollapse={setSiderCollapsed}
+        width={siderCollapsed ? 72 : 232}
+      >
+        <div
+          className={`admin-brand ${
+            siderCollapsed ? "admin-brand-collapsed" : ""
+          }`}
+        >
           <span>R</span>
-          <div>
+          <div aria-hidden={siderCollapsed}>
             <strong>RedNote Admin</strong>
             <small>项目管理后台</small>
           </div>
@@ -644,7 +810,7 @@ function AdminWorkspace() {
             />
             <div>
               <Text className="section-kicker">项目总览</Text>
-              <Title level={2}>后台项目管理系统</Title>
+              <Title level={2}>{activeMenuTitles[activeMenu]}</Title>
             </div>
           </div>
           <Space className="admin-header-actions" size={12} wrap>
@@ -921,6 +1087,10 @@ function AdminWorkspace() {
             <div className="model-config-grid">
               {modelConfigTypes.map((type) => {
                 const config = modelConfigByType.get(type);
+                const apiKeys = config?.apiKeys ?? [];
+                const activeRuntimeKeyId = apiKeys.find(
+                  (apiKey) => apiKey.enabled,
+                )?.id;
                 const form = modelConfigForms[type];
                 const saveDisabled =
                   modelConfigLoading ||
@@ -965,20 +1135,6 @@ function AdminWorkspace() {
                           value={form.modelName}
                         />
                       </label>
-                      <label>
-                        <Text strong>API Key</Text>
-                        <Input.Password
-                          onChange={(event) =>
-                            updateModelConfigForm(
-                              type,
-                              "apiKey",
-                              event.target.value,
-                            )
-                          }
-                          placeholder="留空表示不更新"
-                          value={form.apiKey}
-                        />
-                      </label>
                     </div>
 
                     <Flex
@@ -989,9 +1145,9 @@ function AdminWorkspace() {
                       wrap
                     >
                       <Text type="secondary">
-                        {config?.hasApiKey
-                          ? `已保存：${config.apiKeyPreview}`
-                          : "尚未保存 API Key"}
+                        {config?.baseUrl && config?.modelName
+                          ? "模型连接信息已配置"
+                          : "请先配置模型连接信息"}
                       </Text>
                       <Button
                         disabled={saveDisabled}
@@ -1003,6 +1159,107 @@ function AdminWorkspace() {
                         保存配置
                       </Button>
                     </Flex>
+
+                    <div className="api-key-panel">
+                      <Flex align="center" justify="space-between" wrap>
+                        <Text strong>API Key</Text>
+                        <Tag>{apiKeys.length} 个</Tag>
+                      </Flex>
+
+                      <div className="api-key-create-row">
+                        <Input
+                          onChange={(event) =>
+                            updateModelApiKeyForm(
+                              type,
+                              "name",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Key 名称，例如：主账号"
+                          value={modelApiKeyForms[type].name}
+                        />
+                        <Input.Password
+                          onChange={(event) =>
+                            updateModelApiKeyForm(
+                              type,
+                              "apiKey",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="输入新的 API Key"
+                          value={modelApiKeyForms[type].apiKey}
+                        />
+                        <Button
+                          disabled={
+                            !modelApiKeyForms[type].name.trim() ||
+                            !modelApiKeyForms[type].apiKey.trim()
+                          }
+                          icon={<PlusOutlined />}
+                          loading={creatingApiKey === type}
+                          onClick={() => void handleCreateModelApiKey(type)}
+                          type="primary"
+                        >
+                          新增 API Key
+                        </Button>
+                      </div>
+
+                      <div className="api-key-list">
+                        {apiKeys.length ? (
+                          apiKeys.map((apiKey) => (
+                            <div className="api-key-item" key={apiKey.id}>
+                              <div className="api-key-item-main">
+                                <Text strong>{apiKey.name}</Text>
+                                {apiKey.id === activeRuntimeKeyId ? (
+                                  <Tag color="processing">运行使用</Tag>
+                                ) : null}
+                                <Text code>{apiKey.apiKeyPreview}</Text>
+                              </div>
+                              <Space size={8}>
+                                <Switch
+                                  checked={apiKey.enabled}
+                                  checkedChildren="启用"
+                                  disabled={mutatingApiKeyId === apiKey.id}
+                                  loading={mutatingApiKeyId === apiKey.id}
+                                  onChange={(checked) =>
+                                    void handleToggleModelApiKey(
+                                      type,
+                                      apiKey,
+                                      checked,
+                                    )
+                                  }
+                                  unCheckedChildren="停用"
+                                />
+                                <Popconfirm
+                                  cancelText="取消"
+                                  okText="删除"
+                                  onConfirm={() =>
+                                    void handleDeleteModelApiKey(type, apiKey)
+                                  }
+                                  title="删除 API Key"
+                                >
+                                  <Button
+                                    aria-label={`删除 ${apiKey.name}`}
+                                    danger
+                                    disabled={mutatingApiKeyId === apiKey.id}
+                                    icon={<DeleteOutlined />}
+                                  />
+                                </Popconfirm>
+                              </Space>
+                            </div>
+                          ))
+                        ) : (
+                          <Empty
+                            description="还没有 API Key"
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          />
+                        )}
+                        {apiKeys.length && !activeRuntimeKeyId ? (
+                          <Text type="warning">
+                            当前没有启用的 API Key，模型调用会失败。
+                          </Text>
+                        ) : null}
+                      </div>
+                    </div>
                   </Card>
                 );
               })}
@@ -1064,7 +1321,7 @@ function AdminWorkspace() {
         size="large"
         title="后台导航"
       >
-        {navigation}
+        {mobileNavigation}
       </Drawer>
 
       <Drawer
