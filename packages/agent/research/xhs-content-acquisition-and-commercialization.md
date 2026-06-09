@@ -87,9 +87,51 @@ Implemented in `packages/agent/src/xhs-analysis`:
   pillars, top posts, and next actions.
 - `buildXhsGenerationBrief`: converts reference post analyses into prompt
   additions and recommended image-text sections without copying source content.
+- `buildXhsImageTextPublishPackage`: converts an idea, optional outline, and
+  reference brief into a Xiaohongshu-style publish package:
+  - title candidates
+  - cover page
+  - content pages
+  - summary page
+  - caption
+  - hashtags
+  - per-page image prompts
+  - copy-ready publish text
+  - publishing checklist
 
 Exports were added from `packages/agent/src/index.ts` so backend/product layers
 can import these primitives later.
+
+## Publish Package Contract
+
+The frontend should not treat image-text generation as one long assistant reply.
+The commercial product should persist and render a structured publish package.
+
+Recommended lifecycle:
+
+1. User enters an idea.
+2. Backend generates or receives three outlines.
+3. User edits and selects an outline.
+4. Backend analyzes selected reference notes or account samples with
+   `analyzeXhsPost` / `analyzeXhsAccount`.
+5. Backend builds a `XhsGenerationBrief`.
+6. Backend generates or refines final copy with the model, then normalizes the
+   result through `buildXhsImageTextPublishPackage`.
+7. Frontend renders pages as editable cards:
+   - cover
+   - P2-PN content pages
+   - summary/interact page
+   - caption and hashtags
+   - image prompt pack
+   - copy/export actions
+
+Storage should preserve the full publish package JSON so conversation restore
+can bring back the exact selected outline, generated pages, edits, caption,
+hashtags, and image prompts.
+
+The current agent package produces deterministic scaffold content. Production
+model output can replace or enrich page bodies later, but should keep the same
+contract so API consumers and saved conversation records stay stable.
 
 ## Future Product Work
 
@@ -113,6 +155,8 @@ can import these primitives later.
 - Show analysis results as account pillars, viral signals, and generation
   guidance.
 - Feed selected references into outline/post generation.
+- Render final output as a publish package, not as a prompt-like intermediate
+  structure.
 
 ### Admin
 
@@ -131,4 +175,3 @@ can import these primitives later.
   - copy/download/export actions
 
 Any UI changes should go through impeccable review before commit.
-
