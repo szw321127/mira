@@ -1,4 +1,8 @@
-export type AdminAuditTargetType = 'model_config' | 'project' | 'task';
+export type AdminAuditTargetType =
+  | 'content_provider'
+  | 'model_config'
+  | 'project'
+  | 'task';
 
 export type AdminAuditLogRecordInput = {
   action: string;

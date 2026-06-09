@@ -153,6 +153,30 @@ model AdminModelApiKey {
   @@index([type, enabled, createdAt])
 }
 
+model AdminContentProviderConfig {
+  id                 String   @id @default(cuid())
+  type               String   @unique
+  name               String
+  baseUrl            String
+  enabled            Boolean  @default(false)
+  rateLimitPerMinute Int?
+  complianceNote     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model AdminContentProviderApiKey {
+  id              String   @id @default(cuid())
+  type            String
+  name            String
+  apiKeyEncrypted String
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type, enabled, createdAt])
+}
+
 model AdminProject {
   id                  String   @id @default(cuid())
   key                 String   @unique
