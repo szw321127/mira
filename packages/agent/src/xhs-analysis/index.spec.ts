@@ -3,6 +3,7 @@ import {
   analyzeXhsPost,
   auditXhsImageTextPublishPackage,
   buildXhsCommercialWorkflow,
+  buildXhsOutlineCandidates,
   buildXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
   normalizeXhsImportedAccount,
@@ -110,6 +111,52 @@ describe('xhs analysis primitives', () => {
     );
     expect(brief.recommendedSections.length).toBeGreaterThanOrEqual(4);
     expect(brief.sourcePatterns[0]).toContain('高收藏价值');
+  });
+
+  it('builds three editable Xiaohongshu outline candidates from an idea and brief', () => {
+    const brief = buildXhsGenerationBrief({
+      idea: '给初入职场女生做低预算通勤穿搭',
+      references: [
+        analyzeXhsPost({
+          title: '普通女生也能复制的通勤胶囊衣橱',
+          content:
+            '我用 12 件单品搭了 21 套通勤 look，省钱是真的，早上不用纠结也是真的。',
+          tags: ['通勤穿搭', '胶囊衣橱', '普通女生'],
+          images: [
+            'https://example.com/cover.jpg',
+            'https://example.com/page-2.jpg',
+            'https://example.com/page-3.jpg',
+          ],
+          metrics: { likes: '2.4万', collects: '1.1万', comments: 342 },
+        }),
+      ],
+    });
+
+    const candidates = buildXhsOutlineCandidates({
+      audience: '初入职场女生',
+      brief,
+      idea: '给初入职场女生做低预算通勤穿搭',
+    });
+
+    expect(candidates).toHaveLength(3);
+    expect(candidates.map((candidate) => candidate.strategy)).toEqual([
+      'pain-point',
+      'step-by-step',
+      'checklist',
+    ]);
+    expect(candidates.every((candidate) => candidate.outline.length >= 4)).toBe(
+      true,
+    );
+    expect(
+      candidates.every((candidate) => candidate.estimatedPageCount >= 4),
+    ).toBe(true);
+    expect(candidates[0]).toMatchObject({
+      audience: '初入职场女生',
+      idea: '给初入职场女生做低预算通勤穿搭',
+    });
+    expect(candidates[0]?.outline[0]).toContain('痛点');
+    expect(candidates[1]?.outline[1]).toContain('步骤');
+    expect(candidates[2]?.selectionReason).toContain('收藏');
   });
 
   it('builds a Xiaohongshu image-text publish package from an idea and reference brief', () => {

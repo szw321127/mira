@@ -92,6 +92,11 @@ Implemented in `packages/agent/src/xhs-analysis`:
   payload and its note list into `XhsAccountInput`, keeping source provenance.
 - `buildXhsGenerationBrief`: converts reference post analyses into prompt
   additions and recommended image-text sections without copying source content.
+- `buildXhsOutlineCandidates`: returns three editable Xiaohongshu image-text
+  outline candidates for one idea:
+  - pain-point
+  - step-by-step
+  - checklist
 - `buildXhsImageTextPublishPackage`: converts an idea, optional outline, and
   reference brief into a Xiaohongshu-style publish package:
   - title candidates
@@ -128,6 +133,7 @@ The product should separate acquisition from analysis:
   `normalizeXhsImportedAccount`.
 - Analysis layer: `analyzeXhsPost`, `analyzeXhsAccount`, and
   `buildXhsGenerationBrief`.
+- Outline layer: `buildXhsOutlineCandidates`.
 - Generation layer: `buildXhsImageTextPublishPackage` and
   `auditXhsImageTextPublishPackage`.
 
@@ -159,6 +165,26 @@ publishing. Those concerns belong to explicit adapters with user/admin
 configuration and compliance controls.
 
 ## Commercial Workflow Contract
+
+The recommended product flow is:
+
+1. User enters an idea.
+2. Backend runs `buildXhsOutlineCandidates` and returns exactly three editable
+   outline candidates.
+3. User edits or selects one candidate.
+4. Backend runs `buildXhsCommercialWorkflow` with the selected outline.
+5. Frontend renders the structured publish package and audit state.
+
+Recommended outline API shape:
+
+- `POST /xhs/outlines`
+- Request body:
+  - `idea`
+  - `audience`
+  - optional `brief` if references were already analyzed
+- Response body:
+  - wrapped in `{ code, data, msg }`
+  - `data.candidates` should contain three `XhsOutlineCandidate` records
 
 For the first backend integration, prefer one composed workflow endpoint before
 splitting the internals into many UI-facing calls:
