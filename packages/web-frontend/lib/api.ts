@@ -121,6 +121,136 @@ export type BackendConversationSummary = {
 
 export type XhsOutlineStrategy = "pain-point" | "step-by-step" | "checklist";
 
+export type XhsMetricValue = number | string | null | undefined;
+
+export type XhsPostMetrics = {
+  collects?: XhsMetricValue;
+  comments?: XhsMetricValue;
+  likes?: XhsMetricValue;
+  shares?: XhsMetricValue;
+};
+
+export type XhsPostInput = {
+  author?: string;
+  content?: string;
+  images?: string[];
+  metrics?: XhsPostMetrics;
+  publishTime?: string;
+  tags?: string[];
+  title: string;
+  url?: string;
+  videoUrl?: string;
+};
+
+export type XhsAccountInput = {
+  bio?: string;
+  followers?: XhsMetricValue;
+  name: string;
+  posts: XhsPostInput[];
+  url?: string;
+};
+
+export type XhsPostAnalysis = {
+  contentAngles: string[];
+  engagement: {
+    collects: number;
+    comments: number;
+    likes: number;
+    shares: number;
+    total: number;
+  };
+  format: "image-text" | "text" | "video";
+  generationHints: string[];
+  post: XhsPostInput;
+  tagPatterns: string[];
+  viralSignals: string[];
+};
+
+export type XhsAccountAnalysis = {
+  contentPillars: Array<{ count: number; name: string }>;
+  nextActions: string[];
+  snapshot: {
+    bio: string;
+    followers: number;
+    name: string;
+    postCount: number;
+    url?: string;
+  };
+  topPosts: XhsPostInput[];
+};
+
+export type XhsGenerationBrief = {
+  idea: string;
+  promptAdditions: string[];
+  recommendedSections: string[];
+  sourcePatterns: string[];
+};
+
+export type XhsImportedContentSource =
+  | "browser"
+  | "manual"
+  | "provider"
+  | "unknown";
+
+export type XhsImportedPostRecord = {
+  raw: Record<string, unknown>;
+  source: XhsImportedContentSource;
+  sourceId?: string;
+};
+
+export type XhsImportedAccountRecord = {
+  raw: Record<string, unknown>;
+  source: XhsImportedContentSource;
+  sourceId?: string;
+};
+
+export type XhsImportDroppedRecord = {
+  reason: "duplicate" | "missing-title";
+  source: XhsImportedContentSource;
+  sourceId?: string;
+};
+
+export type XhsImportSourceRecord = {
+  normalizedId: string;
+  rawId?: string;
+  source: XhsImportedContentSource;
+  sourceId?: string;
+  url?: string;
+};
+
+export type XhsImportedPostsNormalization = {
+  dropped: XhsImportDroppedRecord[];
+  posts: XhsPostInput[];
+  sources: XhsImportSourceRecord[];
+};
+
+export type XhsImportedAccountNormalization = {
+  account: XhsAccountInput;
+  dropped: XhsImportDroppedRecord[];
+  source: XhsImportSourceRecord;
+  sources: XhsImportSourceRecord[];
+};
+
+export type XhsProviderImportSummary = {
+  complianceNote: string;
+  endpoint: string;
+  rateLimitPerMinute: number | null;
+  sourceId: string;
+  type: "custom" | "tikhub";
+};
+
+export type ImportedXhsPostAnalysis = {
+  analysis: XhsPostAnalysis;
+  imported: XhsImportedPostsNormalization;
+  provider: XhsProviderImportSummary;
+};
+
+export type ImportedXhsAccountAnalysis = {
+  analysis: XhsAccountAnalysis;
+  imported: XhsImportedAccountNormalization;
+  provider: XhsProviderImportSummary;
+};
+
 export type XhsOutlineCandidate = {
   audience: string;
   estimatedPageCount: number;
@@ -498,20 +628,12 @@ export const api = {
     buildCommercialDraft: (
       token: string,
       body: {
-        account?: {
-          raw: Record<string, unknown>;
-          source: string;
-          sourceId?: string;
-        };
+        account?: XhsImportedAccountRecord;
         audience?: string;
         idea: string;
         outline: string[];
         pageCount?: number;
-        posts?: Array<{
-          raw: Record<string, unknown>;
-          source: string;
-          sourceId?: string;
-        }>;
+        posts?: XhsImportedPostRecord[];
         tone?: string;
       },
     ) =>
@@ -523,8 +645,38 @@ export const api = {
           token,
         },
       ),
-    buildOutlines: (token: string, body: { audience?: string; idea: string }) =>
+    buildOutlines: (
+      token: string,
+      body: { audience?: string; brief?: XhsGenerationBrief; idea: string },
+    ) =>
       request<XhsOutlineCandidate[]>("/xhs-analysis/outlines", {
+        body,
+        method: "POST",
+        token,
+      }),
+    importAccount: (
+      token: string,
+      body: {
+        limit?: number;
+        providerType?: XhsProviderImportSummary["type"];
+        url?: string;
+        userId?: string;
+      },
+    ) =>
+      request<ImportedXhsAccountAnalysis>("/xhs-analysis/accounts/import", {
+        body,
+        method: "POST",
+        token,
+      }),
+    importPost: (
+      token: string,
+      body: {
+        noteId?: string;
+        providerType?: XhsProviderImportSummary["type"];
+        url?: string;
+      },
+    ) =>
+      request<ImportedXhsPostAnalysis>("/xhs-analysis/posts/import", {
         body,
         method: "POST",
         token,

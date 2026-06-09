@@ -3,6 +3,8 @@ import type {
   BackendOutline,
   BackendPostDraft,
   BackendSavedDraft,
+  ImportedXhsAccountAnalysis,
+  ImportedXhsPostAnalysis,
 } from "@/lib/api";
 import type {
   ConversationRecord,
@@ -10,6 +12,8 @@ import type {
   OutlineGroup,
   OutlineTone,
   PostDraft,
+  ReferenceImportMode,
+  ReferenceImportState,
   SavedDraft,
   Snapshot,
   WorkspaceSnapshot,
@@ -93,6 +97,57 @@ function imageStatus(value: unknown): PostDraft["imageStatus"] {
   return value === "generating" || value === "ready" || value === "failed"
     ? value
     : "idle";
+}
+
+export function createEmptyReferenceImport(): ReferenceImportState {
+  return {
+    error: "",
+    importedAccount: null,
+    importedPosts: [],
+    mode: "post",
+    url: "",
+  };
+}
+
+function referenceImportMode(value: unknown): ReferenceImportMode {
+  return value === "account" ? "account" : "post";
+}
+
+function mapImportedPostAnalysis(value: unknown): ImportedXhsPostAnalysis | null {
+  if (!isRecord(value) || !isRecord(value.analysis) || !isRecord(value.imported)) {
+    return null;
+  }
+
+  return value as unknown as ImportedXhsPostAnalysis;
+}
+
+function mapImportedAccountAnalysis(
+  value: unknown,
+): ImportedXhsAccountAnalysis | null {
+  if (!isRecord(value) || !isRecord(value.analysis) || !isRecord(value.imported)) {
+    return null;
+  }
+
+  return value as unknown as ImportedXhsAccountAnalysis;
+}
+
+export function mapReferenceImportState(value: unknown): ReferenceImportState {
+  if (!isRecord(value)) return createEmptyReferenceImport();
+
+  return {
+    error: typeof value.error === "string" ? value.error : "",
+    importedAccount:
+      value.importedAccount === null || value.importedAccount === undefined
+        ? null
+        : mapImportedAccountAnalysis(value.importedAccount),
+    importedPosts: Array.isArray(value.importedPosts)
+      ? value.importedPosts
+          .map((post) => mapImportedPostAnalysis(post))
+          .filter((post): post is ImportedXhsPostAnalysis => Boolean(post))
+      : [],
+    mode: referenceImportMode(value.mode),
+    url: typeof value.url === "string" ? value.url : "",
+  };
 }
 
 export function getDraftSignature(draft: PostDraft) {
@@ -305,6 +360,7 @@ export function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
     lastSnapshot: mapUndoSnapshot(value.lastSnapshot),
     outlines,
     postDraft,
+    referenceImport: mapReferenceImportState(value.referenceImport),
     savedDrafts,
     seed: value.seed,
     selectedId: value.selectedId,
@@ -322,6 +378,7 @@ export function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
     draftStale: snapshot.draftStale,
     outlines: snapshot.outlines,
     postDraft: snapshot.postDraft,
+    referenceImport: snapshot.referenceImport,
     savedDrafts: snapshot.savedDrafts,
     seed: snapshot.seed,
     selectedId: snapshot.selectedId,

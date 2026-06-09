@@ -1,6 +1,21 @@
+import type {
+  ImportedXhsAccountAnalysis,
+  ImportedXhsPostAnalysis,
+} from "@/lib/api";
+
 export type OutlineTone = "guide" | "story" | "checklist";
 
 export type ImageStatus = "idle" | "generating" | "ready" | "failed";
+
+export type ReferenceImportMode = "account" | "post";
+
+export type ReferenceImportState = {
+  error: string;
+  importedAccount: ImportedXhsAccountAnalysis | null;
+  importedPosts: ImportedXhsPostAnalysis[];
+  mode: ReferenceImportMode;
+  url: string;
+};
 
 export type Outline = {
   id: string;
@@ -47,6 +62,7 @@ export type WorkspaceSnapshot = {
   lastSnapshot: Snapshot | null;
   outlines: Outline[];
   postDraft: PostDraft | null;
+  referenceImport: ReferenceImportState;
   savedDrafts: SavedDraft[];
   seed: string;
   selectedId: string;

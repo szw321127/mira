@@ -10,7 +10,11 @@ import {
   type AuthResponse,
   type AuthUser,
   type BackendConversation,
+  type ImportedXhsPostAnalysis,
   type XhsCommercialWorkflow,
+  type XhsGenerationBrief,
+  type XhsImportedAccountRecord,
+  type XhsImportedPostRecord,
   type XhsOutlineCandidate,
   type XhsOutlineStrategy,
 } from "@/lib/api";
@@ -18,11 +22,14 @@ import type {
   ConversationRecord,
   Outline,
   PostDraft,
+  ReferenceImportMode,
+  ReferenceImportState,
   SavedDraft,
   Snapshot,
   WorkspaceSnapshot,
 } from "./workbench/types";
 import {
+  createEmptyReferenceImport,
   createAutoSaveKey,
   dedupeSavedDrafts,
   formatAutoSaveTime,
@@ -40,6 +47,7 @@ import { ConversationRail } from "./workbench/conversation-rail";
 import { IdeaComposer } from "./workbench/idea-composer";
 import { OutlineWorkspace } from "./workbench/outline-workspace";
 import { PostEditor } from "./workbench/post-editor";
+import { ReferenceImporter } from "./workbench/reference-importer";
 
 type AuthMode = "login" | "register";
 
@@ -169,6 +177,101 @@ function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
   };
 }
 
+function uniqueReferenceParts(parts: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(parts.map((part) => part?.trim()).filter(Boolean) as string[]),
+  );
+}
+
+function getReferencePostKey(post: ImportedXhsPostAnalysis) {
+  return (
+    post.imported.sources[0]?.normalizedId ??
+    post.analysis.post.url ??
+    post.analysis.post.title
+  );
+}
+
+function dedupeImportedPostAnalyses(posts: ImportedXhsPostAnalysis[]) {
+  const seen = new Set<string>();
+
+  return posts.filter((post) => {
+    const key = getReferencePostKey(post);
+
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildReferenceBrief(
+  idea: string,
+  referenceImport: ReferenceImportState,
+): XhsGenerationBrief | undefined {
+  const accountAnalysis = referenceImport.importedAccount?.analysis;
+  const postAnalyses = referenceImport.importedPosts.map((post) => post.analysis);
+
+  if (!accountAnalysis && !postAnalyses.length) return undefined;
+
+  const sourcePatterns = uniqueReferenceParts([
+    ...(accountAnalysis?.contentPillars.map((pillar) => pillar.name) ?? []),
+    ...postAnalyses.flatMap((post) => post.viralSignals),
+    ...postAnalyses.flatMap((post) => post.tagPatterns.map((tag) => `#${tag}`)),
+  ]).slice(0, 8);
+  const promptAdditions = uniqueReferenceParts([
+    accountAnalysis
+      ? `参考账号「${accountAnalysis.snapshot.name || "同类账号"}」的内容定位：${accountAnalysis.contentPillars
+          .slice(0, 3)
+          .map((pillar) => pillar.name)
+          .join("、") || "保持垂直内容方向"}。`
+      : null,
+    ...postAnalyses.flatMap((post) => post.generationHints),
+  ]).slice(0, 6);
+  const recommendedSections = uniqueReferenceParts([
+    ...(accountAnalysis?.nextActions ?? []),
+    ...postAnalyses.flatMap((post) => post.contentAngles),
+  ]).slice(0, 5);
+
+  return {
+    idea: idea.trim(),
+    promptAdditions,
+    recommendedSections,
+    sourcePatterns,
+  };
+}
+
+function buildReferenceWorkflowInputs(
+  referenceImport: ReferenceImportState,
+): {
+  account?: XhsImportedAccountRecord;
+  posts?: XhsImportedPostRecord[];
+} {
+  const account = referenceImport.importedAccount
+    ? {
+        raw: referenceImport.importedAccount.imported
+          .account as unknown as Record<string, unknown>,
+        source: "provider" as const,
+        sourceId:
+          referenceImport.importedAccount.imported.source.normalizedId ??
+          referenceImport.importedAccount.provider.sourceId,
+      }
+    : undefined;
+  const posts = referenceImport.importedPosts.flatMap((importedPost) =>
+    importedPost.imported.posts.map((post, index) => ({
+      raw: post as unknown as Record<string, unknown>,
+      source: "provider" as const,
+      sourceId:
+        importedPost.imported.sources[index]?.normalizedId ??
+        importedPost.provider.sourceId,
+    })),
+  );
+
+  return {
+    ...(account ? { account } : {}),
+    ...(posts.length ? { posts } : {}),
+  };
+}
+
 function mergePostDraftImageFields(
   current: PostDraft,
   next: PostDraft,
@@ -200,8 +303,11 @@ export default function Home() {
   const [outlines, setOutlines] = useState<Outline[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
+  const [referenceImport, setReferenceImport] =
+    useState<ReferenceImportState>(() => createEmptyReferenceImport());
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isImportingReference, setIsImportingReference] = useState(false);
   const [generatingImageDraftId, setGeneratingImageDraftId] = useState<
     string | null
   >(null);
@@ -282,6 +388,7 @@ export default function Home() {
       lastSnapshot,
       outlines,
       postDraft,
+      referenceImport,
       savedDrafts,
       seed,
       selectedId,
@@ -294,6 +401,7 @@ export default function Home() {
       lastSnapshot,
       outlines,
       postDraft,
+      referenceImport,
       savedDrafts,
       seed,
       selectedId,
@@ -375,6 +483,7 @@ export default function Home() {
     if (!options.keepLastSnapshot) setLastSnapshot(null);
     setOutlines(nextOutlines);
     setPostDraft(nextPostDraft);
+    setReferenceImport(createEmptyReferenceImport());
     setSavedDrafts(nextSavedDrafts);
     setSeed(conversation.topic ?? "");
     setSelectedId(conversation.selectedOutlineId ?? nextOutlines[0]?.id ?? "");
@@ -395,6 +504,7 @@ export default function Home() {
     setLastSnapshot(snapshot.lastSnapshot);
     setOutlines(snapshot.outlines);
     setPostDraft(snapshot.postDraft);
+    setReferenceImport(snapshot.referenceImport);
     setSavedDrafts(snapshot.savedDrafts);
     setSeed(snapshot.seed);
     setSelectedId(snapshot.selectedId);
@@ -578,6 +688,7 @@ export default function Home() {
       setLastSnapshot(null);
       setOutlines([]);
       setPostDraft(null);
+      setReferenceImport(createEmptyReferenceImport());
       setSavedDrafts([]);
       setSeed("");
       setSelectedId("");
@@ -689,6 +800,7 @@ export default function Home() {
     try {
       const currentConversationId = await ensureConversation(accessToken);
       const candidates = await api.xhs.buildOutlines(accessToken, {
+        brief: buildReferenceBrief(seed, referenceImport),
         idea: seed,
       });
       const nextBatch = latestBatch + 1;
@@ -772,6 +884,7 @@ export default function Home() {
         idea: seed,
         outline: selectedOutline.points,
         pageCount: Math.min(Math.max(selectedOutline.points.length + 1, 4), 7),
+        ...buildReferenceWorkflowInputs(referenceImport),
       });
 
       setPostDraft(mapXhsWorkflowToPostDraft(workflow));
@@ -853,6 +966,110 @@ export default function Home() {
     } finally {
       setIsSavingDraft(false);
     }
+  }
+
+  function updateReferenceMode(mode: ReferenceImportMode) {
+    setReferenceImport((current) => ({
+      ...current,
+      error: "",
+      mode,
+    }));
+  }
+
+  function updateReferenceUrl(url: string) {
+    setReferenceImport((current) => ({
+      ...current,
+      error: "",
+      url,
+    }));
+  }
+
+  async function importReferenceSource() {
+    if (isImportingReference) return;
+
+    if (!accessToken) {
+      setStatusMessage("请先登录，再导入参考来源。");
+      return;
+    }
+
+    const url = referenceImport.url.trim();
+
+    if (!url) {
+      setReferenceImport((current) => ({
+        ...current,
+        error:
+          current.mode === "post"
+            ? "请先粘贴帖子 URL。"
+            : "请先粘贴账号 URL。",
+      }));
+      return;
+    }
+
+    setIsImportingReference(true);
+    setReferenceImport((current) => ({ ...current, error: "" }));
+
+    try {
+      if (referenceImport.mode === "post") {
+        const importedPost = await api.xhs.importPost(accessToken, { url });
+
+        setReferenceImport((current) => ({
+          ...current,
+          importedPosts: dedupeImportedPostAnalyses([
+            importedPost,
+            ...current.importedPosts,
+          ]).slice(0, 4),
+          url: "",
+        }));
+        setStatusMessage("已导入帖子参考，生成时会吸收爆点信号。");
+      } else {
+        const importedAccount = await api.xhs.importAccount(accessToken, {
+          limit: 12,
+          url,
+        });
+
+        setReferenceImport((current) => ({
+          ...current,
+          importedAccount,
+          url: "",
+        }));
+        setStatusMessage("已导入账号参考，生成时会参考账号定位。");
+      }
+
+      if (postDraft) setDraftStale(true);
+    } catch (error) {
+      const errorMessage = getWorkspaceErrorMessage(
+        error,
+        "参考来源导入失败，请检查后台内容来源配置。",
+      );
+
+      setReferenceImport((current) => ({
+        ...current,
+        error: errorMessage,
+      }));
+      setStatusMessage(errorMessage);
+    } finally {
+      setIsImportingReference(false);
+    }
+  }
+
+  function clearReferenceAccount() {
+    setReferenceImport((current) => ({
+      ...current,
+      importedAccount: null,
+    }));
+    if (postDraft) setDraftStale(true);
+    setStatusMessage("已移除账号参考。");
+  }
+
+  function removeReferencePost(key: string) {
+    setReferenceImport((current) => ({
+      ...current,
+      importedPosts: current.importedPosts.filter(
+        (post) => getReferencePostKey(post) !== key,
+      ),
+    }));
+    if (postDraft) setDraftStale(true);
+    setStatusMessage("已移除帖子参考。");
   }
 
   async function generateImage() {
@@ -1189,6 +1406,7 @@ export default function Home() {
         setLastSnapshot(null);
         setOutlines([]);
         setPostDraft(null);
+        setReferenceImport(createEmptyReferenceImport());
         setSavedDrafts([]);
         setSeed("");
         setSelectedId("");
@@ -1299,6 +1517,7 @@ export default function Home() {
     setLoginError("");
     setOutlines([]);
     setPostDraft(null);
+    setReferenceImport(createEmptyReferenceImport());
     setSavedDrafts([]);
     setSelectedId("");
     setStatusMessage("已退出登录。");
@@ -1537,6 +1756,16 @@ export default function Home() {
                   setStatusMessage("主题已更新，重新生成大纲后生效。");
                 }}
                 seed={seed}
+              />
+              <ReferenceImporter
+                isDisabled={isGenerating || isStartingConversation}
+                isImporting={isImportingReference}
+                onClearAccount={clearReferenceAccount}
+                onImport={() => void importReferenceSource()}
+                onModeChange={updateReferenceMode}
+                onRemovePost={removeReferencePost}
+                onUrlChange={updateReferenceUrl}
+                referenceImport={referenceImport}
               />
               <OutlineWorkspace
                 hasPostDraft={Boolean(postDraft)}

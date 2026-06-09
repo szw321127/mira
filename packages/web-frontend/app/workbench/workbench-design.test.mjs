@@ -240,3 +240,37 @@ test("login page supports Google email sign-in", () => {
   assert.ok(loginActionsStart !== -1);
   assert.ok(googleFallbackStart > loginActionsStart);
 });
+
+test("workbench imports Xiaohongshu reference sources into generation", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+  const types = readWorkbenchFile("types.ts");
+  const utils = readWorkbenchFile("workspace-utils.ts");
+  const importer = readWorkbenchFile("reference-importer.tsx");
+
+  assert.match(api, /importPost:/);
+  assert.match(api, /\/xhs-analysis\/posts\/import/);
+  assert.match(api, /importAccount:/);
+  assert.match(api, /\/xhs-analysis\/accounts\/import/);
+
+  assert.match(types, /ReferenceImportState/);
+  assert.match(types, /referenceImport: ReferenceImportState/);
+  assert.match(utils, /mapReferenceImportState/);
+  assert.match(utils, /referenceImport: mapReferenceImportState/);
+  assert.match(utils, /referenceImport: snapshot\.referenceImport/);
+
+  assert.match(importer, /参考来源/);
+  assert.match(importer, /帖子 URL/);
+  assert.match(importer, /账号 URL/);
+  assert.match(importer, /爆点信号/);
+  assert.match(importer, /账号定位/);
+
+  assert.match(source, /ReferenceImporter/);
+  assert.match(source, /referenceImport/);
+  assert.match(source, /api\.xhs\.importPost/);
+  assert.match(source, /api\.xhs\.importAccount/);
+  assert.match(source, /buildReferenceBrief/);
+  assert.match(source, /brief: buildReferenceBrief/);
+  assert.match(source, /buildReferenceWorkflowInputs/);
+  assert.match(source, /\.\.\.buildReferenceWorkflowInputs/);
+});
