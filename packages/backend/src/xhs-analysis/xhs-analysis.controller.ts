@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AnalyzeXhsAccountDto } from './dto/analyze-xhs-account.dto';
 import { AnalyzeXhsPostDto } from './dto/analyze-xhs-post.dto';
 import { BuildXhsCommercialWorkflowDto } from './dto/build-xhs-commercial-workflow.dto';
+import { BuildXhsGenerationBriefDto } from './dto/build-xhs-generation-brief.dto';
 import { BuildXhsOutlineCandidatesDto } from './dto/build-xhs-outline-candidates.dto';
 import { ImportXhsAccountDto } from './dto/import-xhs-account.dto';
 import { ImportXhsPostDto } from './dto/import-xhs-post.dto';
@@ -31,6 +32,11 @@ export class XhsAnalysisController {
   @Post('accounts/import')
   importAccount(@Body() dto: ImportXhsAccountDto) {
     return this.xhsAnalysisService.importAndAnalyzeAccount(dto);
+  }
+
+  @Post('generation-brief')
+  buildGenerationBrief(@Body() dto: BuildXhsGenerationBriefDto) {
+    return this.xhsAnalysisService.buildGenerationBrief(dto);
   }
 
   @Post('outlines')

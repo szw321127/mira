@@ -3,12 +3,14 @@ import {
   analyzeXhsAccount,
   analyzeXhsPost,
   buildXhsCommercialWorkflow,
+  buildXhsGenerationBrief,
   buildXhsOutlineCandidates,
   normalizeXhsImportedAccount,
   normalizeXhsImportedPosts,
 } from '@rednote/agent/dist/index.js';
 import type {
   XhsAccountInput,
+  XhsGenerationBriefInput,
   XhsImportedAccountNormalization,
   XhsImportedPostsNormalization,
   XhsCommercialWorkflowInput,
@@ -73,6 +75,10 @@ export class XhsAnalysisService {
 
   buildOutlineCandidates(input: XhsOutlineCandidateInput) {
     return buildXhsOutlineCandidates(input);
+  }
+
+  buildGenerationBrief(input: XhsGenerationBriefInput) {
+    return buildXhsGenerationBrief(input);
   }
 
   buildCommercialWorkflow(input: XhsCommercialWorkflowInput) {

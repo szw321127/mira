@@ -177,12 +177,6 @@ function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
   };
 }
 
-function uniqueReferenceParts(parts: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(parts.map((part) => part?.trim()).filter(Boolean) as string[]),
-  );
-}
-
 function getReferencePostKey(post: ImportedXhsPostAnalysis) {
   return (
     post.imported.sources[0]?.normalizedId ??
@@ -204,40 +198,21 @@ function dedupeImportedPostAnalyses(posts: ImportedXhsPostAnalysis[]) {
   });
 }
 
-function buildReferenceBrief(
+async function buildReferenceBrief(
+  token: string,
   idea: string,
   referenceImport: ReferenceImportState,
-): XhsGenerationBrief | undefined {
+): Promise<XhsGenerationBrief | undefined> {
   const accountAnalysis = referenceImport.importedAccount?.analysis;
   const postAnalyses = referenceImport.importedPosts.map((post) => post.analysis);
 
   if (!accountAnalysis && !postAnalyses.length) return undefined;
 
-  const sourcePatterns = uniqueReferenceParts([
-    ...(accountAnalysis?.contentPillars.map((pillar) => pillar.name) ?? []),
-    ...postAnalyses.flatMap((post) => post.viralSignals),
-    ...postAnalyses.flatMap((post) => post.tagPatterns.map((tag) => `#${tag}`)),
-  ]).slice(0, 8);
-  const promptAdditions = uniqueReferenceParts([
-    accountAnalysis
-      ? `参考账号「${accountAnalysis.snapshot.name || "同类账号"}」的内容定位：${accountAnalysis.contentPillars
-          .slice(0, 3)
-          .map((pillar) => pillar.name)
-          .join("、") || "保持垂直内容方向"}。`
-      : null,
-    ...postAnalyses.flatMap((post) => post.generationHints),
-  ]).slice(0, 6);
-  const recommendedSections = uniqueReferenceParts([
-    ...(accountAnalysis?.nextActions ?? []),
-    ...postAnalyses.flatMap((post) => post.contentAngles),
-  ]).slice(0, 5);
-
-  return {
+  return api.xhs.buildGenerationBrief(token, {
+    account: accountAnalysis,
     idea: idea.trim(),
-    promptAdditions,
-    recommendedSections,
-    sourcePatterns,
-  };
+    references: postAnalyses,
+  });
 }
 
 function buildReferenceWorkflowInputs(
@@ -799,8 +774,13 @@ export default function Home() {
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
+      const referenceBrief = await buildReferenceBrief(
+        accessToken,
+        seed,
+        referenceImport,
+      );
       const candidates = await api.xhs.buildOutlines(accessToken, {
-        brief: buildReferenceBrief(seed, referenceImport),
+        brief: referenceBrief,
         idea: seed,
       });
       const nextBatch = latestBatch + 1;

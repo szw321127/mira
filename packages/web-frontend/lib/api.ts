@@ -625,6 +625,19 @@ export const api = {
       }),
   },
   xhs: {
+    buildGenerationBrief: (
+      token: string,
+      body: {
+        account?: XhsAccountAnalysis;
+        idea: string;
+        references: XhsPostAnalysis[];
+      },
+    ) =>
+      request<XhsGenerationBrief>("/xhs-analysis/generation-brief", {
+        body,
+        method: "POST",
+        token,
+      }),
     buildCommercialDraft: (
       token: string,
       body: {

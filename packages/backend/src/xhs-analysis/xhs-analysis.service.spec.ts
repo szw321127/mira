@@ -135,6 +135,48 @@ describe('XhsAnalysisService', () => {
     });
   });
 
+  it('builds a generation brief from analyzed account and post references', () => {
+    const account = service.analyzeAccount({
+      bio: '通勤效率和包内收纳，每周更新真实清单',
+      followers: '4.2万',
+      name: '早八不慌实验室',
+      posts: [
+        {
+          title: '通勤包这样收纳，早八少慌 10 分钟',
+          content: '把通勤包里的东西拆成三个模块，早上直接照着拿。',
+          metrics: { collects: '8800', comments: 128, likes: '1.6万' },
+          tags: ['通勤包', '效率工具'],
+        },
+      ],
+    });
+    const reference = service.analyzePost({
+      title: '普通女生也能复制的通勤胶囊衣橱',
+      content:
+        '我用 12 件单品搭了 21 套通勤 look，省钱是真的，早上不用纠结也是真的。',
+      images: ['https://example.com/cover.jpg'],
+      metrics: {
+        collects: '1.1万',
+        comments: 342,
+        likes: '2.4万',
+        shares: 840,
+      },
+      tags: ['通勤穿搭', '胶囊衣橱', '普通女生'],
+    });
+
+    const brief = service.buildGenerationBrief({
+      account,
+      idea: '给初入职场女生做低预算通勤穿搭',
+      references: [reference],
+    });
+
+    expect(brief.idea).toBe('给初入职场女生做低预算通勤穿搭');
+    expect(brief.sourcePatterns).toEqual(
+      expect.arrayContaining(['高收藏价值', '数字化清单结构']),
+    );
+    expect(brief.promptAdditions.join('\n')).toContain('小红书图文成稿');
+    expect(brief.recommendedSections.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('imports a post from the configured provider before analyzing it', async () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       json: () =>

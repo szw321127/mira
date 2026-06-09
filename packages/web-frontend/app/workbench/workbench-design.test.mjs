@@ -252,6 +252,8 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(api, /\/xhs-analysis\/posts\/import/);
   assert.match(api, /importAccount:/);
   assert.match(api, /\/xhs-analysis\/accounts\/import/);
+  assert.match(api, /buildGenerationBrief:/);
+  assert.match(api, /\/xhs-analysis\/generation-brief/);
 
   assert.match(types, /ReferenceImportState/);
   assert.match(types, /referenceImport: ReferenceImportState/);
@@ -269,8 +271,10 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(source, /referenceImport/);
   assert.match(source, /api\.xhs\.importPost/);
   assert.match(source, /api\.xhs\.importAccount/);
+  assert.match(source, /api\.xhs\.buildGenerationBrief/);
   assert.match(source, /buildReferenceBrief/);
-  assert.match(source, /brief: buildReferenceBrief/);
+  assert.match(source, /const referenceBrief = await buildReferenceBrief/);
+  assert.match(source, /brief: referenceBrief/);
   assert.match(source, /buildReferenceWorkflowInputs/);
   assert.match(source, /\.\.\.buildReferenceWorkflowInputs/);
 });
