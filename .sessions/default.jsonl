@@ -1,0 +1,2 @@
+{"type":"message","timestamp":"2026-06-08T02:55:51.607Z","message":{"role":"user","content":"你好"}}
+{"type":"message","timestamp":"2026-06-08T02:55:53.136Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.3，现在我不只能聊天，还有保险丝保护了 :)"}]}}
