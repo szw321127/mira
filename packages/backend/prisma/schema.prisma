@@ -131,6 +131,16 @@ model AdminModelConfig {
   updatedAt       DateTime @updatedAt
 }
 
+model AdminUser {
+  id           String    @id @default(cuid())
+  account      String    @unique
+  displayName  String
+  passwordHash String
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
 model AdminModelApiKey {
   id              String   @id @default(cuid())
   type            String

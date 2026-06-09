@@ -60,7 +60,7 @@ describe('AdminApiKeyGuard', () => {
     ).toBe(true);
   });
 
-  it('is referenced by all admin controllers', () => {
+  it('keeps admin controllers on scoped administrator JWT auth', () => {
     const root = join(__dirname, '..');
     const controllerFiles = [
       'admin-projects/admin-projects.controller.ts',
@@ -71,7 +71,8 @@ describe('AdminApiKeyGuard', () => {
     for (const file of controllerFiles) {
       const source = readFileSync(join(root, file), 'utf8');
 
-      expect(source).toMatch(/UseGuards\(AdminApiKeyGuard\)/);
+      expect(source).toMatch(/UseGuards\(AdminJwtAuthGuard\)/);
+      expect(source).not.toMatch(/UseGuards\(AdminApiKeyGuard\)/);
     }
   });
 });

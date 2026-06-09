@@ -1,9 +1,9 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { AdminApiKeyGuard } from '../admin-security/admin-api-key.guard';
+import { AdminJwtAuthGuard } from '../admin-auth/admin-jwt-auth.guard';
 import { AdminAuditLogsService } from './admin-audit-logs.service';
 
 @Controller('admin/audit-logs')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(AdminJwtAuthGuard)
 export class AdminAuditLogsController {
   constructor(private readonly auditLogs: AdminAuditLogsService) {}
 

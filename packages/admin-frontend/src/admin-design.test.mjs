@@ -65,11 +65,37 @@ test("admin frontend API exposes audit log loading", () => {
   assert.match(api, /\/admin\/audit-logs/);
 });
 
-test("admin frontend can attach the deployment admin api key", () => {
+test("admin frontend uses administrator bearer auth instead of exposed api keys", () => {
   const api = readSource("api.ts");
 
-  assert.match(api, /VITE_ADMIN_API_KEY/);
-  assert.match(api, /x-admin-api-key/);
+  assert.match(api, /AdminLoginResponse/);
+  assert.match(api, /AdminProfile/);
+  assert.match(api, /loginAdmin/);
+  assert.match(api, /loadAdminProfile/);
+  assert.match(api, /updateAdminProfile/);
+  assert.match(api, /changeAdminPassword/);
+  assert.match(api, /setAdminAccessToken/);
+  assert.match(api, /Authorization/);
+  assert.match(api, /Bearer/);
+  assert.doesNotMatch(api, /VITE_ADMIN_API_KEY/);
+  assert.doesNotMatch(api, /x-admin-api-key/);
+});
+
+test("admin frontend has login and administrator information management", () => {
+  const app = readSource("App.tsx");
+  const css = readSource("styles.css");
+
+  assert.match(app, /管理员登录/);
+  assert.match(app, /initialAdminSession/);
+  assert.match(app, /handleAdminLogin/);
+  assert.match(app, /管理员信息/);
+  assert.match(app, /修改密码/);
+  assert.match(app, /当前密码/);
+  assert.match(app, /新密码/);
+  assert.match(app, /退出登录/);
+  assert.match(app, /UserOutlined/);
+  assert.match(css, /admin-login-shell/);
+  assert.match(css, /admin-profile-grid/);
 });
 
 test("admin frontend manages text and image model configs without exposing api keys", () => {

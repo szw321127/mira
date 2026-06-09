@@ -9,14 +9,14 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { AdminApiKeyGuard } from '../admin-security/admin-api-key.guard';
+import { AdminJwtAuthGuard } from '../admin-auth/admin-jwt-auth.guard';
 import { AdminModelConfigsService } from './admin-model-configs.service';
 import { CreateAdminModelApiKeyDto } from './dto/create-admin-model-api-key.dto';
 import { UpdateAdminModelApiKeyDto } from './dto/update-admin-model-api-key.dto';
 import { UpdateAdminModelConfigDto } from './dto/update-admin-model-config.dto';
 
 @Controller('admin/model-configs')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(AdminJwtAuthGuard)
 export class AdminModelConfigsController {
   constructor(
     private readonly adminModelConfigsService: AdminModelConfigsService,

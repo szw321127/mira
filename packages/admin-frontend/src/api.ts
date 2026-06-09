@@ -1,6 +1,16 @@
 const API_BASE_URL =
   import.meta.env.VITE_BACKEND_URL ?? "http://localhost:3001";
-const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY?.trim();
+const ADMIN_ACCESS_TOKEN_STORAGE_KEY = "rednote-admin-access-token";
+
+function getStoredAdminAccessToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY);
+}
+
+let adminAccessToken: string | null = getStoredAdminAccessToken();
 
 export type ApiEnvelope<T> = {
   code: number;
@@ -18,6 +28,34 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export type AdminProfile = {
+  account: string;
+  createdAt: string;
+  displayName: string;
+  id: string;
+  lastLoginAt: string | null;
+  updatedAt: string;
+};
+
+export type AdminLoginInput = {
+  account: string;
+  password: string;
+};
+
+export type AdminLoginResponse = {
+  accessToken: string;
+  admin: AdminProfile;
+};
+
+export type UpdateAdminProfileInput = {
+  displayName: string;
+};
+
+export type ChangeAdminPasswordInput = {
+  currentPassword: string;
+  newPassword: string;
+};
 
 export type AdminProjectStatus = "进行中" | "规划中" | "风险" | "已上线";
 
@@ -196,7 +234,27 @@ export function getApiErrorMessage(error: unknown) {
 type RequestOptions = {
   body?: unknown;
   method?: string;
+  skipAuth?: boolean;
 };
+
+export function getAdminAccessToken() {
+  return adminAccessToken;
+}
+
+export function setAdminAccessToken(token: string | null) {
+  adminAccessToken = token;
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (token) {
+    window.localStorage.setItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY, token);
+    return;
+  }
+
+  window.localStorage.removeItem(ADMIN_ACCESS_TOKEN_STORAGE_KEY);
+}
 
 async function request<T>(
   path: string,
@@ -208,8 +266,8 @@ async function request<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (ADMIN_API_KEY) {
-    headers.set("x-admin-api-key", ADMIN_API_KEY);
+  if (adminAccessToken && !options.skipAuth) {
+    headers.set("Authorization", `Bearer ${adminAccessToken}`);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -232,6 +290,32 @@ async function request<T>(
   }
 
   return payload.data as T;
+}
+
+export function loginAdmin(body: AdminLoginInput) {
+  return request<AdminLoginResponse>("/admin/auth/login", {
+    body,
+    method: "POST",
+    skipAuth: true,
+  });
+}
+
+export function loadAdminProfile() {
+  return request<AdminProfile>("/admin/auth/me");
+}
+
+export function updateAdminProfile(body: UpdateAdminProfileInput) {
+  return request<AdminProfile>("/admin/auth/profile", {
+    body,
+    method: "PATCH",
+  });
+}
+
+export function changeAdminPassword(body: ChangeAdminPasswordInput) {
+  return request<AdminProfile>("/admin/auth/password", {
+    body,
+    method: "PATCH",
+  });
 }
 
 export function loadProjectManagementDashboard() {

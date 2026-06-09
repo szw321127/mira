@@ -20,6 +20,7 @@ import {
   Segmented,
   Select,
   Space,
+  Spin,
   Statistic,
   Switch,
   Table,
@@ -36,6 +37,8 @@ import {
   DeleteOutlined,
   ExportOutlined,
   KeyOutlined,
+  LockOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
@@ -45,17 +48,27 @@ import {
   SearchOutlined,
   SettingOutlined,
   TeamOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ApiError,
+  changeAdminPassword,
   createModelApiKey,
   createAdminProject,
   deleteModelApiKey,
   getApiErrorMessage,
+  getAdminAccessToken,
+  loadAdminProfile,
   loadModelConfigs,
   loadProjectManagementDashboard,
+  loginAdmin,
   saveModelConfig,
+  setAdminAccessToken,
+  updateAdminProfile,
   updateModelApiKey,
+  type AdminLoginInput,
+  type AdminProfile,
   type AdminDashboard,
   type AdminModelApiKey,
   type AdminModelConfig,
@@ -69,8 +82,41 @@ import {
 const { Content, Header, Sider } = Layout;
 const { Text, Title } = Typography;
 
-type NavigationKey = "overview" | "projects" | "tasks" | "members" | "settings";
+type NavigationKey =
+  | "overview"
+  | "projects"
+  | "tasks"
+  | "members"
+  | "settings"
+  | "adminProfile";
 type ExportStatus = "idle" | "done";
+
+type AdminSessionState =
+  | {
+      accessToken: null;
+      admin: null;
+      status: "guest";
+    }
+  | {
+      accessToken: string;
+      admin: null;
+      status: "checking";
+    }
+  | {
+      accessToken: string;
+      admin: AdminProfile;
+      status: "authenticated";
+    };
+
+type AdminProfileForm = {
+  displayName: string;
+};
+
+type AdminPasswordForm = {
+  confirmPassword: string;
+  currentPassword: string;
+  newPassword: string;
+};
 
 type CreateProjectForm = {
   budget?: string;
@@ -107,6 +153,7 @@ const menuItems: MenuProps["items"] = [
   { icon: <CheckCircleOutlined />, key: "tasks", label: "任务看板" },
   { icon: <TeamOutlined />, key: "members", label: "成员管理" },
   { icon: <SettingOutlined />, key: "settings", label: "模型配置" },
+  { icon: <UserOutlined />, key: "adminProfile", label: "管理员信息" },
 ];
 
 const modelConfigTypes: AdminModelConfigType[] = ["text", "image"];
@@ -228,6 +275,7 @@ function createModelConfigFormState(configs: AdminModelConfig[]) {
 }
 
 const activeMenuTitles: Record<NavigationKey, string> = {
+  adminProfile: "管理员信息",
   members: "成员管理",
   overview: "项目总览",
   projects: "项目列表",
@@ -235,7 +283,108 @@ const activeMenuTitles: Record<NavigationKey, string> = {
   tasks: "任务看板",
 };
 
+function initialAdminSession(): AdminSessionState {
+  const accessToken = getAdminAccessToken();
+
+  if (!accessToken) {
+    return {
+      accessToken: null,
+      admin: null,
+      status: "guest",
+    };
+  }
+
+  return {
+    accessToken,
+    admin: null,
+    status: "checking",
+  };
+}
+
 export default function App() {
+  const [adminSession, setAdminSession] =
+    useState<AdminSessionState>(initialAdminSession);
+
+  useEffect(() => {
+    if (adminSession.status !== "checking") {
+      return;
+    }
+
+    let active = true;
+
+    loadAdminProfile()
+      .then((admin) => {
+        if (!active) {
+          return;
+        }
+
+        setAdminSession({
+          accessToken: adminSession.accessToken,
+          admin,
+          status: "authenticated",
+        });
+      })
+      .catch(() => {
+        setAdminAccessToken(null);
+
+        if (!active) {
+          return;
+        }
+
+        setAdminSession({
+          accessToken: null,
+          admin: null,
+          status: "guest",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [adminSession]);
+
+  const handleAdminLogin = async (values: AdminLoginInput) => {
+    const response = await loginAdmin(values);
+
+    setAdminAccessToken(response.accessToken);
+    setAdminSession({
+      accessToken: response.accessToken,
+      admin: response.admin,
+      status: "authenticated",
+    });
+  };
+
+  const handleAdminLogout = () => {
+    setAdminAccessToken(null);
+    setAdminSession({
+      accessToken: null,
+      admin: null,
+      status: "guest",
+    });
+  };
+
+  const handleAdminUpdated = (admin: AdminProfile) => {
+    setAdminSession((current) => {
+      if (current.status !== "authenticated") {
+        return current;
+      }
+
+      return {
+        ...current,
+        admin,
+      };
+    });
+  };
+
+  const handleAdminUnauthorized = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 401) {
+      handleAdminLogout();
+      return true;
+    }
+
+    return false;
+  };
+
   return (
     <ConfigProvider
       theme={{
@@ -251,15 +400,121 @@ export default function App() {
       }}
     >
       <AntdApp>
-        <AdminWorkspace />
+        {adminSession.status === "authenticated" ? (
+          <AdminWorkspace
+            admin={adminSession.admin}
+            onAdminUpdated={handleAdminUpdated}
+            onLogout={handleAdminLogout}
+            onUnauthorized={handleAdminUnauthorized}
+          />
+        ) : (
+          <AdminLoginScreen
+            checking={adminSession.status === "checking"}
+            onLogin={handleAdminLogin}
+          />
+        )}
       </AntdApp>
     </ConfigProvider>
   );
 }
 
-function AdminWorkspace() {
+type AdminWorkspaceProps = {
+  admin: AdminProfile;
+  onAdminUpdated: (admin: AdminProfile) => void;
+  onLogout: () => void;
+  onUnauthorized: (error: unknown) => boolean;
+};
+
+type AdminLoginScreenProps = {
+  checking: boolean;
+  onLogin: (values: AdminLoginInput) => Promise<void>;
+};
+
+function AdminLoginScreen({ checking, onLogin }: AdminLoginScreenProps) {
+  const [loginForm] = Form.useForm<AdminLoginInput>();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  const handleFinish = async (values: AdminLoginInput) => {
+    setErrorMessage(null);
+    setLoggingIn(true);
+
+    try {
+      await onLogin(values);
+      loginForm.resetFields(["password"]);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  return (
+    <div className="admin-login-shell">
+      <Card className="admin-login-card">
+        <div className="admin-login-mark">R</div>
+        <Title level={3}>管理员登录</Title>
+        <Text className="admin-login-product">RedNote 后台项目管理</Text>
+
+        {checking ? (
+          <div className="admin-login-checking">
+            <Spin />
+            <Text type="secondary">正在恢复登录</Text>
+          </div>
+        ) : (
+          <Form
+            form={loginForm}
+            initialValues={{ account: "admin" }}
+            layout="vertical"
+            onFinish={(values) => void handleFinish(values)}
+            requiredMark={false}
+          >
+            {errorMessage ? (
+              <Alert
+                className="admin-login-error"
+                showIcon
+                title={errorMessage}
+                type="error"
+              />
+            ) : null}
+
+            <Form.Item
+              label="账号"
+              name="account"
+              rules={[{ message: "请输入管理员账号", required: true }]}
+            >
+              <Input prefix={<UserOutlined />} />
+            </Form.Item>
+            <Form.Item
+              label="密码"
+              name="password"
+              rules={[{ message: "请输入管理员密码", required: true }]}
+            >
+              <Input.Password prefix={<LockOutlined />} />
+            </Form.Item>
+            <Button block htmlType="submit" loading={loggingIn} type="primary">
+              登录
+            </Button>
+            <Text className="admin-login-default" type="secondary">
+              初始：admin / Rednote@123456
+            </Text>
+          </Form>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function AdminWorkspace({
+  admin,
+  onAdminUpdated,
+  onLogout,
+  onUnauthorized,
+}: AdminWorkspaceProps) {
   const [activeMenu, setActiveMenu] = useState<NavigationKey>("overview");
   const [createProjectForm] = Form.useForm<CreateProjectForm>();
+  const [passwordForm] = Form.useForm<AdminPasswordForm>();
+  const [profileForm] = Form.useForm<AdminProfileForm>();
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [dashboardState, setDashboardState] = useState<DashboardState>({
@@ -284,6 +539,8 @@ function AdminWorkspace() {
   });
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
+  const [savingAdminPassword, setSavingAdminPassword] = useState(false);
+  const [savingAdminProfile, setSavingAdminProfile] = useState(false);
   const [savingModelConfig, setSavingModelConfig] =
     useState<AdminModelConfigType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -291,6 +548,21 @@ function AdminWorkspace() {
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "全部">(
     "全部",
   );
+
+  const handleAdminApiError = (error: unknown) => {
+    if (onUnauthorized(error)) {
+      return true;
+    }
+
+    setOperationNotice(getApiErrorMessage(error));
+    return false;
+  };
+
+  useEffect(() => {
+    profileForm.setFieldsValue({
+      displayName: admin.displayName,
+    });
+  }, [admin.displayName, profileForm]);
 
   useEffect(() => {
     let active = true;
@@ -309,6 +581,10 @@ function AdminWorkspace() {
       })
       .catch((error: unknown) => {
         if (!active) {
+          return;
+        }
+
+        if (onUnauthorized(error)) {
           return;
         }
 
@@ -342,6 +618,10 @@ function AdminWorkspace() {
       })
       .catch((error: unknown) => {
         if (!active) {
+          return;
+        }
+
+        if (onUnauthorized(error)) {
           return;
         }
 
@@ -459,7 +739,7 @@ function AdminWorkspace() {
       }));
       setOperationNotice(`${modelConfigLabels[type]}已保存`);
     } catch (error) {
-      setOperationNotice(getApiErrorMessage(error));
+      handleAdminApiError(error);
     } finally {
       setSavingModelConfig(null);
     }
@@ -490,7 +770,7 @@ function AdminWorkspace() {
       }));
       setOperationNotice(`${modelConfigLabels[type]} API Key 已新增`);
     } catch (error) {
-      setOperationNotice(getApiErrorMessage(error));
+      handleAdminApiError(error);
     } finally {
       setCreatingApiKey(null);
     }
@@ -510,7 +790,7 @@ function AdminWorkspace() {
       );
       setOperationNotice(`${updated.name}已${enabled ? "启用" : "停用"}`);
     } catch (error) {
-      setOperationNotice(getApiErrorMessage(error));
+      handleAdminApiError(error);
     } finally {
       setMutatingApiKeyId(null);
     }
@@ -529,7 +809,7 @@ function AdminWorkspace() {
       );
       setOperationNotice(`${apiKey.name}已删除`);
     } catch (error) {
-      setOperationNotice(getApiErrorMessage(error));
+      handleAdminApiError(error);
     } finally {
       setMutatingApiKeyId(null);
     }
@@ -573,9 +853,63 @@ function AdminWorkspace() {
         return;
       }
 
-      setOperationNotice(getApiErrorMessage(error));
+      handleAdminApiError(error);
     } finally {
       setCreatingProject(false);
+    }
+  };
+
+  const handleSaveAdminProfile = async () => {
+    try {
+      const values = await profileForm.validateFields();
+
+      setSavingAdminProfile(true);
+      const updated = await updateAdminProfile({
+        displayName: values.displayName,
+      });
+
+      onAdminUpdated(updated);
+      setOperationNotice("管理员信息已更新");
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "errorFields" in error
+      ) {
+        return;
+      }
+
+      handleAdminApiError(error);
+    } finally {
+      setSavingAdminProfile(false);
+    }
+  };
+
+  const handleChangeAdminPassword = async () => {
+    try {
+      const values = await passwordForm.validateFields();
+
+      setSavingAdminPassword(true);
+      const updated = await changeAdminPassword({
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      });
+
+      onAdminUpdated(updated);
+      passwordForm.resetFields();
+      setOperationNotice("管理员密码已修改");
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "errorFields" in error
+      ) {
+        return;
+      }
+
+      handleAdminApiError(error);
+    } finally {
+      setSavingAdminPassword(false);
     }
   };
 
@@ -670,6 +1004,11 @@ function AdminWorkspace() {
     if (nextKey === "overview") {
       window.scrollTo({ top: 0, behavior: "smooth" });
       setOperationNotice("已回到项目总览");
+      return;
+    }
+
+    if (nextKey === "adminProfile") {
+      setOperationNotice("已打开管理员信息");
       return;
     }
 
@@ -831,6 +1170,12 @@ function AdminWorkspace() {
               value={searchQuery}
             />
             <Button
+              icon={<UserOutlined />}
+              onClick={() => setActiveMenu("adminProfile")}
+            >
+              {admin.displayName}
+            </Button>
+            <Button
               aria-label="查看通知"
               icon={<BellOutlined />}
               onClick={() => setNoticeOpen(true)}
@@ -846,6 +1191,9 @@ function AdminWorkspace() {
               type="primary"
             >
               新建项目
+            </Button>
+            <Button icon={<LogoutOutlined />} onClick={onLogout}>
+              退出登录
             </Button>
           </Space>
         </Header>
@@ -868,6 +1216,115 @@ function AdminWorkspace() {
               title={operationNotice}
               type={exportStatus === "done" ? "success" : "info"}
             />
+          ) : null}
+
+          {activeMenu === "adminProfile" ? (
+            <Card
+              className="admin-card admin-profile-panel"
+              id="admin-profile"
+              title={
+                <Flex align="center" gap={8}>
+                  <UserOutlined />
+                  <span>管理员信息</span>
+                </Flex>
+              }
+            >
+              <div className="admin-profile-grid">
+                <div className="admin-profile-card">
+                  <Text strong>账号信息</Text>
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="登录账号">
+                      {admin.account}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="上次登录">
+                      {admin.lastLoginAt ?? "尚未记录"}
+                    </Descriptions.Item>
+                  </Descriptions>
+
+                  <Form
+                    className="admin-profile-form"
+                    form={profileForm}
+                    layout="vertical"
+                  >
+                    <Form.Item
+                      label="显示名称"
+                      name="displayName"
+                      rules={[{ message: "请输入显示名称", required: true }]}
+                    >
+                      <Input prefix={<UserOutlined />} />
+                    </Form.Item>
+                    <Button
+                      icon={<SaveOutlined />}
+                      loading={savingAdminProfile}
+                      onClick={() => void handleSaveAdminProfile()}
+                      type="primary"
+                    >
+                      保存信息
+                    </Button>
+                  </Form>
+                </div>
+
+                <div className="admin-profile-card">
+                  <Text strong>修改密码</Text>
+                  <Form
+                    className="admin-profile-form"
+                    form={passwordForm}
+                    layout="vertical"
+                    requiredMark={false}
+                  >
+                    <Form.Item
+                      label="当前密码"
+                      name="currentPassword"
+                      rules={[{ message: "请输入当前密码", required: true }]}
+                    >
+                      <Input.Password prefix={<LockOutlined />} />
+                    </Form.Item>
+                    <Form.Item
+                      label="新密码"
+                      name="newPassword"
+                      rules={[
+                        { message: "请输入新密码", required: true },
+                        { message: "新密码至少 8 位", min: 8 },
+                      ]}
+                    >
+                      <Input.Password prefix={<LockOutlined />} />
+                    </Form.Item>
+                    <Form.Item
+                      dependencies={["newPassword"]}
+                      label="确认新密码"
+                      name="confirmPassword"
+                      rules={[
+                        { message: "请再次输入新密码", required: true },
+                        ({ getFieldValue }) => ({
+                          validator(_, value) {
+                            if (
+                              !value ||
+                              getFieldValue("newPassword") === value
+                            ) {
+                              return Promise.resolve();
+                            }
+
+                            return Promise.reject(
+                              new Error("两次输入的新密码不一致"),
+                            );
+                          },
+                        }),
+                      ]}
+                    >
+                      <Input.Password prefix={<LockOutlined />} />
+                    </Form.Item>
+                    <Button
+                      icon={<LockOutlined />}
+                      loading={savingAdminPassword}
+                      onClick={() => void handleChangeAdminPassword()}
+                      type="primary"
+                    >
+                      修改密码
+                    </Button>
+                  </Form>
+                </div>
+              </div>
+            </Card>
           ) : null}
 
           {createProjectOpen ? (

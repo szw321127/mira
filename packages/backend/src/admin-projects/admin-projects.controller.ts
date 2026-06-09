@@ -8,14 +8,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { AdminApiKeyGuard } from '../admin-security/admin-api-key.guard';
+import { AdminJwtAuthGuard } from '../admin-auth/admin-jwt-auth.guard';
 import { AdminProjectsService } from './admin-projects.service';
 import { CreateAdminProjectDto } from './dto/create-admin-project.dto';
 import { CreateAdminTaskDto } from './dto/create-admin-task.dto';
 import { UpdateAdminTaskDto } from './dto/update-admin-task.dto';
 
 @Controller('admin/projects')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(AdminJwtAuthGuard)
 export class AdminProjectsController {
   constructor(private readonly adminProjectsService: AdminProjectsService) {}
 
