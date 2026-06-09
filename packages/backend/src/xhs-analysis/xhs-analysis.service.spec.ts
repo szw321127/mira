@@ -1,10 +1,25 @@
 import { XhsAnalysisService } from './xhs-analysis.service';
 
+const contentProviders = {
+  getRuntimeConfig: jest.fn(() =>
+    Promise.resolve({
+      apiKey: 'provider-key',
+      baseUrl: 'https://provider.example',
+      complianceNote: 'Only use authorized imports.',
+      enabled: true,
+      rateLimitPerMinute: 60,
+      type: 'custom' as const,
+    }),
+  ),
+};
+
 describe('XhsAnalysisService', () => {
   let service: XhsAnalysisService;
 
   beforeEach(() => {
-    service = new XhsAnalysisService();
+    jest.restoreAllMocks();
+    contentProviders.getRuntimeConfig.mockClear();
+    service = new XhsAnalysisService(contentProviders as never);
   });
 
   it('analyzes a Xiaohongshu post with normalized engagement signals', () => {
@@ -118,5 +133,108 @@ describe('XhsAnalysisService', () => {
       referenceCount: 1,
       score: workflow.audit.score,
     });
+  });
+
+  it('imports a post from the configured provider before analyzing it', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            collected_count: '8800',
+            comment_count: 128,
+            desc: '把通勤包里的东西拆成三个模块，早上直接照着拿。',
+            image_list: ['https://example.com/cover.jpg'],
+            liked_count: '1.6万',
+            note_id: 'note-42',
+            tag_list: ['通勤包', '效率工具'],
+            title: '通勤包这样收纳，早八少慌 10 分钟',
+          },
+        }),
+      ok: true,
+    } as Response);
+
+    const result = await service.importAndAnalyzePost({
+      providerType: 'custom',
+      url: 'https://www.xiaohongshu.com/explore/note-42',
+    });
+
+    expect(contentProviders.getRuntimeConfig).toHaveBeenCalledWith('custom');
+    const firstCall = fetchMock.mock.calls[0];
+    const requestUrl = firstCall?.[0];
+    const requestInit = firstCall?.[1];
+
+    expect(requestUrl).toBe('https://provider.example/xhs/posts/import');
+    expect(requestInit?.body).toBe(
+      JSON.stringify({
+        noteId: undefined,
+        url: 'https://www.xiaohongshu.com/explore/note-42',
+      }),
+    );
+    expect(requestInit?.headers).toMatchObject({
+      Authorization: 'Bearer provider-key',
+    });
+    expect(requestInit?.method).toBe('POST');
+    expect(result.imported.posts[0]?.title).toBe(
+      '通勤包这样收纳，早八少慌 10 分钟',
+    );
+    expect(result.analysis.engagement.likes).toBe(16000);
+    expect(result.provider).toMatchObject({
+      endpoint: 'https://provider.example/xhs/posts/import',
+      type: 'custom',
+    });
+  });
+
+  it('imports an account from the configured provider before analyzing it', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          data: {
+            desc: '小个子通勤穿搭，每周更新胶囊衣橱',
+            fans: '8.6万',
+            nickname: '阿鱼的衣橱',
+            notes: [
+              {
+                collected_count: '9800',
+                comment_count: 310,
+                desc: '版型、长度、面料三个维度，照着买不踩雷。',
+                liked_count: '1.2万',
+                note_id: 'note-1',
+                tag_list: ['小个子穿搭', '通勤穿搭'],
+                title: '小个子通勤裤子这样买',
+              },
+            ],
+            user_id: 'user-1',
+          },
+        }),
+      ok: true,
+    } as Response);
+
+    const result = await service.importAndAnalyzeAccount({
+      providerType: 'custom',
+      url: 'https://www.xiaohongshu.com/user/profile/user-1',
+    });
+
+    expect(contentProviders.getRuntimeConfig).toHaveBeenCalledWith('custom');
+    const firstCall = fetchMock.mock.calls[0];
+    const requestUrl = firstCall?.[0];
+    const requestInit = firstCall?.[1];
+
+    expect(requestUrl).toBe('https://provider.example/xhs/accounts/import');
+    expect(requestInit?.body).toBe(
+      JSON.stringify({
+        limit: undefined,
+        url: 'https://www.xiaohongshu.com/user/profile/user-1',
+        userId: undefined,
+      }),
+    );
+    expect(requestInit?.headers).toMatchObject({
+      Authorization: 'Bearer provider-key',
+    });
+    expect(requestInit?.method).toBe('POST');
+    expect(result.imported.account.name).toBe('阿鱼的衣橱');
+    expect(result.analysis.snapshot.followers).toBe(86000);
+    expect(result.analysis.contentPillars).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: '通勤穿搭' })]),
+    );
   });
 });
