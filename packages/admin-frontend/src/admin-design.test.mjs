@@ -11,24 +11,55 @@ function readSource(name) {
   return existsSync(file) ? readFileSync(file, "utf8") : "";
 }
 
+test("admin frontend splits app shell into sidebar page modules", () => {
+  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const expectedFiles = [
+    "admin/AdminLoginScreen.tsx",
+    "admin/AdminWorkspace.tsx",
+    "admin/navigation.tsx",
+    "admin/pages/AdminProfilePage.tsx",
+    "admin/pages/MembersPage.tsx",
+    "admin/pages/ModelConfigsPage.tsx",
+    "admin/pages/OverviewPage.tsx",
+    "admin/pages/ProjectsPage.tsx",
+    "admin/pages/TasksPage.tsx",
+  ];
+
+  assert.ok(
+    app.split("\n").length < 260,
+    "App.tsx should only compose auth state, theme, and the workspace shell",
+  );
+  for (const file of expectedFiles) {
+    assert.ok(readSource(file).length > 0, `${file} should exist`);
+  }
+  assert.match(workspace, /renderActivePage/);
+  assert.match(workspace, /activeMenuTitles/);
+});
+
 test("admin frontend exposes an Ant Design project management shell", () => {
   const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const navigation = readSource("admin/navigation.tsx");
   const index = readFileSync(join(root, "..", "index.html"), "utf8");
+  const source = `${app}\n${workspace}\n${navigation}`;
 
-  assert.match(app, /antd/);
-  assert.match(app, /Layout/);
-  assert.match(app, /项目管理后台/);
-  assert.match(app, /项目总览/);
-  assert.match(app, /项目列表/);
-  assert.match(app, /任务看板/);
-  assert.match(app, /Drawer/);
+  assert.match(source, /antd/);
+  assert.match(source, /Layout/);
+  assert.match(source, /项目管理后台/);
+  assert.match(source, /项目总览/);
+  assert.match(source, /项目列表/);
+  assert.match(source, /任务看板/);
+  assert.match(source, /Drawer/);
   assert.match(index, /<title>后台项目管理系统 \| RedNote<\/title>/);
-  assert.doesNotMatch(app, /<Title level=\{2\}>后台项目管理系统<\/Title>/);
+  assert.doesNotMatch(source, /<Title level=\{2\}>后台项目管理系统<\/Title>/);
 });
 
 test("admin frontend loads project management data through the backend API", () => {
   const api = readSource("api.ts");
-  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const projectsPage = readSource("admin/pages/ProjectsPage.tsx");
+  const source = `${workspace}\n${projectsPage}`;
 
   assert.match(api, /VITE_BACKEND_URL/);
   assert.match(api, /ApiEnvelope/);
@@ -37,12 +68,12 @@ test("admin frontend loads project management data through the backend API", () 
   assert.match(api, /CreateAdminProjectInput/);
   assert.match(api, /createAdminProject/);
   assert.match(api, /\/admin\/projects/);
-  assert.match(app, /loadProjectManagementDashboard/);
-  assert.match(app, /handleCreateProject/);
-  assert.match(app, /项目名称/);
-  assert.match(app, /创建项目/);
-  assert.match(app, /dashboardState/);
-  assert.match(app, /\[projects, searchQuery, statusFilter\]/);
+  assert.match(source, /loadProjectManagementDashboard/);
+  assert.match(source, /handleCreateProject/);
+  assert.match(source, /项目名称/);
+  assert.match(source, /创建项目/);
+  assert.match(source, /dashboardState/);
+  assert.match(source, /\[projects, searchQuery, statusFilter\]/);
 });
 
 test("admin frontend API exposes task management mutations", () => {
@@ -83,24 +114,30 @@ test("admin frontend uses administrator bearer auth instead of exposed api keys"
 
 test("admin frontend has login and administrator information management", () => {
   const app = readSource("App.tsx");
+  const login = readSource("admin/AdminLoginScreen.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const profile = readSource("admin/pages/AdminProfilePage.tsx");
   const css = readSource("styles.css");
+  const source = `${app}\n${login}\n${workspace}\n${profile}`;
 
-  assert.match(app, /管理员登录/);
-  assert.match(app, /initialAdminSession/);
-  assert.match(app, /handleAdminLogin/);
-  assert.match(app, /管理员信息/);
-  assert.match(app, /修改密码/);
-  assert.match(app, /当前密码/);
-  assert.match(app, /新密码/);
-  assert.match(app, /退出登录/);
-  assert.match(app, /UserOutlined/);
+  assert.match(source, /管理员登录/);
+  assert.match(source, /initialAdminSession/);
+  assert.match(source, /handleAdminLogin/);
+  assert.match(source, /管理员信息/);
+  assert.match(source, /修改密码/);
+  assert.match(source, /当前密码/);
+  assert.match(source, /新密码/);
+  assert.match(source, /退出登录/);
+  assert.match(source, /UserOutlined/);
   assert.match(css, /admin-login-shell/);
   assert.match(css, /admin-profile-grid/);
 });
 
 test("admin frontend manages text and image model configs without exposing api keys", () => {
   const api = readSource("api.ts");
-  const app = readSource("App.tsx");
+  const settings = `${readSource("admin/adminTypes.ts")}\n${readSource(
+    "admin/pages/ModelConfigsPage.tsx",
+  )}`;
   const css = readSource("styles.css");
 
   assert.match(api, /AdminModelConfig/);
@@ -114,28 +151,28 @@ test("admin frontend manages text and image model configs without exposing api k
   assert.match(api, /testModelConfigConnection/);
   assert.match(api, /\/admin\/model-configs/);
   assert.match(api, /\/admin\/model-configs\/\$\{type\}\/test/);
-  assert.match(app, /模型配置/);
-  assert.match(app, /文本模型/);
-  assert.match(app, /图片模型/);
-  assert.match(app, /baseUrl/);
-  assert.match(app, /apiKeys/);
-  assert.match(app, /新增 API Key/);
-  assert.match(app, /Switch/);
-  assert.match(app, /Popconfirm/);
+  assert.match(settings, /模型配置/);
+  assert.match(settings, /文本模型/);
+  assert.match(settings, /图片模型/);
+  assert.match(settings, /baseUrl/);
+  assert.match(settings, /apiKeys/);
+  assert.match(settings, /新增 API Key/);
+  assert.match(settings, /Switch/);
+  assert.match(settings, /Popconfirm/);
   assert.match(css, /model-config-grid/);
   assert.match(css, /api-key-list/);
 });
 
 test("admin sidebar can collapse to icon-only navigation", () => {
-  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
   const css = readSource("styles.css");
 
-  assert.match(app, /siderCollapsed/);
-  assert.match(app, /collapsible/);
-  assert.match(app, /collapsed=\{siderCollapsed\}/);
-  assert.match(app, /trigger=\{null\}/);
-  assert.match(app, /desktop-sider-toggle/);
-  assert.match(app, /inlineCollapsed=\{siderCollapsed\}/);
+  assert.match(workspace, /siderCollapsed/);
+  assert.match(workspace, /collapsible/);
+  assert.match(workspace, /collapsed=\{siderCollapsed\}/);
+  assert.match(workspace, /trigger=\{null\}/);
+  assert.match(workspace, /desktop-sider-toggle/);
+  assert.match(workspace, /inlineCollapsed=\{siderCollapsed\}/);
   assert.match(css, /admin-brand-collapsed/);
 });
 
@@ -149,62 +186,75 @@ test("admin desktop shell keeps header fixed and scrolls only main content", () 
 });
 
 test("admin shell has real search state, filtered tasks, and empty states", () => {
-  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
+  const projectsPage = readSource("admin/pages/ProjectsPage.tsx");
+  const tasksPage = readSource("admin/pages/TasksPage.tsx");
+  const source = `${workspace}\n${projectsPage}\n${tasksPage}`;
 
-  assert.match(app, /searchQuery/);
-  assert.match(app, /filteredTasks/);
-  assert.match(app, /没有匹配的项目/);
-  assert.match(app, /没有匹配的任务/);
+  assert.match(source, /searchQuery/);
+  assert.match(source, /filteredTasks/);
+  assert.match(source, /没有匹配的项目/);
+  assert.match(source, /没有匹配的任务/);
 });
 
 test("primary header actions expose operator feedback instead of silent buttons", () => {
-  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
 
-  assert.match(app, /noticeOpen/);
-  assert.match(app, /createProjectOpen/);
-  assert.match(app, /exportStatus/);
-  assert.match(app, /已导出当前筛选结果/);
-  assert.match(app, /暂无新通知/);
-  assert.doesNotMatch(app, /等待权限接口接入后开放/);
-  assert.doesNotMatch(app, /新建项目需要后端接口/);
+  assert.match(workspace, /noticeOpen/);
+  assert.match(workspace, /createProjectOpen/);
+  assert.match(workspace, /exportStatus/);
+  assert.match(workspace, /已导出当前筛选结果/);
+  assert.match(workspace, /暂无新通知/);
+  assert.doesNotMatch(workspace, /等待权限接口接入后开放/);
+  assert.doesNotMatch(workspace, /新建项目需要后端接口/);
 });
 
 test("mobile admin layout has navigation and horizontal overflow controls", () => {
-  const app = readSource("App.tsx");
+  const workspace = readSource("admin/AdminWorkspace.tsx");
   const css = readSource("styles.css");
 
-  assert.match(app, /mobile-nav-button/);
-  assert.match(app, /mobile-nav-drawer/);
-  assert.match(app, /table-scroll/);
+  assert.match(workspace, /mobile-nav-button/);
+  assert.match(workspace, /mobile-nav-drawer/);
+  assert.match(css, /table-scroll/);
   assert.match(css, /overflow-x:\s*auto/);
   assert.match(css, /max-width:\s*100%/);
 });
 
 test("admin shell avoids deprecated Ant Design props", () => {
-  const app = readSource("App.tsx");
-  const alertBlocks = app.match(/<Alert\b[\s\S]*?\/>/g) ?? [];
+  const source = [
+    "App.tsx",
+    "admin/AdminLoginScreen.tsx",
+    "admin/AdminWorkspace.tsx",
+    "admin/pages/AdminProfilePage.tsx",
+    "admin/pages/ModelConfigsPage.tsx",
+    "admin/pages/OverviewPage.tsx",
+    "admin/pages/ProjectsPage.tsx",
+  ]
+    .map(readSource)
+    .join("\n");
+  const alertBlocks = source.match(/<Alert\b[\s\S]*?\/>/g) ?? [];
 
-  assert.doesNotMatch(app, /valueStyle=/);
-  assert.doesNotMatch(app, /<Drawer[\s\S]*width=/);
+  assert.doesNotMatch(source, /valueStyle=/);
+  assert.doesNotMatch(source, /<Drawer[\s\S]*width=/);
   for (const alertBlock of alertBlocks) {
     assert.doesNotMatch(alertBlock, /message=/);
     assert.doesNotMatch(alertBlock, /onClose=/);
   }
-  assert.match(app, /styles=\{\{\s*content:/);
-  assert.match(app, /size="large"/);
-  assert.match(app, /title="模型配置接口加载失败"/);
+  assert.match(source, /styles=\{\{\s*content:/);
+  assert.match(source, /size="large"/);
+  assert.match(source, /title="模型配置接口加载失败"/);
 });
 
 test("risk projects are promoted into an actionable queue", () => {
-  const app = readSource("App.tsx");
+  const overview = readSource("admin/pages/OverviewPage.tsx");
   const css = readSource("styles.css");
 
-  assert.match(app, /riskQueueProjects/);
-  assert.match(app, /riskReason/);
-  assert.match(app, /风险处理队列/);
-  assert.match(app, /严重度/);
-  assert.match(app, /最近更新/);
-  assert.match(app, /下一步动作/);
-  assert.match(app, /升级负责人/);
+  assert.match(overview, /riskQueueProjects/);
+  assert.match(overview, /riskReason/);
+  assert.match(overview, /风险处理队列/);
+  assert.match(overview, /严重度/);
+  assert.match(overview, /最近更新/);
+  assert.match(overview, /下一步动作/);
+  assert.match(overview, /升级负责人/);
   assert.match(css, /risk-queue/);
 });
