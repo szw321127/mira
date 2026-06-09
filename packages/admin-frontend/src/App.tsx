@@ -808,10 +808,7 @@ function AdminWorkspace() {
               icon={<MenuOutlined />}
               onClick={() => setMobileNavOpen(true)}
             />
-            <div>
-              <Text className="section-kicker">项目总览</Text>
-              <Title level={2}>{activeMenuTitles[activeMenu]}</Title>
-            </div>
+            <Title level={2}>{activeMenuTitles[activeMenu]}</Title>
           </div>
           <Space className="admin-header-actions" size={12} wrap>
             <Input
