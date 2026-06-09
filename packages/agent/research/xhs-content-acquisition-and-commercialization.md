@@ -1,0 +1,134 @@
+# Xiaohongshu Content Acquisition And Productization Notes
+
+Date: 2026-06-10
+
+This note records the repository research and the implementation boundary for
+RedNote account/post analysis. It is intentionally stored under
+`packages/agent` because the current task limits product code changes outside
+the agent package.
+
+## Repository Sample
+
+GitHub search for `小红书` returned thousands of repositories. The relevant
+content-acquisition samples fall into these groups:
+
+| Repository | Main Method | Useful Signal For RedNote |
+| --- | --- | --- |
+| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Playwright login state + signed web API requests to Xiaohongshu endpoints such as search, feed detail, comments, creator profile, creator notes. | Best map of data fields and workflows, but license and anti-bot mechanics make direct reuse unsuitable for this commercial project. |
+| [yangsijie666/xiaohongshu-crawler](https://github.com/yangsijie666/xiaohongshu-crawler) | Playwright DOM collection with saved auth state, stealth context, search result parsing, detail parsing, and comment scrolling. | Good model for a bring-your-own-browser collector and MCP-style session boundary. |
+| [mcxiaoxiao/xiaohongshuCrawler](https://github.com/mcxiaoxiao/xiaohongshuCrawler) | Tampermonkey extracts IDs/titles/media on the page, then Python requests public note pages and reads meta description. | Lightweight manual-assisted import path; lower automation risk but limited data depth. |
+| [TikHub/TikHub-API-Python-SDK](https://github.com/TikHub/TikHub-API-Python-SDK) | Third-party API SDK exposing Xiaohongshu web/app endpoints for note info, comments, user info, user notes, search, share-link extraction, images. | Clean product integration option if users bring an API key and accept provider terms/cost. |
+| [Xiangyu-CAS/xiaohongshu-ops-skill](https://github.com/Xiangyu-CAS/xiaohongshu-ops-skill) | Operational SOP over browser actions: account analysis, feed analysis, viral-copy, publish flow, comment operations, knowledge-base persistence. | Strong product workflow reference for account diagnosis and viral post deconstruction. |
+| [comeonzhj/Auto-Redbook-Skills](https://github.com/comeonzhj/Auto-Redbook-Skills) | Skill-driven note creation, card/cover rendering, and publishing automation. | Useful image-text package structure: cover plus multiple cards/pages. |
+| [whotto/Video_note_generator](https://github.com/whotto/Video_note_generator) | Video/subtitle ingestion, AI restructuring, optional image sourcing, Xiaohongshu output format. | Useful expansion path from raw material to platform-native publish packages. |
+| [upJiang/jiang-xiaohongshu-crawler](https://github.com/upJiang/jiang-xiaohongshu-crawler) | Puppeteer crawler plus AI analysis/export workflow. | Confirms the commercial UI shape: collect, deduplicate/export, analyze, generate insights. |
+
+## Acquisition Patterns
+
+1. Signed web API with cookies
+
+- Uses a real browser session to obtain cookies such as `web_session`.
+- Calls Xiaohongshu web endpoints for search, feed detail, comments, and creator
+  notes.
+- Requires request signatures (`x-s`, `x-t`, `x-s-common`, trace id) and tokens
+  such as `xsec_token`.
+- Pros: structured data and higher fidelity.
+- Cons: brittle, platform-policy risk, anti-bot maintenance, and often
+  non-commercial or research-only licensing.
+
+2. Browser DOM collection
+
+- Opens Xiaohongshu pages with Playwright/Selenium/DrissionPage/Puppeteer.
+- Saves browser auth state and extracts visible cards/details/comments from DOM.
+- Uses infinite scroll and randomized delays.
+- Pros: easier to reason about and can be user-assisted.
+- Cons: selectors break, login/captcha still required, and scraping volume must
+  remain controlled.
+
+3. Manual-assisted page extraction
+
+- Browser extension/userscript extracts current-page note IDs, titles, images,
+  or profile links.
+- A local script converts the pasted/exported list into structured samples.
+- Pros: smallest risk and easiest MVP import.
+- Cons: relies on user action and shallow data.
+
+4. Third-party provider API
+
+- User supplies a provider API key.
+- Product calls provider endpoints for note/user/search/comment/image data.
+- Pros: clean backend integration and predictable API contract.
+- Cons: cost, vendor dependency, data rights and availability are delegated to
+  the provider.
+
+## Recommended Product Boundary
+
+For RedNote, the safer commercial path is:
+
+1. Accept structured Xiaohongshu samples from user import, browser-assisted
+   collection, or configured third-party providers.
+2. Keep the agent analysis core independent from any specific crawler.
+3. Add provider adapters later behind explicit admin configuration and clear
+   rate limits.
+4. Do not copy signing algorithms, stealth scripts, or crawler code from
+   research-only repositories.
+
+This lets the product deliver account/post analysis and better generation
+without making the first commercial release depend on fragile scraping.
+
+## Current Agent Implementation
+
+Implemented in `packages/agent/src/xhs-analysis`:
+
+- `normalizeXhsCount`: converts Xiaohongshu count text like `1.2万` and `3.5w`.
+- `analyzeXhsPost`: turns one structured note into format, engagement,
+  content-angle, viral-signal, tag-pattern, and generation-hint data.
+- `analyzeXhsAccount`: analyzes recent posts into account snapshot, content
+  pillars, top posts, and next actions.
+- `buildXhsGenerationBrief`: converts reference post analyses into prompt
+  additions and recommended image-text sections without copying source content.
+
+Exports were added from `packages/agent/src/index.ts` so backend/product layers
+can import these primitives later.
+
+## Future Product Work
+
+### Backend
+
+- Add `xhs-analysis` module with endpoints:
+  - `POST /xhs-analysis/posts/analyze`
+  - `POST /xhs-analysis/accounts/analyze`
+  - `POST /xhs-analysis/generation-brief`
+- Persist imported samples, analyses, and source metadata.
+- Add provider config later:
+  - manual import
+  - browser-assisted import
+  - TikHub-compatible provider
+
+### Web Frontend
+
+- Add an "inspiration/reference" panel in the creator workbench.
+- Let users paste a note URL, upload exported samples, or select saved
+  reference posts.
+- Show analysis results as account pillars, viral signals, and generation
+  guidance.
+- Feed selected references into outline/post generation.
+
+### Admin
+
+- Add content-provider settings only after backend adapter shape is stable:
+  provider type, base URL, API key keyring, rate limits, and compliance copy.
+
+### Publish Package
+
+- Move from one cover preview to a publish package model closer to Xiaohongshu
+  image-text posts:
+  - cover page
+  - 3-6 content pages
+  - caption/body
+  - tags
+  - image/page prompts
+  - copy/download/export actions
+
+Any UI changes should go through impeccable review before commit.
+
