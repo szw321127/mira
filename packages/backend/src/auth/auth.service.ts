@@ -3,6 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { User } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -31,6 +32,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly googleIdentityService: GoogleIdentityService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -125,6 +127,10 @@ export class AuthService {
   }
 
   async loginDemo(): Promise<AuthResponse> {
+    if (!this.isDemoLoginEnabled()) {
+      throw new UnauthorizedException('Demo login is disabled.');
+    }
+
     const account = 'creator@rednote.local';
     const user = await this.prisma.user.upsert({
       create: {
@@ -164,6 +170,16 @@ export class AuthService {
 
   private normalizeAccount(account: string): string {
     return account.trim().toLowerCase();
+  }
+
+  private isDemoLoginEnabled(): boolean {
+    const nodeEnv = this.configService.get<string>('NODE_ENV')?.trim();
+    const explicitFlag = this.configService
+      .get<string>('ENABLE_DEMO_LOGIN')
+      ?.trim()
+      .toLowerCase();
+
+    return nodeEnv !== 'production' || explicitFlag === 'true';
   }
 
   private toPublicUser(user: User): PublicUser {

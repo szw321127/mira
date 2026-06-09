@@ -9,7 +9,12 @@ describe('AuthService Google login', () => {
     sub: 'google-sub-1',
   };
 
-  function createService() {
+  function createService(
+    configValues: Record<string, string | undefined> = {},
+  ) {
+    const configService = {
+      get: jest.fn((key: string) => configValues[key]),
+    };
     const jwtService = {
       sign: jest.fn(() => 'jwt-token'),
     };
@@ -17,6 +22,7 @@ describe('AuthService Google login', () => {
       user: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        upsert: jest.fn(),
         update: jest.fn(),
       },
     };
@@ -25,6 +31,7 @@ describe('AuthService Google login', () => {
     };
 
     return {
+      configService,
       googleIdentity,
       jwtService,
       prisma,
@@ -32,6 +39,7 @@ describe('AuthService Google login', () => {
         jwtService as never,
         prisma as never,
         googleIdentity as never,
+        configService as never,
       ),
     };
   }
@@ -124,5 +132,51 @@ describe('AuthService Google login', () => {
     await expect(
       service.login({ account: 'creator@gmail.com', password: 'password-1' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('allows demo login outside production by default', async () => {
+    const { prisma, service } = createService();
+    prisma.user.upsert.mockResolvedValue({
+      account: 'creator@rednote.local',
+      authProvider: 'password',
+      displayName: '内容创作者',
+      googleSub: null,
+      id: 'demo-user',
+      passwordHash: 'argon-hash',
+    });
+
+    const result = await service.loginDemo();
+
+    expect(prisma.user.upsert).toHaveBeenCalled();
+    expect(result.user.account).toBe('creator@rednote.local');
+  });
+
+  it('rejects demo login in production by default', async () => {
+    const { prisma, service } = createService({ NODE_ENV: 'production' });
+
+    await expect(service.loginDemo()).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.user.upsert).not.toHaveBeenCalled();
+  });
+
+  it('allows demo login in production when explicitly enabled', async () => {
+    const { prisma, service } = createService({
+      ENABLE_DEMO_LOGIN: 'true',
+      NODE_ENV: 'production',
+    });
+    prisma.user.upsert.mockResolvedValue({
+      account: 'creator@rednote.local',
+      authProvider: 'password',
+      displayName: '内容创作者',
+      googleSub: null,
+      id: 'demo-user',
+      passwordHash: 'argon-hash',
+    });
+
+    const result = await service.loginDemo();
+
+    expect(prisma.user.upsert).toHaveBeenCalled();
+    expect(result.user.account).toBe('creator@rednote.local');
   });
 });
