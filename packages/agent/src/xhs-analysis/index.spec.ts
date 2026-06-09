@@ -4,6 +4,8 @@ import {
   auditXhsImageTextPublishPackage,
   buildXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
+  normalizeXhsImportedAccount,
+  normalizeXhsImportedPosts,
   normalizeXhsCount,
 } from './index';
 
@@ -221,5 +223,118 @@ describe('xhs analysis primitives', () => {
         expect.stringContaining('图片提示词'),
       ]),
     );
+  });
+
+  it('normalizes imported posts from provider, browser, and manual sources', () => {
+    const result = normalizeXhsImportedPosts([
+      {
+        source: 'provider',
+        sourceId: 'provider-note-1',
+        raw: {
+          note_id: 'note-1',
+          title: '普通女生通勤胶囊衣橱',
+          desc: '12 件单品搭出一周通勤，省钱也省时间。',
+          images_list: [
+            { url: 'https://example.com/cover.jpg' },
+            { url: 'https://example.com/page-2.jpg' },
+          ],
+          liked_count: '1.2万',
+          collected_count: '8500',
+          comment_count: '230',
+          share_count: '480',
+          tag_list: ['#通勤穿搭', '胶囊衣橱'],
+          user: { nickname: '阿鱼的衣橱' },
+          time: '2026-06-01',
+        },
+      },
+      {
+        source: 'browser',
+        sourceId: 'browser-note-1',
+        raw: {
+          id: 'note-1',
+          title: '重复卡片会被去重',
+          description: '浏览器列表页重复抓到同一篇。',
+          imageUrls: ['https://example.com/duplicated.jpg'],
+        },
+      },
+      {
+        source: 'manual',
+        sourceId: 'manual-note-2',
+        raw: {
+          author: '阿鱼的衣橱',
+          content: '买之前先看版型、面料和复穿率。',
+          metrics: { likes: '8600', collects: '5300', comments: 92 },
+          tags: '#通勤穿搭 #避坑指南',
+          title: '低预算通勤衣橱避坑清单',
+          url: 'https://www.xiaohongshu.com/explore/note-2',
+        },
+      },
+    ]);
+
+    expect(result.posts).toHaveLength(2);
+    expect(result.posts[0]).toMatchObject({
+      author: '阿鱼的衣橱',
+      metrics: {
+        collects: '8500',
+        comments: '230',
+        likes: '1.2万',
+        shares: '480',
+      },
+      tags: ['通勤穿搭', '胶囊衣橱'],
+      title: '普通女生通勤胶囊衣橱',
+    });
+    expect(result.posts[0]?.images).toEqual([
+      'https://example.com/cover.jpg',
+      'https://example.com/page-2.jpg',
+    ]);
+    expect(result.posts[1]?.tags).toEqual(['通勤穿搭', '避坑指南']);
+    expect(result.dropped).toEqual([
+      expect.objectContaining({
+        reason: 'duplicate',
+        sourceId: 'browser-note-1',
+      }),
+    ]);
+    expect(result.sources).toEqual([
+      expect.objectContaining({ normalizedId: 'note-1', source: 'provider' }),
+      expect.objectContaining({ normalizedId: 'note-2', source: 'manual' }),
+    ]);
+  });
+
+  it('normalizes an imported account and keeps posts ready for analysis', () => {
+    const account = normalizeXhsImportedAccount({
+      source: 'provider',
+      sourceId: 'provider-user-1',
+      raw: {
+        avatar: 'https://example.com/avatar.jpg',
+        desc: '小个子通勤穿搭，每周更新胶囊衣橱',
+        fans: '8.6万',
+        homepage: 'https://www.xiaohongshu.com/user/profile/user-1',
+        nickname: '阿鱼的衣橱',
+        notes: [
+          {
+            note_id: 'note-1',
+            title: '小个子通勤裤子这样买',
+            desc: '版型、长度、面料三个维度，照着买不踩雷。',
+            liked_count: '1.2万',
+            collected_count: '9800',
+            comment_count: 310,
+            tag_list: ['小个子穿搭', '通勤穿搭'],
+          },
+        ],
+      },
+    });
+
+    expect(account.account).toMatchObject({
+      bio: '小个子通勤穿搭，每周更新胶囊衣橱',
+      followers: '8.6万',
+      name: '阿鱼的衣橱',
+      url: 'https://www.xiaohongshu.com/user/profile/user-1',
+    });
+    expect(account.account.posts[0]?.title).toBe('小个子通勤裤子这样买');
+    expect(analyzeXhsAccount(account.account).snapshot.followers).toBe(86000);
+    expect(account.source).toMatchObject({
+      source: 'provider',
+      sourceId: 'provider-user-1',
+    });
   });
 });

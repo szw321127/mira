@@ -12,16 +12,16 @@ the agent package.
 GitHub search for `小红书` returned thousands of repositories. The relevant
 content-acquisition samples fall into these groups:
 
-| Repository | Main Method | Useful Signal For RedNote |
-| --- | --- | --- |
-| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) | Playwright login state + signed web API requests to Xiaohongshu endpoints such as search, feed detail, comments, creator profile, creator notes. | Best map of data fields and workflows, but license and anti-bot mechanics make direct reuse unsuitable for this commercial project. |
-| [yangsijie666/xiaohongshu-crawler](https://github.com/yangsijie666/xiaohongshu-crawler) | Playwright DOM collection with saved auth state, stealth context, search result parsing, detail parsing, and comment scrolling. | Good model for a bring-your-own-browser collector and MCP-style session boundary. |
-| [mcxiaoxiao/xiaohongshuCrawler](https://github.com/mcxiaoxiao/xiaohongshuCrawler) | Tampermonkey extracts IDs/titles/media on the page, then Python requests public note pages and reads meta description. | Lightweight manual-assisted import path; lower automation risk but limited data depth. |
-| [TikHub/TikHub-API-Python-SDK](https://github.com/TikHub/TikHub-API-Python-SDK) | Third-party API SDK exposing Xiaohongshu web/app endpoints for note info, comments, user info, user notes, search, share-link extraction, images. | Clean product integration option if users bring an API key and accept provider terms/cost. |
-| [Xiangyu-CAS/xiaohongshu-ops-skill](https://github.com/Xiangyu-CAS/xiaohongshu-ops-skill) | Operational SOP over browser actions: account analysis, feed analysis, viral-copy, publish flow, comment operations, knowledge-base persistence. | Strong product workflow reference for account diagnosis and viral post deconstruction. |
-| [comeonzhj/Auto-Redbook-Skills](https://github.com/comeonzhj/Auto-Redbook-Skills) | Skill-driven note creation, card/cover rendering, and publishing automation. | Useful image-text package structure: cover plus multiple cards/pages. |
-| [whotto/Video_note_generator](https://github.com/whotto/Video_note_generator) | Video/subtitle ingestion, AI restructuring, optional image sourcing, Xiaohongshu output format. | Useful expansion path from raw material to platform-native publish packages. |
-| [upJiang/jiang-xiaohongshu-crawler](https://github.com/upJiang/jiang-xiaohongshu-crawler) | Puppeteer crawler plus AI analysis/export workflow. | Confirms the commercial UI shape: collect, deduplicate/export, analyze, generate insights. |
+| Repository                                                                                | Main Method                                                                                                                                       | Useful Signal For RedNote                                                                                                           |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)                     | Playwright login state + signed web API requests to Xiaohongshu endpoints such as search, feed detail, comments, creator profile, creator notes.  | Best map of data fields and workflows, but license and anti-bot mechanics make direct reuse unsuitable for this commercial project. |
+| [yangsijie666/xiaohongshu-crawler](https://github.com/yangsijie666/xiaohongshu-crawler)   | Playwright DOM collection with saved auth state, stealth context, search result parsing, detail parsing, and comment scrolling.                   | Good model for a bring-your-own-browser collector and MCP-style session boundary.                                                   |
+| [mcxiaoxiao/xiaohongshuCrawler](https://github.com/mcxiaoxiao/xiaohongshuCrawler)         | Tampermonkey extracts IDs/titles/media on the page, then Python requests public note pages and reads meta description.                            | Lightweight manual-assisted import path; lower automation risk but limited data depth.                                              |
+| [TikHub/TikHub-API-Python-SDK](https://github.com/TikHub/TikHub-API-Python-SDK)           | Third-party API SDK exposing Xiaohongshu web/app endpoints for note info, comments, user info, user notes, search, share-link extraction, images. | Clean product integration option if users bring an API key and accept provider terms/cost.                                          |
+| [Xiangyu-CAS/xiaohongshu-ops-skill](https://github.com/Xiangyu-CAS/xiaohongshu-ops-skill) | Operational SOP over browser actions: account analysis, feed analysis, viral-copy, publish flow, comment operations, knowledge-base persistence.  | Strong product workflow reference for account diagnosis and viral post deconstruction.                                              |
+| [comeonzhj/Auto-Redbook-Skills](https://github.com/comeonzhj/Auto-Redbook-Skills)         | Skill-driven note creation, card/cover rendering, and publishing automation.                                                                      | Useful image-text package structure: cover plus multiple cards/pages.                                                               |
+| [whotto/Video_note_generator](https://github.com/whotto/Video_note_generator)             | Video/subtitle ingestion, AI restructuring, optional image sourcing, Xiaohongshu output format.                                                   | Useful expansion path from raw material to platform-native publish packages.                                                        |
+| [upJiang/jiang-xiaohongshu-crawler](https://github.com/upJiang/jiang-xiaohongshu-crawler) | Puppeteer crawler plus AI analysis/export workflow.                                                                                               | Confirms the commercial UI shape: collect, deduplicate/export, analyze, generate insights.                                          |
 
 ## Acquisition Patterns
 
@@ -85,6 +85,11 @@ Implemented in `packages/agent/src/xhs-analysis`:
   content-angle, viral-signal, tag-pattern, and generation-hint data.
 - `analyzeXhsAccount`: analyzes recent posts into account snapshot, content
   pillars, top posts, and next actions.
+- `normalizeXhsImportedPosts`: normalizes already-acquired note data from
+  provider APIs, browser-assisted collection, or manual paste/export into
+  `XhsPostInput[]`. It also records source metadata and drops duplicates.
+- `normalizeXhsImportedAccount`: normalizes an already-acquired account/profile
+  payload and its note list into `XhsAccountInput`, keeping source provenance.
 - `buildXhsGenerationBrief`: converts reference post analyses into prompt
   additions and recommended image-text sections without copying source content.
 - `buildXhsImageTextPublishPackage`: converts an idea, optional outline, and
@@ -109,6 +114,46 @@ Implemented in `packages/agent/src/xhs-analysis`:
 
 Exports were added from `packages/agent/src/index.ts` so backend/product layers
 can import these primitives later.
+
+## Import Normalization Boundary
+
+The product should separate acquisition from analysis:
+
+- Acquisition layer: user paste/export, browser-assisted collector, or
+  configured third-party provider.
+- Normalization layer: `normalizeXhsImportedPosts` and
+  `normalizeXhsImportedAccount`.
+- Analysis layer: `analyzeXhsPost`, `analyzeXhsAccount`, and
+  `buildXhsGenerationBrief`.
+- Generation layer: `buildXhsImageTextPublishPackage` and
+  `auditXhsImageTextPublishPackage`.
+
+This keeps crawler/provider volatility out of the core agent logic. Each
+backend adapter only needs to map its raw payload into a
+`XhsImportedPostRecord` or `XhsImportedAccountRecord`:
+
+```ts
+normalizeXhsImportedPosts([
+  {
+    source: 'provider',
+    sourceId: 'tikhub-note-123',
+    raw: providerPayload,
+  },
+]);
+```
+
+The normalizer handles common field aliases such as:
+
+- note IDs: `note_id`, `noteId`, `id`, `item_id`
+- text: `title`, `desc`, `description`, `content`
+- media: `images`, `imageUrls`, `images_list`, `cover`
+- metrics: `liked_count`, `collected_count`, `comment_count`, `share_count`
+- tags: `tags`, `tag_list`, hashtag strings
+- authors: `author`, `nickname`, `user.nickname`
+
+It intentionally does not fetch, sign, scroll, bypass captcha, or automate
+publishing. Those concerns belong to explicit adapters with user/admin
+configuration and compliance controls.
 
 ## Publish Package Contract
 
