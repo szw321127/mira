@@ -436,10 +436,12 @@ export class ConversationsService {
     await this.ensureOwnedConversation(userId, conversationId);
     const draft = dto.postDraftId
       ? await this.findOwnedPostDraft(userId, dto.postDraftId, conversationId)
-      : await this.prisma.postDraft.findFirst({
-          orderBy: { updatedAt: 'desc' },
-          where: { conversationId },
-        });
+      : dto.snapshot
+        ? null
+        : await this.prisma.postDraft.findFirst({
+            orderBy: { updatedAt: 'desc' },
+            where: { conversationId },
+          });
     const snapshot = dto.snapshot ?? (draft ? this.toPostDraft(draft) : null);
 
     if (!snapshot) {

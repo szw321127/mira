@@ -10,6 +10,9 @@ import {
   type AuthResponse,
   type AuthUser,
   type BackendConversation,
+  type XhsCommercialWorkflow,
+  type XhsOutlineCandidate,
+  type XhsOutlineStrategy,
 } from "@/lib/api";
 import type {
   ConversationRecord,
@@ -91,6 +94,7 @@ type PostDraftPatchInFlight = {
 const AUTH_STORAGE_KEY = "rednote:auth-session";
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
+const LOCAL_XHS_ID_PREFIX = "xhs:";
 
 function getWorkspaceErrorMessage(error: unknown, fallback: string) {
   const detail = getApiErrorMessage(error);
@@ -101,7 +105,74 @@ function getWorkspaceErrorMessage(error: unknown, fallback: string) {
   return `${fallback}（${detail}）`;
 }
 
-function mergePostDraftImageFields(current: PostDraft, next: PostDraft): PostDraft {
+function isLocalXhsId(id: string | null | undefined) {
+  return Boolean(id?.startsWith(LOCAL_XHS_ID_PREFIX));
+}
+
+function mapXhsStrategyToTone(strategy: XhsOutlineStrategy): Outline["tone"] {
+  if (strategy === "checklist") return "checklist";
+  if (strategy === "pain-point") return "story";
+  return "guide";
+}
+
+function mapXhsStrategyLabel(strategy: XhsOutlineStrategy) {
+  if (strategy === "pain-point") return "痛点切入";
+  if (strategy === "step-by-step") return "步骤教程";
+  return "收藏清单";
+}
+
+function mapXhsOutlineCandidate(
+  candidate: XhsOutlineCandidate,
+  batchNo: number,
+  index: number,
+): Outline {
+  return {
+    batch: batchNo,
+    hook: candidate.selectionReason,
+    id: `${LOCAL_XHS_ID_PREFIX}outline:${batchNo}:${index}:${candidate.id}`,
+    label: mapXhsStrategyLabel(candidate.strategy),
+    points: candidate.outline,
+    title: candidate.title,
+    tone: mapXhsStrategyToTone(candidate.strategy),
+  };
+}
+
+function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
+  const publishPackage = workflow.publishPackage;
+  const coverPage =
+    publishPackage.pages.find((page) => page.role === "cover") ??
+    publishPackage.pages[0];
+
+  return {
+    caption: publishPackage.caption,
+    coverLine:
+      (coverPage?.headline ?? publishPackage.titleCandidates[0] ?? "").slice(
+        0,
+        18,
+      ) || publishPackage.idea.slice(0, 18),
+    id: `${LOCAL_XHS_ID_PREFIX}draft:${Date.now()}`,
+    imageError: null,
+    imageGeneratedAt: null,
+    imageProvider: null,
+    imagePrompt: publishPackage.imagePromptPack[0] ?? "",
+    imageStatus: "idle",
+    imageUrl: null,
+    sections: publishPackage.pages.map((page) =>
+      [`P${page.pageNumber} ${page.headline}`, ...page.body].join("\n"),
+    ),
+    stale: false,
+    tags: publishPackage.hashtags,
+    title:
+      publishPackage.copyBlocks.title ||
+      publishPackage.titleCandidates[0] ||
+      publishPackage.idea,
+  };
+}
+
+function mergePostDraftImageFields(
+  current: PostDraft,
+  next: PostDraft,
+): PostDraft {
   return {
     ...current,
     imageError: next.imageError,
@@ -137,7 +208,9 @@ export default function Home() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [briefError, setBriefError] = useState("");
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
-  const [conversationRecords, setConversationRecords] = useState<ConversationRecord[]>([]);
+  const [conversationRecords, setConversationRecords] = useState<
+    ConversationRecord[]
+  >([]);
   const [isHistoryReady, setIsHistoryReady] = useState(false);
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Snapshot | null>(null);
@@ -187,7 +260,10 @@ export default function Home() {
   }, [postDraft?.id]);
 
   const latestBatch = useMemo(
-    () => (outlines.length ? Math.max(...outlines.map((outline) => outline.batch)) : -1),
+    () =>
+      outlines.length
+        ? Math.max(...outlines.map((outline) => outline.batch))
+        : -1,
     [outlines],
   );
 
@@ -267,7 +343,9 @@ export default function Home() {
           mappedSnapshot,
           options.message ?? "已从自动保存恢复当前工作状态。",
         );
-        setLastAutoSavedAt(formatAutoSaveTime(new Date(latestSnapshot.createdAt)));
+        setLastAutoSavedAt(
+          formatAutoSaveTime(new Date(latestSnapshot.createdAt)),
+        );
         return;
       }
     }
@@ -307,7 +385,10 @@ export default function Home() {
     );
   }
 
-  function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot, message: string) {
+  function applyWorkspaceSnapshot(
+    snapshot: WorkspaceSnapshot,
+    message: string,
+  ) {
     setBatch(snapshot.batch);
     setBriefError(snapshot.briefError);
     setDraftStale(snapshot.draftStale);
@@ -367,7 +448,10 @@ export default function Home() {
     const records = await refreshConversationRecords(token);
 
     if (records[0]) {
-      const conversation = await api.conversations.get(token, records[0].conversationId);
+      const conversation = await api.conversations.get(
+        token,
+        records[0].conversationId,
+      );
       applyConversation(conversation, {
         message: "已从后端恢复最近一次创作。",
         preferSnapshot: true,
@@ -405,7 +489,10 @@ export default function Home() {
         const nextSession = { accessToken: session.accessToken, user };
         setAccessToken(nextSession.accessToken);
         setAuthUser(nextSession.user);
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+        window.localStorage.setItem(
+          AUTH_STORAGE_KEY,
+          JSON.stringify(nextSession),
+        );
         await bootstrapWorkspace(nextSession.accessToken);
       } catch (error) {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -474,7 +561,9 @@ export default function Home() {
         await api.conversations.update(accessToken, conversationId, updateBody);
         lastAutoSavedKeyRef.current = createAutoSaveKey(snapshot);
         setAutoSaveState("saved");
-        setLastAutoSavedAt(formatAutoSaveTime(new Date(savedSnapshot.createdAt)));
+        setLastAutoSavedAt(
+          formatAutoSaveTime(new Date(savedSnapshot.createdAt)),
+        );
       }
 
       const conversation = await api.conversations.create(accessToken, {
@@ -599,17 +688,25 @@ export default function Home() {
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
-      const result = await api.conversations.createOutlineBatch(
-        accessToken,
-        currentConversationId,
-        { prompt: seed },
+      const candidates = await api.xhs.buildOutlines(accessToken, {
+        idea: seed,
+      });
+      const nextBatch = latestBatch + 1;
+      const nextOutlines = candidates.map((candidate, index) =>
+        mapXhsOutlineCandidate(candidate, nextBatch, index),
       );
 
       setLastSnapshot(previousSnapshot);
-      applyConversation(result.conversation, {
-        keepLastSnapshot: true,
-        message: "已追加新一批大纲，之前生成的仍保留。",
+      setBatch(nextBatch);
+      setOutlines((currentOutlines) => [...currentOutlines, ...nextOutlines]);
+      setSelectedId(nextOutlines[0]?.id ?? selectedId);
+      if (postDraft) setDraftStale(true);
+      await api.conversations.update(accessToken, currentConversationId, {
+        statusMessage: "已追加新一批小红书大纲，之前生成的仍保留。",
+        title: seed.trim() || selectedOutline?.title || "新对话",
+        topic: seed,
       });
+      setStatusMessage("已追加新一批小红书大纲，之前生成的仍保留。");
       await refreshConversationRecordsSafely(
         "大纲已生成，但记录列表刷新失败。",
         accessToken,
@@ -646,13 +743,11 @@ export default function Home() {
     setStatusMessage("大纲已更新，生成图文可刷新预览。");
 
     if (!accessToken) return;
+    if (isLocalXhsId(id)) return;
 
     void api.outlines.update(accessToken, id, patch).catch((error) => {
       setStatusMessage(
-        getWorkspaceErrorMessage(
-          error,
-          "大纲已在本地更新，但同步到后端失败。",
-        ),
+        getWorkspaceErrorMessage(error, "大纲已在本地更新，但同步到后端失败。"),
       );
     });
   }
@@ -673,15 +768,19 @@ export default function Home() {
         selectedOutlineId: selectedOutline.id,
         topic: seed,
       });
-      const draft = await api.conversations.generatePostDraft(
-        accessToken,
-        currentConversationId,
-        { outlineId: selectedOutline.id },
-      );
+      const workflow = await api.xhs.buildCommercialDraft(accessToken, {
+        idea: seed,
+        outline: selectedOutline.points,
+        pageCount: Math.min(Math.max(selectedOutline.points.length + 1, 4), 7),
+      });
 
-      setPostDraft(mapBackendPostDraft(draft));
+      setPostDraft(mapXhsWorkflowToPostDraft(workflow));
       setDraftStale(false);
-      setStatusMessage("图文草稿已生成，可以复制或继续微调大纲。");
+      setStatusMessage(
+        workflow.audit.ready
+          ? "小红书发布包已生成，可以复制或继续微调。"
+          : `发布包已生成，建议先处理：${workflow.audit.repairActions[0] ?? "检查内容完整度。"}`,
+      );
       await refreshConversationRecordsSafely(
         "图文已生成，但记录列表刷新失败。",
         accessToken,
@@ -730,7 +829,9 @@ export default function Home() {
       const savedDraft = await api.conversations.createSavedDraft(
         accessToken,
         currentConversationId,
-        { postDraftId: postDraft.id },
+        isLocalXhsId(postDraft.id)
+          ? { snapshot: postDraft as unknown as Record<string, unknown> }
+          : { postDraftId: postDraft.id },
       );
       const mappedDraft = mapSavedDraft(savedDraft);
 
@@ -766,6 +867,11 @@ export default function Home() {
       return;
     }
 
+    if (isLocalXhsId(postDraft.id)) {
+      setStatusMessage("当前发布包已包含封面提示词，独立封面出图稍后接入。");
+      return;
+    }
+
     const draftId = postDraft.id;
     const previousImageFields = {
       imageError: postDraft.imageError,
@@ -787,9 +893,7 @@ export default function Home() {
         await flushPostDraftPatch();
       } catch (error) {
         setPostDraft((draft) =>
-          draft?.id === draftId
-            ? { ...draft, ...previousImageFields }
-            : draft,
+          draft?.id === draftId ? { ...draft, ...previousImageFields } : draft,
         );
         setStatusMessage(
           getWorkspaceErrorMessage(error, "草稿同步失败，封面图生成未开始。"),
@@ -879,7 +983,8 @@ export default function Home() {
     const inFlight = postDraftPatchInFlightRef.current;
     if (inFlight) {
       await inFlight.promise.catch((error: unknown) => {
-        const isCurrentDraft = currentPostDraftIdRef.current === inFlight.draftId;
+        const isCurrentDraft =
+          currentPostDraftIdRef.current === inFlight.draftId;
 
         if (isCurrentDraft) {
           const existingPendingPatch = pendingPostDraftPatchRef.current;
@@ -950,6 +1055,7 @@ export default function Home() {
     setDraftStale(false);
 
     if (!accessToken || !postDraft) return;
+    if (isLocalXhsId(postDraft.id)) return;
 
     postDraftPatchSequenceRef.current += 1;
 
@@ -995,7 +1101,8 @@ export default function Home() {
     }
 
     const topic = seed.trim();
-    const title = (postDraft?.title ?? selectedOutline?.title ?? topic) || "新对话";
+    const title =
+      (postDraft?.title ?? selectedOutline?.title ?? topic) || "新对话";
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
@@ -1024,10 +1131,7 @@ export default function Home() {
     } catch (error) {
       setAutoSaveState("error");
       setStatusMessage(
-        getWorkspaceErrorMessage(
-          error,
-          "保存对话记录失败，本地内容已保留。",
-        ),
+        getWorkspaceErrorMessage(error, "保存对话记录失败，本地内容已保留。"),
       );
     }
   }
@@ -1444,7 +1548,9 @@ export default function Home() {
                 onSelectOutline={(outline) => {
                   setSelectedId(outline.id);
                   if (postDraft) setDraftStale(true);
-                  setStatusMessage(`已选择「${toneMeta[outline.tone].name}」。`);
+                  setStatusMessage(
+                    `已选择「${toneMeta[outline.tone].name}」。`,
+                  );
                   if (accessToken && conversationId) {
                     void api.conversations
                       .update(accessToken, conversationId, {
@@ -1485,7 +1591,9 @@ export default function Home() {
               isHistoryReady={isHistoryReady}
               isStartingConversation={isStartingConversation}
               onCreateConversation={() => void startNewConversation()}
-              onDeleteConversation={(record) => void deleteConversationRecord(record)}
+              onDeleteConversation={(record) =>
+                void deleteConversationRecord(record)
+              }
               onRestoreConversation={(record) =>
                 void restoreConversationRecord(record)
               }

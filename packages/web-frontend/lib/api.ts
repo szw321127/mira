@@ -119,6 +119,78 @@ export type BackendConversationSummary = {
   updatedAt: string;
 };
 
+export type XhsOutlineStrategy = "pain-point" | "step-by-step" | "checklist";
+
+export type XhsOutlineCandidate = {
+  audience: string;
+  estimatedPageCount: number;
+  id: string;
+  idea: string;
+  outline: string[];
+  selectionReason: string;
+  sourcePatterns: string[];
+  strategy: XhsOutlineStrategy;
+  title: string;
+};
+
+export type XhsPublishAuditIssue = {
+  check: string;
+  message: string;
+  severity: "blocker" | "warning";
+};
+
+export type XhsImageTextPage = {
+  body: string[];
+  designNotes: string[];
+  headline: string;
+  imagePrompt: string;
+  pageNumber: number;
+  role: "content" | "cover" | "summary";
+};
+
+export type XhsImageTextPublishPackage = {
+  caption: string;
+  copyBlocks: {
+    caption: string;
+    hashtags: string;
+    pageText: string;
+    publishText: string;
+    title: string;
+  };
+  hashtags: string[];
+  idea: string;
+  imagePromptPack: string[];
+  pages: XhsImageTextPage[];
+  platform: "xiaohongshu";
+  publishingChecklist: string[];
+  titleCandidates: string[];
+};
+
+export type XhsCommercialWorkflow = {
+  accountAnalysis?: unknown;
+  audit: {
+    blockers: XhsPublishAuditIssue[];
+    passedChecks: string[];
+    ready: boolean;
+    repairActions: string[];
+    score: number;
+    warnings: XhsPublishAuditIssue[];
+  };
+  brief: unknown;
+  importedAccount?: unknown;
+  importedPosts: unknown;
+  publishPackage: XhsImageTextPublishPackage;
+  referencePosts: unknown[];
+  summary: {
+    importedAccountPostCount: number;
+    importedStandalonePostCount: number;
+    ready: boolean;
+    referenceCount: number;
+    score: number;
+    topContentPillars: string[];
+  };
+};
+
 export type OutlineBatchResult = {
   batch: BackendOutlineBatch;
   conversation: BackendConversation;
@@ -247,11 +319,19 @@ class ApiClient {
       const payload: unknown = await response.json().catch(() => null);
 
       if (!isEnvelope(payload)) {
-        throw new ApiError(response.status, "接口返回格式异常。", response.status);
+        throw new ApiError(
+          response.status,
+          "接口返回格式异常。",
+          response.status,
+        );
       }
 
       if (!response.ok || payload.code !== 0) {
-        throw new ApiError(payload.code || response.status, payload.msg, response.status);
+        throw new ApiError(
+          payload.code || response.status,
+          payload.msg,
+          response.status,
+        );
       }
 
       const context = await this.interceptors.response.run({
@@ -359,14 +439,11 @@ export const api = {
       conversationId: string,
       body: { outlineId?: string },
     ) =>
-      request<BackendPostDraft>(
-        `/conversations/${conversationId}/post-draft`,
-        {
-          body,
-          method: "POST",
-          token,
-        },
-      ),
+      request<BackendPostDraft>(`/conversations/${conversationId}/post-draft`, {
+        body,
+        method: "POST",
+        token,
+      }),
   },
   outlines: {
     update: (
@@ -414,6 +491,42 @@ export const api = {
       request<BackendPostDraft>(`/post-drafts/${postDraftId}`, {
         body,
         method: "PATCH",
+        token,
+      }),
+  },
+  xhs: {
+    buildCommercialDraft: (
+      token: string,
+      body: {
+        account?: {
+          raw: Record<string, unknown>;
+          source: string;
+          sourceId?: string;
+        };
+        audience?: string;
+        idea: string;
+        outline: string[];
+        pageCount?: number;
+        posts?: Array<{
+          raw: Record<string, unknown>;
+          source: string;
+          sourceId?: string;
+        }>;
+        tone?: string;
+      },
+    ) =>
+      request<XhsCommercialWorkflow>(
+        "/xhs-analysis/workflows/commercial-draft",
+        {
+          body,
+          method: "POST",
+          token,
+        },
+      ),
+    buildOutlines: (token: string, body: { audience?: string; idea: string }) =>
+      request<XhsOutlineCandidate[]>("/xhs-analysis/outlines", {
+        body,
+        method: "POST",
         token,
       }),
   },

@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { XhsAnalysisModule } from './xhs-analysis/xhs-analysis.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ConversationsModule } from './conversations/conversations.module';
     AdminProjectsModule,
     AuthModule,
     ConversationsModule,
+    XhsAnalysisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
