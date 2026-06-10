@@ -5,6 +5,8 @@ import type {
   BackendSavedDraft,
   ImportedXhsAccountAnalysis,
   ImportedXhsPostAnalysis,
+  XhsProviderImportSummary,
+  XhsStoredReference,
 } from "@/lib/api";
 import type {
   ConversationRecord,
@@ -129,6 +131,50 @@ function mapImportedAccountAnalysis(
   }
 
   return value as unknown as ImportedXhsAccountAnalysis;
+}
+
+function referenceProviderType(
+  value: string,
+): XhsProviderImportSummary["type"] {
+  return value === "tikhub" ? "tikhub" : "custom";
+}
+
+export function mapXhsStoredReferenceToReferenceImport(
+  reference: XhsStoredReference,
+): ReferenceImportState {
+  const provider: XhsProviderImportSummary = {
+    complianceNote: "",
+    endpoint: reference.providerEndpoint ?? "",
+    rateLimitPerMinute: null,
+    sourceId: reference.sourceId,
+    type: referenceProviderType(reference.providerType),
+  };
+  const mapped = {
+    analysis: reference.analysis,
+    backendReferenceId: reference.id,
+    imported: reference.imported,
+    provider,
+    reference: reference.reference,
+  };
+  const empty = createEmptyReferenceImport();
+
+  if (reference.kind === "account") {
+    const account = mapImportedAccountAnalysis(mapped);
+
+    return {
+      ...empty,
+      importedAccount: account
+        ? { ...account, backendReferenceId: reference.id }
+        : null,
+    };
+  }
+
+  const post = mapImportedPostAnalysis(mapped);
+
+  return {
+    ...empty,
+    importedPosts: post ? [{ ...post, backendReferenceId: reference.id }] : [],
+  };
 }
 
 export function mapReferenceImportState(value: unknown): ReferenceImportState {

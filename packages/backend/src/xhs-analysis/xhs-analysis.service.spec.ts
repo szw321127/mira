@@ -31,11 +31,42 @@ type XhsReferenceUpsertArgs = {
   };
 };
 
+const storedPostReference = {
+  analysis: JSON.stringify({
+    engagement: { total: 24928 },
+    post: { title: '通勤包这样收纳，早八少慌 10 分钟' },
+    tagPatterns: ['通勤包'],
+    viralSignals: ['高收藏价值'],
+  }),
+  conversationId: 'conversation-1',
+  createdAt: new Date('2026-06-10T00:00:00.000Z'),
+  id: 'xhs-reference-post-1',
+  imported: JSON.stringify({
+    posts: [{ title: '通勤包这样收纳，早八少慌 10 分钟' }],
+    sources: [{ normalizedId: 'note-42', source: 'provider' }],
+  }),
+  kind: 'post',
+  providerEndpoint: 'https://provider.example/xhs/posts/import',
+  providerType: 'custom',
+  sourceId: 'note-42',
+  sourceUrl: 'https://www.xiaohongshu.com/explore/note-42',
+  title: '通勤包这样收纳，早八少慌 10 分钟',
+  updatedAt: new Date('2026-06-10T00:02:00.000Z'),
+};
+
+const storedPostReferenceOwnership = {
+  conversation: { userId: 'user-1' },
+  id: 'xhs-reference-post-1',
+};
+
 const prisma = {
   conversation: {
     findFirst: jest.fn(() => Promise.resolve({ id: 'conversation-1' })),
   },
   xhsReference: {
+    delete: jest.fn(() => Promise.resolve(storedPostReference)),
+    findFirst: jest.fn(() => Promise.resolve(storedPostReferenceOwnership)),
+    findMany: jest.fn(() => Promise.resolve([storedPostReference])),
     upsert: jest.fn((args: XhsReferenceUpsertArgs) => {
       const { create } = args;
 
@@ -58,6 +89,9 @@ describe('XhsAnalysisService', () => {
     jest.restoreAllMocks();
     contentProviders.getRuntimeConfig.mockClear();
     prisma.conversation.findFirst.mockClear();
+    prisma.xhsReference.delete.mockClear();
+    prisma.xhsReference.findFirst.mockClear();
+    prisma.xhsReference.findMany.mockClear();
     prisma.xhsReference.upsert.mockClear();
     service = new XhsAnalysisService(
       contentProviders as never,
@@ -388,5 +422,53 @@ describe('XhsAnalysisService', () => {
     expect(result.analysis.contentPillars).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: '通勤穿搭' })]),
     );
+  });
+
+  it('lists stored references for an owned conversation with parsed payloads', async () => {
+    const references = await service.listReferences('user-1', 'conversation-1');
+
+    expect(prisma.conversation.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { id: 'conversation-1', userId: 'user-1' },
+    });
+    expect(prisma.xhsReference.findMany).toHaveBeenCalledWith({
+      orderBy: { createdAt: 'desc' },
+      where: { conversationId: 'conversation-1' },
+    });
+    expect(references[0]).toMatchObject({
+      analysis: {
+        engagement: { total: 24928 },
+        viralSignals: ['高收藏价值'],
+      },
+      imported: {
+        posts: [{ title: '通勤包这样收纳，早八少慌 10 分钟' }],
+      },
+      kind: 'post',
+      reference: {
+        conversationId: 'conversation-1',
+        id: 'xhs-reference-post-1',
+        sourceId: 'note-42',
+      },
+      title: '通勤包这样收纳，早八少慌 10 分钟',
+    });
+  });
+
+  it('deletes a stored reference only when it belongs to the user', async () => {
+    const result = await service.deleteReference(
+      'user-1',
+      'xhs-reference-post-1',
+    );
+
+    expect(prisma.xhsReference.findFirst).toHaveBeenCalledWith({
+      select: {
+        conversation: { select: { userId: true } },
+        id: true,
+      },
+      where: { id: 'xhs-reference-post-1' },
+    });
+    expect(prisma.xhsReference.delete).toHaveBeenCalledWith({
+      where: { id: 'xhs-reference-post-1' },
+    });
+    expect(result).toEqual({ ok: true });
   });
 });

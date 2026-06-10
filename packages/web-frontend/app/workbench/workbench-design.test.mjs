@@ -254,10 +254,16 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(api, /\/xhs-analysis\/accounts\/import/);
   assert.match(api, /buildGenerationBrief:/);
   assert.match(api, /\/xhs-analysis\/generation-brief/);
+  assert.match(api, /listReferences:/);
+  assert.match(api, /\/conversations\/\$\{conversationId\}\/xhs-references/);
+  assert.match(api, /deleteReference:/);
+  assert.match(api, /\/xhs-references\/\$\{referenceId\}/);
 
   assert.match(types, /ReferenceImportState/);
+  assert.match(types, /backendReferenceId\?: string/);
   assert.match(types, /referenceImport: ReferenceImportState/);
   assert.match(utils, /mapReferenceImportState/);
+  assert.match(utils, /mapXhsStoredReferenceToReferenceImport/);
   assert.match(utils, /referenceImport: mapReferenceImportState/);
   assert.match(utils, /referenceImport: snapshot\.referenceImport/);
 
@@ -273,6 +279,9 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(source, /api\.xhs\.importAccount/);
   assert.match(source, /const currentConversationId = await ensureConversation/);
   assert.match(source, /conversationId: currentConversationId/);
+  assert.match(source, /loadConversationReferences/);
+  assert.match(source, /api\.xhs\.listReferences/);
+  assert.match(source, /api\.xhs\.deleteReference/);
   assert.match(source, /api\.xhs\.buildGenerationBrief/);
   assert.match(source, /buildReferenceBrief/);
   assert.match(source, /const referenceBrief = await buildReferenceBrief/);

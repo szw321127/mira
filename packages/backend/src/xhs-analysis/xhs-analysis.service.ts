@@ -65,6 +65,22 @@ type SavedXhsReference = {
   title: string;
 };
 
+export type XhsStoredReference = {
+  analysis: unknown;
+  conversationId: string;
+  createdAt: Date;
+  id: string;
+  imported: unknown;
+  kind: XhsReferenceKind;
+  providerEndpoint: string | null;
+  providerType: string;
+  reference: SavedXhsReference;
+  sourceId: string;
+  sourceUrl: string | null;
+  title: string;
+  updatedAt: Date;
+};
+
 export type ImportedXhsPostAnalysis = {
   analysis: XhsPostAnalysis;
   imported: XhsImportedPostsNormalization;
@@ -104,6 +120,59 @@ export class XhsAnalysisService {
 
   buildCommercialWorkflow(input: XhsCommercialWorkflowInput) {
     return buildXhsCommercialWorkflow(input);
+  }
+
+  async listReferences(
+    userId: string,
+    conversationId: string,
+  ): Promise<XhsStoredReference[]> {
+    await this.ensureOwnedConversation(userId, conversationId);
+
+    const references = await this.prisma.xhsReference.findMany({
+      orderBy: { createdAt: 'desc' },
+      where: { conversationId },
+    });
+
+    return references.map((reference) => ({
+      analysis: this.parseStoredReferenceJson(reference.analysis),
+      conversationId: reference.conversationId,
+      createdAt: reference.createdAt,
+      id: reference.id,
+      imported: this.parseStoredReferenceJson(reference.imported),
+      kind: reference.kind as XhsReferenceKind,
+      providerEndpoint: reference.providerEndpoint,
+      providerType: reference.providerType,
+      reference: {
+        conversationId: reference.conversationId,
+        createdAt: reference.createdAt,
+        id: reference.id,
+        kind: reference.kind as XhsReferenceKind,
+        sourceId: reference.sourceId,
+        title: reference.title,
+      },
+      sourceId: reference.sourceId,
+      sourceUrl: reference.sourceUrl,
+      title: reference.title,
+      updatedAt: reference.updatedAt,
+    }));
+  }
+
+  async deleteReference(userId: string, referenceId: string) {
+    const reference = await this.prisma.xhsReference.findFirst({
+      select: {
+        conversation: { select: { userId: true } },
+        id: true,
+      },
+      where: { id: referenceId },
+    });
+
+    if (!reference || reference.conversation.userId !== userId) {
+      throw new NotFoundException('参考来源不存在或无权删除。');
+    }
+
+    await this.prisma.xhsReference.delete({ where: { id: referenceId } });
+
+    return { ok: true };
   }
 
   async importAndAnalyzePost(
@@ -326,14 +395,7 @@ export class XhsAnalysisService {
       throw new BadRequestException('保存参考来源需要登录用户。');
     }
 
-    const conversation = await this.prisma.conversation.findFirst({
-      select: { id: true },
-      where: { id: input.conversationId, userId: input.userId },
-    });
-
-    if (!conversation) {
-      throw new NotFoundException('对话不存在或无权保存参考来源。');
-    }
+    await this.ensureOwnedConversation(input.userId, input.conversationId);
 
     const reference = await this.prisma.xhsReference.upsert({
       create: {
@@ -372,5 +434,29 @@ export class XhsAnalysisService {
       sourceId: reference.sourceId,
       title: reference.title,
     };
+  }
+
+  private async ensureOwnedConversation(
+    userId: string,
+    conversationId: string,
+  ) {
+    const conversation = await this.prisma.conversation.findFirst({
+      select: { id: true },
+      where: { id: conversationId, userId },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('对话不存在或无权保存参考来源。');
+    }
+
+    return conversation;
+  }
+
+  private parseStoredReferenceJson(value: string): unknown {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      throw new BadRequestException('参考来源数据损坏，请重新导入。');
+    }
   }
 }

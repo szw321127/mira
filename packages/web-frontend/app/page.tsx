@@ -40,6 +40,7 @@ import {
   mapConversationRecord,
   mapSavedDraft,
   mapWorkspaceSnapshot,
+  mapXhsStoredReferenceToReferenceImport,
   toneMeta,
 } from "./workbench/workspace-utils";
 import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
@@ -308,6 +309,7 @@ export default function Home() {
   );
   const postDraftPatchInFlightRef = useRef<PostDraftPatchInFlight | null>(null);
   const postDraftPatchSequenceRef = useRef(0);
+  const conversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return apiClient.interceptors.error.use((error) => {
@@ -340,6 +342,10 @@ export default function Home() {
     postDraftPatchSequenceRef.current += 1;
   }, [postDraft?.id]);
 
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   const latestBatch = useMemo(
     () =>
       outlines.length
@@ -354,6 +360,54 @@ export default function Home() {
     () => outlines.find((outline) => outline.id === selectedId) ?? outlines[0],
     [outlines, selectedId],
   );
+
+  function mergeReferenceImportState(
+    base: ReferenceImportState,
+    incoming: ReferenceImportState,
+  ): ReferenceImportState {
+    return {
+      ...base,
+      importedAccount: incoming.importedAccount ?? base.importedAccount,
+      importedPosts: dedupeImportedPostAnalyses([
+        ...incoming.importedPosts,
+        ...base.importedPosts,
+      ]).slice(0, 4),
+    };
+  }
+
+  async function loadConversationReferences(
+    token: string | null,
+    nextConversationId: string,
+  ) {
+    if (!token) return;
+
+    try {
+      const references = await api.xhs.listReferences(token, nextConversationId);
+      const restoredReferenceImport = references
+        .map((reference) => mapXhsStoredReferenceToReferenceImport(reference))
+        .reduce<ReferenceImportState>(
+          (state, incoming) => mergeReferenceImportState(state, incoming),
+          createEmptyReferenceImport(),
+        );
+
+      if (conversationIdRef.current !== nextConversationId) return;
+
+      setReferenceImport((current) => ({
+        ...current,
+        importedAccount: restoredReferenceImport.importedAccount,
+        importedPosts: restoredReferenceImport.importedPosts,
+      }));
+    } catch (error) {
+      if (conversationIdRef.current !== nextConversationId) return;
+
+      setStatusMessage(
+        getWorkspaceErrorMessage(
+          error,
+          "对话已恢复，但参考来源加载失败。",
+        ),
+      );
+    }
+  }
 
   const workspaceSnapshot = useMemo<WorkspaceSnapshot>(
     () => ({
@@ -412,6 +466,7 @@ export default function Home() {
       keepLastSnapshot?: boolean;
       message?: string;
       preferSnapshot?: boolean;
+      token?: string | null;
     } = {},
   ) {
     if (options.preferSnapshot) {
@@ -421,6 +476,7 @@ export default function Home() {
         : null;
 
       if (mappedSnapshot) {
+        conversationIdRef.current = conversation.id;
         setConversationId(conversation.id);
         applyWorkspaceSnapshot(
           mappedSnapshot,
@@ -428,6 +484,10 @@ export default function Home() {
         );
         setLastAutoSavedAt(
           formatAutoSaveTime(new Date(latestSnapshot.createdAt)),
+        );
+        void loadConversationReferences(
+          options.token ?? accessToken,
+          conversation.id,
         );
         return;
       }
@@ -453,6 +513,7 @@ export default function Home() {
         : -1,
     );
     setBriefError("");
+    conversationIdRef.current = conversation.id;
     setConversationId(conversation.id);
     setDraftStale(Boolean(nextPostDraft?.stale));
     if (!options.keepLastSnapshot) setLastSnapshot(null);
@@ -466,6 +527,10 @@ export default function Home() {
       options.message ??
         conversation.statusMessage ??
         "已从后端恢复当前工作状态。",
+    );
+    void loadConversationReferences(
+      options.token ?? accessToken,
+      conversation.id,
     );
   }
 
@@ -520,6 +585,7 @@ export default function Home() {
 
     applyConversation(conversation, {
       message: "写下一句想法后生成大纲。",
+      token,
     });
     setSeed("");
     setOutlines([]);
@@ -540,6 +606,7 @@ export default function Home() {
       applyConversation(conversation, {
         message: "已从后端恢复最近一次创作。",
         preferSnapshot: true,
+        token,
       });
       return;
     }
@@ -606,6 +673,7 @@ export default function Home() {
       topic: seed.trim(),
     });
 
+    conversationIdRef.current = conversation.id;
     setConversationId(conversation.id);
     return conversation.id;
   }
@@ -996,11 +1064,15 @@ export default function Home() {
           conversationId: currentConversationId,
           url,
         });
+        const importedPostWithReference = {
+          ...importedPost,
+          backendReferenceId: importedPost.reference?.id,
+        };
 
         setReferenceImport((current) => ({
           ...current,
           importedPosts: dedupeImportedPostAnalyses([
-            importedPost,
+            importedPostWithReference,
             ...current.importedPosts,
           ]).slice(0, 4),
           url: "",
@@ -1012,10 +1084,14 @@ export default function Home() {
           limit: 12,
           url,
         });
+        const importedAccountWithReference = {
+          ...importedAccount,
+          backendReferenceId: importedAccount.reference?.id,
+        };
 
         setReferenceImport((current) => ({
           ...current,
-          importedAccount,
+          importedAccount: importedAccountWithReference,
           url: "",
         }));
         setStatusMessage("已导入账号参考，生成时会参考账号定位。");
@@ -1039,15 +1115,29 @@ export default function Home() {
   }
 
   function clearReferenceAccount() {
+    const referenceId = referenceImport.importedAccount?.backendReferenceId;
+
     setReferenceImport((current) => ({
       ...current,
       importedAccount: null,
     }));
     if (postDraft) setDraftStale(true);
     setStatusMessage("已移除账号参考。");
+
+    if (accessToken && referenceId) {
+      void api.xhs.deleteReference(accessToken, referenceId).catch((error) => {
+        setStatusMessage(
+          getWorkspaceErrorMessage(error, "账号参考已移除，但后端删除失败。"),
+        );
+      });
+    }
   }
 
   function removeReferencePost(key: string) {
+    const referenceId = referenceImport.importedPosts.find(
+      (post) => getReferencePostKey(post) === key,
+    )?.backendReferenceId;
+
     setReferenceImport((current) => ({
       ...current,
       importedPosts: current.importedPosts.filter(
@@ -1056,6 +1146,14 @@ export default function Home() {
     }));
     if (postDraft) setDraftStale(true);
     setStatusMessage("已移除帖子参考。");
+
+    if (accessToken && referenceId) {
+      void api.xhs.deleteReference(accessToken, referenceId).catch((error) => {
+        setStatusMessage(
+          getWorkspaceErrorMessage(error, "帖子参考已移除，但后端删除失败。"),
+        );
+      });
+    }
   }
 
   async function generateImage() {
@@ -1343,11 +1441,13 @@ export default function Home() {
     if (!accessToken) return;
 
     if (record.snapshot) {
+      conversationIdRef.current = record.conversationId;
       setConversationId(record.conversationId);
       applyWorkspaceSnapshot(
         record.snapshot,
         `已恢复 ${record.savedAt} 的对话记录。`,
       );
+      void loadConversationReferences(accessToken, record.conversationId);
       return;
     }
 
@@ -1359,6 +1459,7 @@ export default function Home() {
       applyConversation(conversation, {
         message: `已恢复 ${record.savedAt} 的对话记录。`,
         preferSnapshot: true,
+        token: accessToken,
       });
       await refreshConversationRecordsSafely(
         "已恢复对话记录，但记录列表刷新失败。",

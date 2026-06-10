@@ -239,16 +239,45 @@ export type XhsProviderImportSummary = {
   type: "custom" | "tikhub";
 };
 
+export type XhsStoredReferenceSummary = {
+  conversationId: string;
+  createdAt: string;
+  id: string;
+  kind: "account" | "post";
+  sourceId: string;
+  title: string;
+};
+
 export type ImportedXhsPostAnalysis = {
   analysis: XhsPostAnalysis;
+  backendReferenceId?: string;
   imported: XhsImportedPostsNormalization;
   provider: XhsProviderImportSummary;
+  reference?: XhsStoredReferenceSummary;
 };
 
 export type ImportedXhsAccountAnalysis = {
   analysis: XhsAccountAnalysis;
+  backendReferenceId?: string;
   imported: XhsImportedAccountNormalization;
   provider: XhsProviderImportSummary;
+  reference?: XhsStoredReferenceSummary;
+};
+
+export type XhsStoredReference = {
+  analysis: unknown;
+  conversationId: string;
+  createdAt: string;
+  id: string;
+  imported: unknown;
+  kind: "account" | "post";
+  providerEndpoint: string | null;
+  providerType: XhsProviderImportSummary["type"];
+  reference: XhsStoredReferenceSummary;
+  sourceId: string;
+  sourceUrl: string | null;
+  title: string;
+  updatedAt: string;
 };
 
 export type XhsOutlineCandidate = {
@@ -694,6 +723,16 @@ export const api = {
       request<ImportedXhsPostAnalysis>("/xhs-analysis/posts/import", {
         body,
         method: "POST",
+        token,
+      }),
+    listReferences: (token: string, conversationId: string) =>
+      request<XhsStoredReference[]>(
+        `/conversations/${conversationId}/xhs-references`,
+        { token },
+      ),
+    deleteReference: (token: string, referenceId: string) =>
+      request<{ ok: boolean }>(`/xhs-references/${referenceId}`, {
+        method: "DELETE",
         token,
       }),
   },

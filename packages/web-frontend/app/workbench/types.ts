@@ -9,10 +9,14 @@ export type ImageStatus = "idle" | "generating" | "ready" | "failed";
 
 export type ReferenceImportMode = "account" | "post";
 
+export type ReferenceBackedImport = {
+  backendReferenceId?: string;
+};
+
 export type ReferenceImportState = {
   error: string;
-  importedAccount: ImportedXhsAccountAnalysis | null;
-  importedPosts: ImportedXhsPostAnalysis[];
+  importedAccount: (ImportedXhsAccountAnalysis & ReferenceBackedImport) | null;
+  importedPosts: Array<ImportedXhsPostAnalysis & ReferenceBackedImport>;
   mode: ReferenceImportMode;
   url: string;
 };
