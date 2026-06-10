@@ -26,6 +26,22 @@ describe('backend monorepo structure', () => {
     expect(packageJson.scripts?.['start:dev']).not.toContain('start-dev');
   });
 
+  it('uses cross-platform script syntax for environment variables', () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(backendRoot, 'package.json'), 'utf8'),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+
+    const unixEnvAssignment = /(^|&&\s+)[A-Z][A-Z0-9_]*=/;
+
+    expect(
+      Object.entries(packageJson.scripts ?? {}).filter(([, script]) =>
+        unixEnvAssignment.test(script),
+      ),
+    ).toEqual([]);
+  });
+
   it('does not import runtime code from compiled workspace package output', () => {
     const compiledOutputImports = collectTypeScriptFiles(join(__dirname))
       .map((filePath) => ({
