@@ -1,2 +1,9 @@
 {"type":"message","timestamp":"2026-06-08T02:55:51.607Z","message":{"role":"user","content":"你好"}}
 {"type":"message","timestamp":"2026-06-08T02:55:53.136Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.3，现在我不只能聊天，还有保险丝保护了 :)"}]}}
+{"type":"message","timestamp":"2026-06-09T08:24:28.322Z","message":{"role":"user","content":"sim"}}
+{"type":"message","timestamp":"2026-06-09T08:24:29.965Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.8。摘要压缩已就绪，试试 compress 命令。。"}]}}
+{"type":"message","timestamp":"2026-06-09T08:24:37.061Z","message":{"role":"user","content":"status"}}
+{"type":"message","timestamp":"2026-06-09T08:24:38.634Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.8。摘要压缩已就绪，试试 compress 命令。。"}]}}
+{"type":"message","timestamp":"2026-06-09T08:25:27.020Z","message":{"role":"user","content":"sim"}}
+{"type":"message","timestamp":"2026-06-09T08:37:36.894Z","message":{"role":"user","content":"你好"}}
+{"type":"message","timestamp":"2026-06-09T08:39:50.125Z","message":{"role":"user","content":"你好"}}

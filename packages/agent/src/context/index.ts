@@ -12,3 +12,9 @@ export {
   summarize,
   type CompactionResult,
 } from './compressor';
+export {
+  TokenTracker,
+  applyDefense,
+  estimateMessageTokens,
+  truncateToolResults,
+} from './defense';

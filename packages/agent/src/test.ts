@@ -21,14 +21,16 @@ import { SessionStore } from './session';
 import {
   PromptBuilder,
   PromptContext,
+  applyDefense,
   coreRules,
   deferredTools,
-  estimateTokens,
-  microcompact,
   sessionContext,
-  summarize,
+  // estimateTokens,
+  // microcompact,
+  // summarize,
   toolGuide,
 } from './context';
+import { estimateMessageTokens } from './context/defense';
 
 const qwen = createOpenAI({
   baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -80,6 +82,7 @@ function renderAgentLoopEvent(event: AgentLoopEvent): void {
       console.log(
         `  [重试] 第 ${event.attempt}/${event.maxRetries} 次，${event.delayMs}ms 后...`,
       );
+      console.log(event.error);
       break;
     }
     case 'token-usage': {
@@ -97,193 +100,230 @@ function renderAgentLoopEvent(event: AgentLoopEvent): void {
   }
 }
 
-/** Inject fake history messages to simulate a long conversation. */
-function injectFakeHistory(messages: ModelMessage[]) {
-  const fakeHistory: ModelMessage[] = [
-    { role: 'user', content: '帮我看看当前目录有什么文件' },
+/** Inject fake history with timestamps to demo TTL pruning. */
+function injectFakeHistory(
+  messages: ModelMessage[],
+  timestamps: Map<number, number>,
+) {
+  const now = Date.now();
+  const fakeHistory: Array<{ msg: ModelMessage; ageMs: number }> = [
+    // 12 minutes ago — will be hard pruned
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'tool-call' as const,
-          toolCallId: 'fake-1',
-          toolName: 'list_directory',
-          input: { path: '.' },
-        },
-      ],
+      ageMs: 12 * 60 * 1000,
+      msg: { role: 'user', content: '帮我看看 package.json' },
     },
     {
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result' as const,
-          toolCallId: 'fake-1',
-          toolName: 'list_directory',
-          output:
-            '[FILE] .env\n[DIR] node_modules\n[FILE] package.json\n[FILE] sample-data.txt\n[DIR] src\n[FILE] tsconfig.json',
-        },
-      ],
+      ageMs: 12 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'old-1',
+            toolName: 'read_file',
+            input: { path: 'package.json' },
+          },
+        ],
+      },
     },
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'text' as const,
-          text: '当前目录有以下文件：.env, package.json, sample-data.txt, tsconfig.json，以及 src 和 node_modules 两个目录。',
-        },
-      ],
-    },
-    { role: 'user', content: '读一下 package.json' },
-    {
-      role: 'assistant',
-      content: [
-        {
-          type: 'tool-call' as const,
-          toolCallId: 'fake-2',
-          toolName: 'read_file',
-          input: { path: 'package.json' },
-        },
-      ],
+      ageMs: 12 * 60 * 1000,
+      msg: {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'old-1',
+            toolName: 'read_file',
+            output:
+              '{\n  "name": "super-agent-09",\n  "version": "0.9.0",\n  "type": "module",\n  "scripts": { "start": "tsx src/index.ts" },\n  "dependencies": {\n    "ai": "5.0.98",\n    "@ai-sdk/openai": "2.0.44",\n    "zod": "3.25.76"\n  }\n}',
+          },
+        ],
+      },
     },
     {
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result' as const,
-          toolCallId: 'fake-2',
-          toolName: 'read_file',
-          output:
-            '{\n  "name": "super-agent-08-compaction",\n  "version": "0.8.0",\n  "type": "module",\n  "scripts": { "start": "tsx src/index.ts" },\n  "dependencies": { "ai": "5.0.98", "@ai-sdk/openai": "2.0.44" }\n}',
-        },
-      ],
+      ageMs: 12 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text' as const,
+            text: 'package.json：项目名 super-agent-09，依赖 ai 和 @ai-sdk/openai。',
+          },
+        ],
+      },
+    },
+
+    // 7 minutes ago — will be soft pruned
+    {
+      ageMs: 7 * 60 * 1000,
+      msg: { role: 'user', content: '搜索 src 目录里的 export' },
     },
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'text' as const,
-          text: 'package.json 的内容：项目名 super-agent-08-compaction，版本 0.8.0，依赖 ai 和 @ai-sdk/openai。',
-        },
-      ],
-    },
-    { role: 'user', content: '读一下 sample-data.txt' },
-    {
-      role: 'assistant',
-      content: [
-        {
-          type: 'tool-call' as const,
-          toolCallId: 'fake-3',
-          toolName: 'read_file',
-          input: { path: 'sample-data.txt' },
-        },
-      ],
+      ageMs: 7 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'mid-1',
+            toolName: 'grep',
+            input: { pattern: 'export', path: 'src' },
+          },
+        ],
+      },
     },
     {
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result' as const,
-          toolCallId: 'fake-3',
-          toolName: 'read_file',
-          output:
-            'Super Agent 工具系统设计文档\n=============================\n\n一、工具注册机制\n每个工具通过 ToolRegistry 统一注册，提供名称、描述、参数 Schema 和执行函数。\n\n二、结果截断策略\nHead/Tail 60/40 分割，保留文件头部和尾部的关键信息。\n\n三、并发控制\n读写锁模式：只读工具共享锁，读写工具独占锁。\n\n四、最佳实践\n1. 工具描述要写"什么时候不该用"比"能干什么"更有价值\n2. 参数描述要具体——"必须是绝对路径"能防一大类错误\n3. 错误信息要对模型友好——模型需要理解为什么失败才能换策略\n4. 结果格式要结构化——JSON 比自然语言更容易被模型准确解析',
-        },
-      ],
+      ageMs: 7 * 60 * 1000,
+      msg: {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'mid-1',
+            toolName: 'grep',
+            output:
+              'src/tools.ts:1: export const weatherTool = ...\nsrc/tools.ts:20: export const calculatorTool = ...\nsrc/tools.ts:40: export const readFileTool = ...\nsrc/tools.ts:60: export const writeFileTool = ...\nsrc/tools.ts:80: export const listDirectoryTool = ...\nsrc/tool-registry.ts:4: export interface ToolDefinition { ... }\nsrc/tool-registry.ts:18: export class ToolRegistry { ... }\nsrc/agent-loop.ts:7: export async function agentLoop(...) { ... }\nsrc/session-store.ts:8: export class SessionStore { ... }\nsrc/prompt-builder.ts:12: export class PromptBuilder { ... }\nsrc/context-defense.ts:5: export class TokenTracker { ... }\nsrc/context-defense.ts:50: export function estimateMessageTokens(...) { ... }\nsrc/context-defense.ts:70: export function truncateToolResults(...) { ... }\nsrc/context-defense.ts:110: export function ttlPrune(...) { ... }',
+          },
+        ],
+      },
     },
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'text' as const,
-          text: 'sample-data.txt 是一份工具系统设计文档，包含四个部分：工具注册机制、结果截断策略、并发控制和最佳实践。',
-        },
-      ],
+      ageMs: 7 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text' as const,
+            text: 'src 目录里的主要导出：tools.ts 定义了各种工具，tool-registry.ts 导出 ToolRegistry 类，context-defense.ts 导出了 TokenTracker、truncateToolResults、ttlPrune 等。',
+          },
+        ],
+      },
     },
-    { role: 'user', content: '帮我搜索一下 src 目录里有哪些 export' },
+
+    // 1 minute ago — will NOT be pruned
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'tool-call' as const,
-          toolCallId: 'fake-4',
-          toolName: 'grep',
-          input: { pattern: 'export', path: 'src' },
-        },
-      ],
+      ageMs: 1 * 60 * 1000,
+      msg: { role: 'user', content: '读一下 sample-data.txt' },
     },
     {
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result' as const,
-          toolCallId: 'fake-4',
-          toolName: 'grep',
-          output:
-            'src/tools.ts:1: export const weatherTool\nsrc/tools.ts:20: export const calculatorTool\nsrc/tools.ts:40: export const readFileTool\nsrc/tool-registry.ts:4: export interface ToolDefinition\nsrc/tool-registry.ts:18: export class ToolRegistry\nsrc/agent-loop.ts:7: export async function agentLoop\nsrc/session-store.ts:8: export class SessionStore\nsrc/prompt-builder.ts:12: export class PromptBuilder\nsrc/context-compressor.ts:30: export function microcompact\nsrc/context-compressor.ts:80: export async function summarize',
-        },
-      ],
+      ageMs: 1 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallId: 'new-1',
+            toolName: 'read_file',
+            input: { path: 'sample-data.txt' },
+          },
+        ],
+      },
     },
     {
-      role: 'assistant',
-      content: [
-        {
-          type: 'text' as const,
-          text: 'src 目录里的主要导出：tools.ts 导出了各种工具定义，tool-registry.ts 导出了 ToolRegistry 类，agent-loop.ts 导出了 agentLoop 函数，还有 SessionStore、PromptBuilder、microcompact 和 summarize 等。',
-        },
-      ],
+      ageMs: 1 * 60 * 1000,
+      msg: {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result' as const,
+            toolCallId: 'new-1',
+            toolName: 'read_file',
+            output:
+              'Super Agent 工具系统设计文档\n=============================\n\n一、工具注册机制\n每个工具通过 ToolRegistry 统一注册。\n\n二、结果截断策略\nHead/Tail 60/40 分割。\n\n三、并发控制\n读写锁模式。\n\n四、最佳实践\n1. 工具描述要写"什么时候不该用"\n2. 参数描述要具体\n3. 错误信息要对模型友好\n4. 结果格式要结构化',
+          },
+        ],
+      },
+    },
+    {
+      ageMs: 1 * 60 * 1000,
+      msg: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text' as const,
+            text: 'sample-data.txt 是工具系统设计文档，包含注册机制、截断策略、并发控制和最佳实践四个部分。',
+          },
+        ],
+      },
     },
   ];
-  messages.push(...fakeHistory);
+
+  for (let i = 0; i < fakeHistory.length; i++) {
+    const { msg, ageMs } = fakeHistory[i];
+    messages.push(msg);
+    timestamps.set(messages.length - 1, now - ageMs);
+  }
 }
 
 async function main() {
-  const isContinue = process.argv.includes('--continue');
+  // const isContinue = process.argv.includes('--continue');
   const store = new SessionStore('default');
-
   let messages: ModelMessage[] = [];
-  if (isContinue && store.exists()) {
-    messages = store.load();
-    console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
-  } else {
-    // 注入模拟历史，演示压缩效果
-    injectFakeHistory(messages);
-    console.log(`[Session] 新会话（已注入 ${messages.length} 条模拟历史）`);
-  }
+  const timestamps = new Map<number, number>();
 
-  let summary = '';
+  // Inject fake history with varied ages
 
-  // ── 压缩演示 ──
-  const beforeTokens = estimateTokens(messages);
-  console.log(`\n[压缩前] ${messages.length} 条消息, ~${beforeTokens} tokens`);
-
-  // Layer 1: Microcompact
-  const mc = microcompact(messages);
-  messages = mc.messages;
-  const afterMCTokens = estimateTokens(messages);
+  // if (isContinue && store.exists()) {
+  //   messages = store.load();
+  //   console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
+  // }
+  injectFakeHistory(messages, timestamps);
   console.log(
-    `[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果, ~${afterMCTokens} tokens`,
+    `\n[Session] 新会话（已注入 ${messages.length} 条模拟历史，时间跨度 12 分钟）`,
   );
 
-  // Layer 2: LLM Summarization
-  const compResult = await summarize(model, messages, summary);
-  messages = compResult.messages;
-  summary = compResult.summary;
-  const afterSumTokens = estimateTokens(messages);
-  if (compResult.compressedCount > 0) {
-    console.log(
-      `[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息, ~${afterSumTokens} tokens`,
-    );
-    console.log(`[摘要预览] ${summary.slice(0, 150)}...`);
-  } else {
-    console.log(`[Layer 2: Summarization] 未触发（消息量不够）`);
-  }
+  // Apply three-layer defense
+  const beforeTokens = estimateMessageTokens(messages);
+  console.log(`\n=== 三层即时防线 ===`);
+  console.log(`[防线前] ${messages.length} 条消息, ~${beforeTokens} tokens`);
 
+  const defense = applyDefense(messages, timestamps);
+  messages = defense.messages;
+  console.log(`[Layer 2: 截断] ${defense.truncated} 个超长结果被截断`);
   console.log(
-    `[压缩后] ${messages.length} 条消息, ~${afterSumTokens} tokens (节省 ${beforeTokens - afterSumTokens} tokens)\n`,
+    `[Layer 3: TTL] ${defense.softPruned} 个软修剪, ${defense.hardPruned} 个硬清除`,
   );
+  console.log(
+    `[防线后] ${messages.length} 条消息, ~${defense.tokenEstimate} tokens (节省 ${beforeTokens - defense.tokenEstimate})`,
+  );
+  console.log(`====================\n`);
+
+  // let summary = '';
+
+  // // ── 压缩演示 ──
+  // const beforeTokens = estimateTokens(messages);
+  // console.log(`\n[压缩前] ${messages.length} 条消息, ~${beforeTokens} tokens`);
+
+  // // Layer 1: Microcompact
+  // const mc = microcompact(messages);
+  // messages = mc.messages;
+  // const afterMCTokens = estimateTokens(messages);
+  // console.log(
+  //   `[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果, ~${afterMCTokens} tokens`,
+  // );
+
+  // // Layer 2: LLM Summarization
+  // const compResult = await summarize(model, messages, summary);
+  // messages = compResult.messages;
+  // summary = compResult.summary;
+  // const afterSumTokens = estimateTokens(messages);
+  // if (compResult.compressedCount > 0) {
+  //   console.log(
+  //     `[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息, ~${afterSumTokens} tokens`,
+  //   );
+  //   console.log(`[摘要预览] ${summary.slice(0, 150)}...`);
+  // } else {
+  //   console.log(`[Layer 2: Summarization] 未触发（消息量不够）`);
+  // }
+
+  // console.log(
+  //   `[压缩后] ${messages.length} 条消息, ~${afterSumTokens} tokens (节省 ${beforeTokens - afterSumTokens} tokens)\n`,
+  // );
 
   // Clear injected history for chat — compression demo is done
   messages = [];
+  timestamps.clear();
 
   const builder = new PromptBuilder()
     .pipe('coreRules', coreRules())
@@ -301,6 +341,89 @@ async function main() {
   const SYSTEM = builder.build(promptCtx);
   builder.debug(promptCtx); // 显示各模块状态
 
+  // Quick triggers for demo
+  function handleQuickTrigger(cmd: string): boolean {
+    const now = Date.now();
+
+    if (cmd === '模拟长对话' || cmd === 'sim') {
+      console.log('\n[模拟] 注入 20 条历史消息（含大量工具结果）...');
+      for (let i = 0; i < 5; i++) {
+        const age = (20 - i * 4) * 60 * 1000;
+        const userIdx = messages.length;
+        messages.push({
+          role: 'user',
+          content: `第 ${i + 1} 轮：帮我读文件 file-${i}.ts`,
+        });
+        timestamps.set(userIdx, now - age);
+        messages.push({
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `sim-${i}`,
+              toolName: 'read_file',
+              input: { path: `file-${i}.ts` },
+            },
+          ],
+        });
+        timestamps.set(userIdx + 1, now - age);
+        const bigContent =
+          `// file-${i}.ts\n` +
+          'export function handler() {\n  // ...\n}\n'.repeat(200);
+        messages.push({
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId: `sim-${i}`,
+              toolName: 'read_file',
+              output: bigContent,
+            },
+          ],
+        });
+        timestamps.set(userIdx + 2, now - age);
+        messages.push({
+          role: 'assistant',
+          content: [
+            { type: 'text' as const, text: `文件 file-${i}.ts 的内容已读取。` },
+          ],
+        });
+        timestamps.set(userIdx + 3, now - age);
+      }
+      const tokens = estimateMessageTokens(messages);
+      console.log(`[模拟完成] ${messages.length} 条消息, ~${tokens} tokens\n`);
+      return true;
+    }
+
+    if (cmd === '执行防线' || cmd === 'defend') {
+      console.log('\n--- 执行三层防线 ---');
+      const before = estimateMessageTokens(messages);
+      const def = applyDefense(messages, timestamps);
+      messages = def.messages;
+      console.log(
+        `  [Layer 2] 截断: ${def.truncated} 条, 预算清理: ${def.compacted} 条`,
+      );
+      console.log(
+        `  [Layer 3] 软修剪: ${def.softPruned}, 硬清除: ${def.hardPruned}`,
+      );
+      console.log(
+        `  [结果] ~${before} → ~${def.tokenEstimate} tokens (节省 ${before - def.tokenEstimate})\n`,
+      );
+      return true;
+    }
+
+    if (cmd === '查看状态' || cmd === 'status') {
+      const tokens = estimateMessageTokens(messages);
+      const toolMsgs = messages.filter((m) => m.role === 'tool').length;
+      console.log(
+        `\n[状态] ${messages.length} 条消息 (${toolMsgs} 条工具结果), ~${tokens} tokens\n`,
+      );
+      return true;
+    }
+
+    return false;
+  }
+
   function ask() {
     rl.question('\nYou: ', (input) => {
       void handleInput(input).catch((error: unknown) => {
@@ -315,6 +438,11 @@ async function main() {
     if (!trimmed || trimmed === 'exit') {
       console.log('Bye!');
       rl.close();
+      return;
+    }
+
+    if (handleQuickTrigger(trimmed)) {
+      ask();
       return;
     }
 
@@ -339,28 +467,35 @@ async function main() {
     store.appendAll(newMessages);
 
     // Check if compaction needed after each turn
-    const currentTokens = estimateTokens(messages);
-    if (currentTokens > 4000) {
-      console.log(`\n  [压缩检查] ~${currentTokens} tokens, 触发压缩...`);
-      const mc2 = microcompact(messages);
-      messages = mc2.messages;
-      if (mc2.cleared > 0)
-        console.log(`  [Microcompact] 清理了 ${mc2.cleared} 个工具结果`);
+    // const currentTokens = estimateTokens(messages);
+    // if (currentTokens > 4000) {
+    //   console.log(`\n  [压缩检查] ~${currentTokens} tokens, 触发压缩...`);
+    //   const mc2 = microcompact(messages);
+    //   messages = mc2.messages;
+    //   if (mc2.cleared > 0)
+    //     console.log(`  [Microcompact] 清理了 ${mc2.cleared} 个工具结果`);
 
-      const comp2 = await summarize(model, messages, summary);
-      if (comp2.compressedCount > 0) {
-        messages = comp2.messages;
-        summary = comp2.summary;
-        console.log(
-          `  [Summarization] 压缩了 ${comp2.compressedCount} 条消息, ~${estimateTokens(messages)} tokens`,
-        );
-      }
-    }
+    //   const comp2 = await summarize(model, messages, summary);
+    //   if (comp2.compressedCount > 0) {
+    //     messages = comp2.messages;
+    //     summary = comp2.summary;
+    //     console.log(
+    //       `  [Summarization] 压缩了 ${comp2.compressedCount} 条消息, ~${estimateTokens(messages)} tokens`,
+    //     );
+    //   }
+    // }
+    // Apply defense after each turn
+    const status = estimateMessageTokens(messages);
+    console.log(`  [Token] ~${status} tokens`);
 
     ask();
   }
 
-  console.log('Super Agent v0.2 — Agent Loop (type "exit" to quit)\n');
+  console.log('Super Agent v0.9 — Context Defense (type "exit" to quit)');
+  console.log('快捷命令：');
+  console.log('  模拟长对话 / sim    — 注入 20 条模拟历史（含大工具结果）');
+  console.log('  执行防线 / defend   — 执行三层防线，查看截断和修剪效果');
+  console.log('  查看状态 / status   — 查看当前消息数和 token 估算\n');
   ask();
 }
 
