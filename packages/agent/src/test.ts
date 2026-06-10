@@ -16,6 +16,7 @@ import {
   listDirectoryTool,
   readFileTool,
   writeFileTool,
+  createMemoryTool,
 } from './tools';
 import { SessionStore } from './session';
 import {
@@ -32,9 +33,17 @@ import {
   // microcompact,
   // summarize,
   toolGuide,
+  estimateMessageTokens,
 } from './context';
-import { estimateMessageTokens } from './context/defense';
 import { UsageTracker } from './usage';
+import {
+  CommandContext,
+  createDispatcher,
+  debugCommands,
+  contextCommands,
+  memoryCommands,
+} from './commands';
+import { MemoryStore } from './memory';
 
 const qwen = createOpenAI({
   baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -61,6 +70,11 @@ registry.register(
   pickSearchTool(),
   getToolSearchTool(registry),
 );
+
+// ── Memory ────────────────────────────────
+const memoryStore = new MemoryStore('.');
+memoryStore.init();
+registry.register(createMemoryTool(memoryStore));
 
 function renderAgentLoopEvent(event: AgentLoopEvent): void {
   switch (event.type) {
@@ -104,164 +118,15 @@ function renderAgentLoopEvent(event: AgentLoopEvent): void {
   }
 }
 
-/** Inject fake history with timestamps to demo TTL pruning. */
-function injectFakeHistory(
-  messages: ModelMessage[],
-  timestamps: Map<number, number>,
-) {
-  const now = Date.now();
-  const fakeHistory: Array<{ msg: ModelMessage; ageMs: number }> = [
-    // 12 minutes ago — will be hard pruned
-    {
-      ageMs: 12 * 60 * 1000,
-      msg: { role: 'user', content: '帮我看看 package.json' },
-    },
-    {
-      ageMs: 12 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call' as const,
-            toolCallId: 'old-1',
-            toolName: 'read_file',
-            input: { path: 'package.json' },
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 12 * 60 * 1000,
-      msg: {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result' as const,
-            toolCallId: 'old-1',
-            toolName: 'read_file',
-            output:
-              '{\n  "name": "super-agent-09",\n  "version": "0.9.0",\n  "type": "module",\n  "scripts": { "start": "tsx src/index.ts" },\n  "dependencies": {\n    "ai": "5.0.98",\n    "@ai-sdk/openai": "2.0.44",\n    "zod": "3.25.76"\n  }\n}',
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 12 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text' as const,
-            text: 'package.json：项目名 super-agent-09，依赖 ai 和 @ai-sdk/openai。',
-          },
-        ],
-      },
-    },
-
-    // 7 minutes ago — will be soft pruned
-    {
-      ageMs: 7 * 60 * 1000,
-      msg: { role: 'user', content: '搜索 src 目录里的 export' },
-    },
-    {
-      ageMs: 7 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call' as const,
-            toolCallId: 'mid-1',
-            toolName: 'grep',
-            input: { pattern: 'export', path: 'src' },
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 7 * 60 * 1000,
-      msg: {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result' as const,
-            toolCallId: 'mid-1',
-            toolName: 'grep',
-            output:
-              'src/tools.ts:1: export const weatherTool = ...\nsrc/tools.ts:20: export const calculatorTool = ...\nsrc/tools.ts:40: export const readFileTool = ...\nsrc/tools.ts:60: export const writeFileTool = ...\nsrc/tools.ts:80: export const listDirectoryTool = ...\nsrc/tool-registry.ts:4: export interface ToolDefinition { ... }\nsrc/tool-registry.ts:18: export class ToolRegistry { ... }\nsrc/agent-loop.ts:7: export async function agentLoop(...) { ... }\nsrc/session-store.ts:8: export class SessionStore { ... }\nsrc/prompt-builder.ts:12: export class PromptBuilder { ... }\nsrc/context-defense.ts:5: export class TokenTracker { ... }\nsrc/context-defense.ts:50: export function estimateMessageTokens(...) { ... }\nsrc/context-defense.ts:70: export function truncateToolResults(...) { ... }\nsrc/context-defense.ts:110: export function ttlPrune(...) { ... }',
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 7 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text' as const,
-            text: 'src 目录里的主要导出：tools.ts 定义了各种工具，tool-registry.ts 导出 ToolRegistry 类，context-defense.ts 导出了 TokenTracker、truncateToolResults、ttlPrune 等。',
-          },
-        ],
-      },
-    },
-
-    // 1 minute ago — will NOT be pruned
-    {
-      ageMs: 1 * 60 * 1000,
-      msg: { role: 'user', content: '读一下 sample-data.txt' },
-    },
-    {
-      ageMs: 1 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call' as const,
-            toolCallId: 'new-1',
-            toolName: 'read_file',
-            input: { path: 'sample-data.txt' },
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 1 * 60 * 1000,
-      msg: {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result' as const,
-            toolCallId: 'new-1',
-            toolName: 'read_file',
-            output:
-              'Super Agent 工具系统设计文档\n=============================\n\n一、工具注册机制\n每个工具通过 ToolRegistry 统一注册。\n\n二、结果截断策略\nHead/Tail 60/40 分割。\n\n三、并发控制\n读写锁模式。\n\n四、最佳实践\n1. 工具描述要写"什么时候不该用"\n2. 参数描述要具体\n3. 错误信息要对模型友好\n4. 结果格式要结构化',
-          },
-        ],
-      },
-    },
-    {
-      ageMs: 1 * 60 * 1000,
-      msg: {
-        role: 'assistant',
-        content: [
-          {
-            type: 'text' as const,
-            text: 'sample-data.txt 是工具系统设计文档，包含注册机制、截断策略、并发控制和最佳实践四个部分。',
-          },
-        ],
-      },
-    },
-  ];
-
-  for (let i = 0; i < fakeHistory.length; i++) {
-    const { msg, ageMs } = fakeHistory[i];
-    messages.push(msg);
-    timestamps.set(messages.length - 1, now - ageMs);
-  }
-}
+// ── Commands ────────────────────────────────
+const dispatch = createDispatcher([
+  ...debugCommands,
+  ...contextCommands,
+  ...memoryCommands,
+]);
 
 async function main() {
-  // const isContinue = process.argv.includes('--continue');
+  const isContinue = process.argv.includes('--continue');
   const store = new SessionStore('default');
   let messages: ModelMessage[] = [];
   const timestamps = new Map<number, number>();
@@ -269,14 +134,10 @@ async function main() {
 
   // Inject fake history with varied ages
 
-  // if (isContinue && store.exists()) {
-  //   messages = store.load();
-  //   console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
-  // }
-  injectFakeHistory(messages, timestamps);
-  console.log(
-    `\n[Session] 新会话（已注入 ${messages.length} 条模拟历史，时间跨度 12 分钟）`,
-  );
+  if (isContinue && store.exists()) {
+    messages = store.load();
+    console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
+  }
 
   // Apply three-layer defense
   const beforeTokens = estimateMessageTokens(messages);
@@ -334,144 +195,16 @@ async function main() {
     .pipe('coreRules', coreRules())
     .pipe('toolGuide', toolGuide())
     .pipe('deferredTools', deferredTools())
+    .pipe('memoryContext', () => memoryStore.buildPromptSection())
     .pipe('sessionContext', sessionContext());
 
-  const promptCtx: PromptContext = {
-    toolCount: registry.getActiveTools().length,
-    deferredToolSummary: registry.getDeferredToolSummary(),
-    sessionMessageCount: messages.length,
-    sessionId: 'default',
-  };
-
-  const SYSTEM = builder.build(promptCtx);
-  builder.debug(promptCtx); // 显示各模块状态
-
-  // Quick triggers for demo
-  function handleQuickTrigger(cmd: string): boolean {
-    const now = Date.now();
-
-    if (cmd === '模拟长对话' || cmd === 'sim') {
-      console.log('\n[模拟] 注入 20 条历史消息（含大量工具结果）...');
-      for (let i = 0; i < 5; i++) {
-        const age = (20 - i * 4) * 60 * 1000;
-        const userIdx = messages.length;
-        messages.push({
-          role: 'user',
-          content: `第 ${i + 1} 轮：帮我读文件 file-${i}.ts`,
-        });
-        timestamps.set(userIdx, now - age);
-        messages.push({
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call' as const,
-              toolCallId: `sim-${i}`,
-              toolName: 'read_file',
-              input: { path: `file-${i}.ts` },
-            },
-          ],
-        });
-        timestamps.set(userIdx + 1, now - age);
-        const bigContent =
-          `// file-${i}.ts\n` +
-          'export function handler() {\n  // ...\n}\n'.repeat(200);
-        messages.push({
-          role: 'tool',
-          content: [
-            {
-              type: 'tool-result' as const,
-              toolCallId: `sim-${i}`,
-              toolName: 'read_file',
-              output: bigContent,
-            },
-          ],
-        });
-        timestamps.set(userIdx + 2, now - age);
-        messages.push({
-          role: 'assistant',
-          content: [
-            { type: 'text' as const, text: `文件 file-${i}.ts 的内容已读取。` },
-          ],
-        });
-        timestamps.set(userIdx + 3, now - age);
-      }
-      const tokens = estimateMessageTokens(messages);
-      console.log(`[模拟完成] ${messages.length} 条消息, ~${tokens} tokens\n`);
-      return true;
-    }
-
-    if (cmd === '执行防线' || cmd === 'defend') {
-      console.log('\n--- 执行三层防线 ---');
-      const before = estimateMessageTokens(messages);
-      const def = applyDefense(messages, timestamps);
-      messages = def.messages;
-      console.log(
-        `  [Layer 2] 截断: ${def.truncated} 条, 预算清理: ${def.compacted} 条`,
-      );
-      console.log(
-        `  [Layer 3] 软修剪: ${def.softPruned}, 硬清除: ${def.hardPruned}`,
-      );
-      console.log(
-        `  [结果] ~${before} → ~${def.tokenEstimate} tokens (节省 ${before - def.tokenEstimate})\n`,
-      );
-      return true;
-    }
-
-    if (cmd === '查看状态' || cmd === 'status') {
-      const tokens = estimateMessageTokens(messages);
-      const toolMsgs = messages.filter((m) => m.role === 'tool').length;
-      console.log(
-        `\n[状态] ${messages.length} 条消息 (${toolMsgs} 条工具结果), ~${tokens} tokens\n`,
-      );
-      return true;
-    }
-
-    // /context: 终端可视化的 context 占用，参考 Claude Code 的 /context
-    if (cmd === '/context' || cmd === 'context') {
-      const snapshot = buildContextSnapshot({
-        modelName: process.env.DASHSCOPE_API_KEY
-          ? 'Qwen Plus'
-          : 'Mock Model (开发用)',
-        modelId: process.env.DASHSCOPE_API_KEY ? 'qwen3-6-plus' : 'mock-model',
-        windowTokens: 1_000_000,
-        systemPromptChars: SYSTEM.length,
-        toolDescriptionChars: registry
-          .getActiveTools()
-          .reduce(
-            (a, t) =>
-              a +
-              t.name.length +
-              (t.description?.length || 0) +
-              JSON.stringify(t.parameters || {}).length,
-            0,
-          ),
-        memoryChars: 0,
-        skillsChars: 0,
-        messages,
-      });
-      console.log(renderContextView(snapshot));
-      return true;
-    }
-
-    if (cmd === '/usage' || cmd === 'usage') {
-      console.log(renderUsageView(tracker));
-      return true;
-    }
-
-    if (cmd === '/cache off' || cmd === 'cache off') {
-      setCacheEnabled(false);
-      console.log(
-        '\n  \x1b[38;5;220m⚠ 已关闭 cache 模拟\x1b[0m  接下来每次请求都按 cache miss 计算\n',
-      );
-      return true;
-    }
-    if (cmd === '/cache on' || cmd === 'cache on') {
-      setCacheEnabled(true);
-      console.log('\n  \x1b[38;5;36m✓ 已开启 cache 模拟\x1b[0m\n');
-      return true;
-    }
-
-    return false;
+  function makePromptCtx(): PromptContext {
+    return {
+      toolCount: registry.getActiveTools().length,
+      deferredToolSummary: registry.getDeferredToolSummary(),
+      sessionMessageCount: messages.length,
+      sessionId: 'default',
+    };
   }
 
   function ask() {
@@ -490,8 +223,21 @@ async function main() {
       rl.close();
       return;
     }
-
-    if (handleQuickTrigger(trimmed)) {
+    const ctx: CommandContext = {
+      messages,
+      timestamps,
+      registry,
+      builder,
+      tracker,
+      sessionStore: store,
+      model,
+      makePromptCtx,
+      ask,
+      memoryStore,
+    };
+    const handled = dispatch(trimmed, ctx);
+    if (handled === 'async') return;
+    if (handled) {
       ask();
       return;
     }
@@ -500,12 +246,13 @@ async function main() {
     messages.push(userMsg);
     store.append(userMsg);
 
+    const currentSystem = builder.build(makePromptCtx());
     const beforeLen = messages.length;
     const result = agentLoop({
       model,
       registry,
       messages,
-      system: SYSTEM,
+      system: currentSystem,
       tracker,
     });
 
@@ -542,11 +289,16 @@ async function main() {
     ask();
   }
 
-  console.log('Super Agent v0.9 — Context Defense (type "exit" to quit)');
+  console.log('Super Agent v0.11 — Memory System (type "exit" to quit)');
   console.log('快捷命令：');
-  console.log('  模拟长对话 / sim    — 注入 20 条模拟历史（含大工具结果）');
-  console.log('  执行防线 / defend   — 执行三层防线，查看截断和修剪效果');
-  console.log('  查看状态 / status   — 查看当前消息数和 token 估算\n');
+  console.log('  /memory         — 查看所有记忆');
+  console.log('  /memory search  — 搜索记忆');
+  console.log('  /context        — 终端里看 context 占用矩阵');
+  console.log('  /usage          — 累计 token 用量和成本');
+  console.log('  status          — 当前消息数、token 和记忆数');
+  console.log('');
+  console.log(`  已加载 ${memoryStore.list().length} 条历史记忆`);
+  console.log('');
   ask();
 }
 

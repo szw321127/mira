@@ -52,4 +52,5 @@ artifacts/
 
 .usage/*
 .sessions/*
+.memory/*
 
