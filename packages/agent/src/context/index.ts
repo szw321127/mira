@@ -18,3 +18,13 @@ export {
   estimateMessageTokens,
   truncateToolResults,
 } from './defense';
+export {
+  type ContextSlice,
+  type ContextSnapshot,
+  type BuildSnapshotInput,
+  renderContextMatrix,
+  renderContextLegend,
+  renderContextView,
+  buildContextSnapshot,
+  renderUsageView,
+} from './view';

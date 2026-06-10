@@ -1,6 +1,6 @@
 import { type LanguageModel, type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createMockModel } from './mock';
+import { createMockModel, setCacheEnabled } from './mock';
 import { createInterface } from 'node:readline';
 import { agentLoop, type AgentLoopEvent } from './loop';
 import {
@@ -22,8 +22,11 @@ import {
   PromptBuilder,
   PromptContext,
   applyDefense,
+  buildContextSnapshot,
   coreRules,
   deferredTools,
+  renderContextView,
+  renderUsageView,
   sessionContext,
   // estimateTokens,
   // microcompact,
@@ -31,6 +34,7 @@ import {
   toolGuide,
 } from './context';
 import { estimateMessageTokens } from './context/defense';
+import { UsageTracker } from './usage';
 
 const qwen = createOpenAI({
   baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
@@ -261,6 +265,7 @@ async function main() {
   const store = new SessionStore('default');
   let messages: ModelMessage[] = [];
   const timestamps = new Map<number, number>();
+  const tracker = new UsageTracker('.usage/today.jsonl');
 
   // Inject fake history with varied ages
 
@@ -421,6 +426,51 @@ async function main() {
       return true;
     }
 
+    // /context: 终端可视化的 context 占用，参考 Claude Code 的 /context
+    if (cmd === '/context' || cmd === 'context') {
+      const snapshot = buildContextSnapshot({
+        modelName: process.env.DASHSCOPE_API_KEY
+          ? 'Qwen Plus'
+          : 'Mock Model (开发用)',
+        modelId: process.env.DASHSCOPE_API_KEY ? 'qwen3-6-plus' : 'mock-model',
+        windowTokens: 1_000_000,
+        systemPromptChars: SYSTEM.length,
+        toolDescriptionChars: registry
+          .getActiveTools()
+          .reduce(
+            (a, t) =>
+              a +
+              t.name.length +
+              (t.description?.length || 0) +
+              JSON.stringify(t.parameters || {}).length,
+            0,
+          ),
+        memoryChars: 0,
+        skillsChars: 0,
+        messages,
+      });
+      console.log(renderContextView(snapshot));
+      return true;
+    }
+
+    if (cmd === '/usage' || cmd === 'usage') {
+      console.log(renderUsageView(tracker));
+      return true;
+    }
+
+    if (cmd === '/cache off' || cmd === 'cache off') {
+      setCacheEnabled(false);
+      console.log(
+        '\n  \x1b[38;5;220m⚠ 已关闭 cache 模拟\x1b[0m  接下来每次请求都按 cache miss 计算\n',
+      );
+      return true;
+    }
+    if (cmd === '/cache on' || cmd === 'cache on') {
+      setCacheEnabled(true);
+      console.log('\n  \x1b[38;5;36m✓ 已开启 cache 模拟\x1b[0m\n');
+      return true;
+    }
+
     return false;
   }
 
@@ -456,6 +506,7 @@ async function main() {
       registry,
       messages,
       system: SYSTEM,
+      tracker,
     });
 
     for await (const event of result) {

@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 export interface ModelPricing {
   input: number; // $/1M tokens (cache miss)
   output: number;

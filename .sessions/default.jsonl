@@ -7,3 +7,11 @@
 {"type":"message","timestamp":"2026-06-09T08:25:27.020Z","message":{"role":"user","content":"sim"}}
 {"type":"message","timestamp":"2026-06-09T08:37:36.894Z","message":{"role":"user","content":"你好"}}
 {"type":"message","timestamp":"2026-06-09T08:39:50.125Z","message":{"role":"user","content":"你好"}}
+{"type":"message","timestamp":"2026-06-10T03:13:07.690Z","message":{"role":"user","content":"你好"}}
+{"type":"message","timestamp":"2026-06-10T03:13:10.200Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.10，已经接上 prompt cache 和成本追踪 :) 多聊几轮，输入 /usage 看节省了多少。"}]}}
+{"type":"message","timestamp":"2026-06-10T03:13:13.402Z","message":{"role":"user","content":"/useage"}}
+{"type":"message","timestamp":"2026-06-10T03:13:16.409Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.10。试试 /context 看上下文占用，/usage 看 token 用量和缓存命中率，/cache off 关掉缓存对比成本差异。"}]}}
+{"type":"message","timestamp":"2026-06-10T03:13:38.530Z","message":{"role":"user","content":"你是？"}}
+{"type":"message","timestamp":"2026-06-10T03:13:41.576Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.10。试试 /context 看上下文占用，/usage 看 token 用量和缓存命中率，/cache off 关掉缓存对比成本差异。"}]}}
+{"type":"message","timestamp":"2026-06-10T03:13:43.052Z","message":{"role":"user","content":"你是？"}}
+{"type":"message","timestamp":"2026-06-10T03:13:45.990Z","message":{"role":"assistant","content":[{"type":"text","text":"你好！我是 Super Agent v0.10。试试 /context 看上下文占用，/usage 看 token 用量和缓存命中率，/cache off 关掉缓存对比成本差异。"}]}}

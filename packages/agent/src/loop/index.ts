@@ -13,6 +13,7 @@ import {
   resetHistory,
   type DetectorKind,
 } from './detection';
+import { normalizeUsage, UsageTracker } from '../usage';
 
 export interface IAgentConfig {
   model: LanguageModel;
@@ -22,6 +23,7 @@ export interface IAgentConfig {
   tokenBudget?: number;
   maxSteps?: number;
   maxRetries?: number;
+  tracker?: UsageTracker;
 }
 
 export type AgentLoopEvent =
@@ -51,11 +53,11 @@ export type AgentLoopEvent =
       type: 'token-usage';
       totalTokens: number;
       tokenBudget: number;
-      percent: number;
+      percent: string;
     }
   | {
       type: 'stop';
-      reason: 'loop-detected' | 'token-budget' | 'done';
+      reason: 'loop-detected' | 'token-budget' | 'max-step' | 'done';
       message?: string;
     };
 
@@ -70,6 +72,7 @@ export async function* agentLoop(
     tokenBudget = 1024 * 1024 * 256,
     maxSteps = Number.MAX_SAFE_INTEGER,
     maxRetries = 10,
+    tracker,
   } = config;
 
   let step = 0;
@@ -192,15 +195,39 @@ export async function* agentLoop(
 
     messages.push(...stepResponse.messages);
 
-    const inp = stepUsage?.inputTokens ?? 0;
-    const out = stepUsage?.outputTokens ?? 0;
-    totalTokens += inp + out;
+    // 把 usage 喂给 tracker；tracker 内部按四类 token 分别累加并算 cost
+    const norm = normalizeUsage(stepUsage);
+    const stepRecord = tracker?.record(model?.modelId || 'mock-model', norm);
+    totalTokens +=
+      norm.inputTokens +
+      norm.outputTokens +
+      norm.cacheReadTokens +
+      norm.cacheWriteTokens;
+
+    // cache 命中时才打印一行简洁状态，让 cache hit 立刻可见
+    if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {
+      const tag =
+        norm.cacheReadTokens > 0
+          ? `\x1b[38;5;36m✓ cache hit\x1b[0m`
+          : `\x1b[38;5;220m✎ cache write\x1b[0m`;
+      const detail =
+        norm.cacheReadTokens > 0
+          ? `read ${norm.cacheReadTokens}`
+          : `write ${norm.cacheWriteTokens}`;
+      console.log(
+        `  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`,
+      );
+    }
+
     if (totalTokens > tokenBudget * 0.9) {
+      console.log(
+        `  [Token] ${totalTokens}/${tokenBudget} (${Math.round((totalTokens / tokenBudget) * 100)}%)`,
+      );
       yield {
         type: 'token-usage',
         totalTokens,
         tokenBudget,
-        percent: Math.round((totalTokens / tokenBudget) * 100),
+        percent: `Math.round((totalTokens / tokenBudget) * 100)}%`,
       };
     }
     if (totalTokens > tokenBudget) {
@@ -216,5 +243,9 @@ export async function* agentLoop(
       yield { type: 'stop', reason: 'done' };
       break;
     }
+  }
+
+  if (step >= maxSteps) {
+    yield { type: 'stop', reason: 'max-step', message: '达到最大步数' };
   }
 }

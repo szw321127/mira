@@ -49,3 +49,7 @@ Thumbs.db
 *.temp
 .cache/
 artifacts/
+
+.usage/*
+.sessions/*
+
