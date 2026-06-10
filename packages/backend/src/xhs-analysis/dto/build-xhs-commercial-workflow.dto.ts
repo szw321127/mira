@@ -10,7 +10,7 @@ import {
 import type {
   XhsImportedAccountRecord,
   XhsImportedPostRecord,
-} from '@rednote/agent';
+} from '@rednote/agent/xhs-analysis';
 
 export class BuildXhsCommercialWorkflowDto {
   @IsOptional()

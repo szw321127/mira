@@ -1,5 +1,5 @@
 import { IsObject, IsOptional, IsString, MinLength } from 'class-validator';
-import type { XhsGenerationBrief } from '@rednote/agent';
+import type { XhsGenerationBrief } from '@rednote/agent/xhs-analysis';
 
 export class BuildXhsOutlineCandidatesDto {
   @IsOptional()

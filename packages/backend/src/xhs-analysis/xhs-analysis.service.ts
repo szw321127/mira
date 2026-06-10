@@ -12,14 +12,14 @@ import {
   buildXhsOutlineCandidates,
   normalizeXhsImportedAccount,
   normalizeXhsImportedPosts,
-} from '@rednote/agent/dist/index.js';
+} from '@rednote/agent/xhs-analysis';
 import type {
   XhsAccountInput,
   XhsGenerationBriefInput,
   XhsCommercialWorkflowInput,
   XhsOutlineCandidateInput,
   XhsPostInput,
-} from '@rednote/agent';
+} from '@rednote/agent/xhs-analysis';
 import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
 import {

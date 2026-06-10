@@ -5,7 +5,10 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import type { XhsAccountAnalysis, XhsPostAnalysis } from '@rednote/agent';
+import type {
+  XhsAccountAnalysis,
+  XhsPostAnalysis,
+} from '@rednote/agent/xhs-analysis';
 
 export class BuildXhsGenerationBriefDto {
   @IsOptional()

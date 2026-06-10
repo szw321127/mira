@@ -9,7 +9,7 @@
     "build": "pnpm --filter @rednote/agent build && pnpm prisma:generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "node scripts/start-dev.cjs",
+    "start:dev": "pnpm prisma:generate && DATABASE_URL=\"file:$PWD/prisma/dev.db\" prisma migrate deploy && DATABASE_URL=\"file:$PWD/prisma/dev.db\" node --conditions=development --watch --watch-path=src --watch-path=../agent/src -r ts-node/register -r tsconfig-paths/register src/main.ts",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "pnpm prisma:generate && eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

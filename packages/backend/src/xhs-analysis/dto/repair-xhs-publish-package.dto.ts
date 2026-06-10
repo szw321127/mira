@@ -5,7 +5,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import type { XhsImageTextPublishPackage } from '@rednote/agent';
+import type { XhsImageTextPublishPackage } from '@rednote/agent/xhs-analysis';
 
 export class RepairXhsPublishPackageDto {
   @IsString()
