@@ -45,4 +45,27 @@ describe('XhsAnalysisController', () => {
 
     expect(service.importAndAnalyzePost).toHaveBeenCalledWith(dto, 'user-1');
   });
+
+  it('exposes publish package repair as a protected xhs-analysis endpoint', () => {
+    const controller = new XhsAnalysisController({
+      repairPublishPackage: jest.fn(),
+    } as never);
+    const handler = Object.getOwnPropertyDescriptor(
+      XhsAnalysisController.prototype,
+      'repairPublishPackage',
+    )?.value as unknown;
+
+    void controller.repairPublishPackage({
+      idea: '低预算通勤穿搭',
+      publishPackage: {},
+      repairActions: ['补齐分页'],
+    });
+
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
+      'workflows/repair-publish-package',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(
+      RequestMethod.POST,
+    );
+  });
 });

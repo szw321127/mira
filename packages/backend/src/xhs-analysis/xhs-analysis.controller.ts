@@ -9,6 +9,7 @@ import { BuildXhsGenerationBriefDto } from './dto/build-xhs-generation-brief.dto
 import { BuildXhsOutlineCandidatesDto } from './dto/build-xhs-outline-candidates.dto';
 import { ImportXhsAccountDto } from './dto/import-xhs-account.dto';
 import { ImportXhsPostDto } from './dto/import-xhs-post.dto';
+import { RepairXhsPublishPackageDto } from './dto/repair-xhs-publish-package.dto';
 import { XhsAnalysisService } from './xhs-analysis.service';
 
 @Controller('xhs-analysis')
@@ -55,5 +56,10 @@ export class XhsAnalysisController {
   @Post('workflows/commercial-draft')
   buildCommercialWorkflow(@Body() dto: BuildXhsCommercialWorkflowDto) {
     return this.xhsAnalysisService.buildCommercialWorkflow(dto);
+  }
+
+  @Post('workflows/repair-publish-package')
+  repairPublishPackage(@Body() dto: RepairXhsPublishPackageDto) {
+    return this.xhsAnalysisService.repairPublishPackage(dto);
   }
 }

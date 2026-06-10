@@ -13,6 +13,7 @@ import {
   type ImportedXhsPostAnalysis,
   type XhsCommercialWorkflow,
   type XhsGenerationBrief,
+  type XhsImageTextPublishPackage,
   type XhsImportedAccountRecord,
   type XhsImportedPostRecord,
   type XhsOutlineCandidate,
@@ -146,8 +147,9 @@ function mapXhsOutlineCandidate(
   };
 }
 
-function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
-  const publishPackage = workflow.publishPackage;
+function mapXhsPublishPackageToPostDraft(
+  publishPackage: XhsImageTextPublishPackage,
+): PostDraft {
   const coverPage =
     publishPackage.pages.find((page) => page.role === "cover") ??
     publishPackage.pages[0];
@@ -176,6 +178,10 @@ function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
       publishPackage.titleCandidates[0] ||
       publishPackage.idea,
   };
+}
+
+function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
+  return mapXhsPublishPackageToPostDraft(workflow.publishPackage);
 }
 
 function getReferencePostKey(post: ImportedXhsPostAnalysis) {
@@ -279,11 +285,15 @@ export default function Home() {
   const [outlines, setOutlines] = useState<Outline[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
+  const [latestWorkflow, setLatestWorkflow] =
+    useState<XhsCommercialWorkflow | null>(null);
   const [referenceImport, setReferenceImport] =
     useState<ReferenceImportState>(() => createEmptyReferenceImport());
   const [draftStale, setDraftStale] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isImportingReference, setIsImportingReference] = useState(false);
+  const [isRepairingPublishPackage, setIsRepairingPublishPackage] =
+    useState(false);
   const [generatingImageDraftId, setGeneratingImageDraftId] = useState<
     string | null
   >(null);
@@ -415,6 +425,7 @@ export default function Home() {
       briefError,
       draftStale,
       lastSnapshot,
+      latestWorkflow,
       outlines,
       postDraft,
       referenceImport,
@@ -428,6 +439,7 @@ export default function Home() {
       briefError,
       draftStale,
       lastSnapshot,
+      latestWorkflow,
       outlines,
       postDraft,
       referenceImport,
@@ -449,7 +461,10 @@ export default function Home() {
     accessToken,
     authReady: Boolean(authUser),
     conversationId,
-    isGenerating: isGenerating || Boolean(generatingImageDraftId),
+    isGenerating:
+      isGenerating ||
+      Boolean(generatingImageDraftId) ||
+      isRepairingPublishPackage,
     isStartingConversation,
     postDraft,
     seed,
@@ -517,6 +532,7 @@ export default function Home() {
     setConversationId(conversation.id);
     setDraftStale(Boolean(nextPostDraft?.stale));
     if (!options.keepLastSnapshot) setLastSnapshot(null);
+    setLatestWorkflow(null);
     setOutlines(nextOutlines);
     setPostDraft(nextPostDraft);
     setReferenceImport(createEmptyReferenceImport());
@@ -542,6 +558,7 @@ export default function Home() {
     setBriefError(snapshot.briefError);
     setDraftStale(snapshot.draftStale);
     setLastSnapshot(snapshot.lastSnapshot);
+    setLatestWorkflow(snapshot.latestWorkflow);
     setOutlines(snapshot.outlines);
     setPostDraft(snapshot.postDraft);
     setReferenceImport(snapshot.referenceImport);
@@ -729,6 +746,7 @@ export default function Home() {
       setConversationId(conversation.id);
       setDraftStale(false);
       setLastSnapshot(null);
+      setLatestWorkflow(null);
       setOutlines([]);
       setPostDraft(null);
       setReferenceImport(createEmptyReferenceImport());
@@ -860,7 +878,10 @@ export default function Home() {
       setBatch(nextBatch);
       setOutlines((currentOutlines) => [...currentOutlines, ...nextOutlines]);
       setSelectedId(nextOutlines[0]?.id ?? selectedId);
-      if (postDraft) setDraftStale(true);
+      if (postDraft) {
+        setDraftStale(true);
+        setLatestWorkflow(null);
+      }
       await api.conversations.update(accessToken, currentConversationId, {
         statusMessage: "已追加新一批小红书大纲，之前生成的仍保留。",
         title: seed.trim() || selectedOutline?.title || "新对话",
@@ -892,6 +913,7 @@ export default function Home() {
     setPostDraft(lastSnapshot.postDraft);
     setDraftStale(false);
     setLastSnapshot(null);
+    setLatestWorkflow(null);
     setStatusMessage("已移除刚追加的大纲，之前生成的内容仍在。");
   }
 
@@ -899,7 +921,10 @@ export default function Home() {
     setOutlines((items) =>
       items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
-    if (postDraft) setDraftStale(true);
+    if (postDraft) {
+      setDraftStale(true);
+      setLatestWorkflow(null);
+    }
     setStatusMessage("大纲已更新，生成图文可刷新预览。");
 
     if (!accessToken) return;
@@ -935,6 +960,7 @@ export default function Home() {
         ...buildReferenceWorkflowInputs(referenceImport),
       });
 
+      setLatestWorkflow(workflow);
       setPostDraft(mapXhsWorkflowToPostDraft(workflow));
       setDraftStale(false);
       setStatusMessage(
@@ -952,6 +978,64 @@ export default function Home() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function repairPublishPackage() {
+    if (isRepairingPublishPackage) return;
+
+    if (!accessToken) {
+      setStatusMessage("请先登录，再修复发布包。");
+      return;
+    }
+
+    if (!postDraft || !latestWorkflow) {
+      setStatusMessage("当前没有可修复的发布包，请先生成图文。");
+      return;
+    }
+
+    if (latestWorkflow.audit.ready) {
+      setStatusMessage("当前发布包已通过检查，无需修复。");
+      return;
+    }
+
+    setIsRepairingPublishPackage(true);
+
+    try {
+      const result = await api.xhs.repairPublishPackage(accessToken, {
+        idea: seed.trim() || latestWorkflow.publishPackage.idea,
+        publishPackage: latestWorkflow.publishPackage,
+        repairActions: latestWorkflow.audit.repairActions,
+      });
+      const nextWorkflow: XhsCommercialWorkflow = {
+        ...latestWorkflow,
+        audit: result.audit,
+        publishPackage: result.publishPackage,
+        summary: {
+          ...latestWorkflow.summary,
+          ready: result.summary.ready,
+          score: result.summary.score,
+        },
+      };
+
+      setLatestWorkflow(nextWorkflow);
+      setPostDraft(mapXhsPublishPackageToPostDraft(result.publishPackage));
+      setDraftStale(false);
+      setStatusMessage(
+        result.audit.ready
+          ? "发布包已修复并通过检查，可以直接复制。"
+          : `发布包已修复，仍建议处理：${result.audit.repairActions[0] ?? "继续检查内容完整度。"}`,
+      );
+      await refreshConversationRecordsSafely(
+        "发布包已修复，但记录列表刷新失败。",
+        accessToken,
+      );
+    } catch (error) {
+      setStatusMessage(
+        getWorkspaceErrorMessage(error, "发布包修复失败，当前内容已保留。"),
+      );
+    } finally {
+      setIsRepairingPublishPackage(false);
     }
   }
 
@@ -1097,7 +1181,10 @@ export default function Home() {
         setStatusMessage("已导入账号参考，生成时会参考账号定位。");
       }
 
-      if (postDraft) setDraftStale(true);
+      if (postDraft) {
+        setDraftStale(true);
+        setLatestWorkflow(null);
+      }
     } catch (error) {
       const errorMessage = getWorkspaceErrorMessage(
         error,
@@ -1121,7 +1208,10 @@ export default function Home() {
       ...current,
       importedAccount: null,
     }));
-    if (postDraft) setDraftStale(true);
+    if (postDraft) {
+      setDraftStale(true);
+      setLatestWorkflow(null);
+    }
     setStatusMessage("已移除账号参考。");
 
     if (accessToken && referenceId) {
@@ -1144,7 +1234,10 @@ export default function Home() {
         (post) => getReferencePostKey(post) !== key,
       ),
     }));
-    if (postDraft) setDraftStale(true);
+    if (postDraft) {
+      setDraftStale(true);
+      setLatestWorkflow(null);
+    }
     setStatusMessage("已移除帖子参考。");
 
     if (accessToken && referenceId) {
@@ -1354,6 +1447,7 @@ export default function Home() {
   function updatePostDraft(patch: PostDraftPatch) {
     setPostDraft((draft) => (draft ? { ...draft, ...patch } : draft));
     setDraftStale(false);
+    setLatestWorkflow(null);
 
     if (!accessToken || !postDraft) return;
     if (isLocalXhsId(postDraft.id)) return;
@@ -1386,6 +1480,7 @@ export default function Home() {
     pendingPostDraftPatchRef.current = null;
     currentPostDraftIdRef.current = draft.id;
     postDraftPatchSequenceRef.current += 1;
+    setLatestWorkflow(null);
     setPostDraft(draft);
     setDraftStale(false);
     setStatusMessage(`已打开 ${draft.savedAt} 保存的草稿。`);
@@ -1491,6 +1586,7 @@ export default function Home() {
         setConversationId(null);
         setDraftStale(false);
         setLastSnapshot(null);
+        setLatestWorkflow(null);
         setOutlines([]);
         setPostDraft(null);
         setReferenceImport(createEmptyReferenceImport());
@@ -1602,6 +1698,7 @@ export default function Home() {
     setIsHistoryReady(false);
     setLoginPassword("");
     setLoginError("");
+    setLatestWorkflow(null);
     setOutlines([]);
     setPostDraft(null);
     setReferenceImport(createEmptyReferenceImport());
@@ -1839,7 +1936,10 @@ export default function Home() {
                 onSeedChange={(value) => {
                   setSeed(value);
                   if (value.trim()) setBriefError("");
-                  if (postDraft) setDraftStale(true);
+                  if (postDraft) {
+                    setDraftStale(true);
+                    setLatestWorkflow(null);
+                  }
                   setStatusMessage("主题已更新，重新生成大纲后生效。");
                 }}
                 seed={seed}
@@ -1863,7 +1963,10 @@ export default function Home() {
                 onRegenerate={regenerateOutlines}
                 onSelectOutline={(outline) => {
                   setSelectedId(outline.id);
-                  if (postDraft) setDraftStale(true);
+                  if (postDraft) {
+                    setDraftStale(true);
+                    setLatestWorkflow(null);
+                  }
                   setStatusMessage(
                     `已选择「${toneMeta[outline.tone].name}」。`,
                   );
@@ -1883,14 +1986,19 @@ export default function Home() {
               />
             </div>
             <PostEditor
+              canRepairPublishPackage={Boolean(
+                postDraft && latestWorkflow && !latestWorkflow.audit.ready,
+              )}
               draftStale={draftStale}
               isGeneratingImage={postDraft?.id === generatingImageDraftId}
+              isRepairingPublishPackage={isRepairingPublishPackage}
               isSavingDraft={isSavingDraft}
               onCopy={(text, label) => void copyText(text, label)}
               onDownloadImage={downloadImage}
               onDraftChange={updatePostDraft}
               onGenerateImage={generateImage}
               onOpenSavedDraft={openSavedDraft}
+              onRepairPublishPackage={repairPublishPackage}
               onSaveDraft={() => void saveDraft()}
               postDraft={postDraft}
               savedDrafts={savedDrafts}

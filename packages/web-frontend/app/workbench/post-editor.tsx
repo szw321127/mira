@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Download, Save } from "lucide-react";
+import { Copy, Download, Save, WandSparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PostCoverPreview } from "./post-cover-preview";
 import type { PostDraft, SavedDraft } from "./types";
@@ -14,14 +14,17 @@ type EditablePostDraftPatch = Partial<
 >;
 
 type PostEditorProps = {
+  canRepairPublishPackage?: boolean;
   draftStale: boolean;
   isGeneratingImage?: boolean;
+  isRepairingPublishPackage?: boolean;
   isSavingDraft: boolean;
   onCopy: (text: string, label: string) => void;
   onDraftChange: (patch: EditablePostDraftPatch) => void;
   onDownloadImage?: () => void;
   onGenerateImage?: () => void;
   onOpenSavedDraft: (draft: SavedDraft) => void;
+  onRepairPublishPackage?: () => void;
   onSaveDraft: () => void;
   postDraft: PostDraft | null;
   savedDrafts: SavedDraft[];
@@ -38,14 +41,17 @@ const quietActionClass =
   "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[var(--line)] bg-[var(--surface-tint)] px-3 font-bold text-[var(--ink)] transition hover:border-[var(--red)] hover:bg-[var(--red-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function PostEditor({
+  canRepairPublishPackage = false,
   draftStale,
   isGeneratingImage = false,
+  isRepairingPublishPackage = false,
   isSavingDraft,
   onCopy,
   onDraftChange,
   onDownloadImage,
   onGenerateImage,
   onOpenSavedDraft,
+  onRepairPublishPackage,
   onSaveDraft,
   postDraft,
   savedDrafts,
@@ -253,17 +259,28 @@ export function PostEditor({
 
       {postDraft ? (
         <div className="grid gap-2" aria-label="发布包操作">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="flex flex-wrap gap-2">
             <button
-              className={primaryActionClass}
+              className={`${primaryActionClass} flex-1 basis-[138px]`}
               onClick={() => onCopy(getFullPostText(postDraft), "完整笔记")}
               type="button"
             >
               <Copy aria-hidden="true" size={16} strokeWidth={2.4} />
               复制完整笔记
             </button>
+            {canRepairPublishPackage ? (
+              <button
+                className={`${quietActionClass} flex-1 basis-[126px]`}
+                disabled={isRepairingPublishPackage}
+                onClick={onRepairPublishPackage}
+                type="button"
+              >
+                <WandSparkles aria-hidden="true" size={16} strokeWidth={2.4} />
+                {isRepairingPublishPackage ? "修复中" : "修复发布包"}
+              </button>
+            ) : null}
             <button
-              className={quietActionClass}
+              className={`${quietActionClass} flex-1 basis-[116px]`}
               disabled={!canDownloadImage}
               onClick={canDownloadImage ? onDownloadImage : undefined}
               type="button"
@@ -272,7 +289,7 @@ export function PostEditor({
               下载封面
             </button>
             <button
-              className={quietActionClass}
+              className={`${quietActionClass} flex-1 basis-[116px]`}
               disabled={isSavingDraft}
               onClick={onSaveDraft}
               type="button"

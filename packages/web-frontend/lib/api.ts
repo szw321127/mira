@@ -298,6 +298,15 @@ export type XhsPublishAuditIssue = {
   severity: "blocker" | "warning";
 };
 
+export type XhsPublishAudit = {
+  blockers: XhsPublishAuditIssue[];
+  passedChecks: string[];
+  ready: boolean;
+  repairActions: string[];
+  score: number;
+  warnings: XhsPublishAuditIssue[];
+};
+
 export type XhsImageTextPage = {
   body: string[];
   designNotes: string[];
@@ -327,14 +336,7 @@ export type XhsImageTextPublishPackage = {
 
 export type XhsCommercialWorkflow = {
   accountAnalysis?: unknown;
-  audit: {
-    blockers: XhsPublishAuditIssue[];
-    passedChecks: string[];
-    ready: boolean;
-    repairActions: string[];
-    score: number;
-    warnings: XhsPublishAuditIssue[];
-  };
+  audit: XhsPublishAudit;
   brief: unknown;
   importedAccount?: unknown;
   importedPosts: unknown;
@@ -347,6 +349,17 @@ export type XhsCommercialWorkflow = {
     referenceCount: number;
     score: number;
     topContentPillars: string[];
+  };
+};
+
+export type XhsPublishRepairResult = {
+  audit: XhsPublishAudit;
+  publishPackage: XhsImageTextPublishPackage;
+  repaired: boolean;
+  summary: {
+    ready: boolean;
+    repairActionCount: number;
+    score: number;
   };
 };
 
@@ -681,6 +694,22 @@ export const api = {
     ) =>
       request<XhsCommercialWorkflow>(
         "/xhs-analysis/workflows/commercial-draft",
+        {
+          body,
+          method: "POST",
+          token,
+        },
+      ),
+    repairPublishPackage: (
+      token: string,
+      body: {
+        idea: string;
+        publishPackage: XhsImageTextPublishPackage;
+        repairActions?: string[];
+      },
+    ) =>
+      request<XhsPublishRepairResult>(
+        "/xhs-analysis/workflows/repair-publish-package",
         {
           body,
           method: "POST",

@@ -206,10 +206,8 @@ test("page merges generated image fields without overwriting local copy", () => 
     generationGuardSource,
     /setStatusMessage\("已有封面图正在生成，请稍等。"\);[\s\S]*return;/,
   );
-  assert.match(
-    source,
-    /isGenerating: isGenerating \|\| Boolean\(generatingImageDraftId\)/,
-  );
+  assert.match(source, /Boolean\(generatingImageDraftId\)/);
+  assert.match(source, /isRepairingPublishPackage/);
   assert.match(source, /草稿同步失败，封面图生成未开始。/);
   assert.match(
     source,
@@ -288,4 +286,38 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(source, /brief: referenceBrief/);
   assert.match(source, /buildReferenceWorkflowInputs/);
   assert.match(source, /\.\.\.buildReferenceWorkflowInputs/);
+});
+
+test("workbench can repair an unready Xiaohongshu publish package", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+  const editor = readWorkbenchFile("post-editor.tsx");
+  const types = readWorkbenchFile("types.ts");
+  const utils = readWorkbenchFile("workspace-utils.ts");
+
+  assert.match(api, /XhsPublishRepairResult/);
+  assert.match(api, /repairPublishPackage:/);
+  assert.match(api, /\/xhs-analysis\/workflows\/repair-publish-package/);
+
+  assert.match(types, /latestWorkflow: XhsCommercialWorkflow \| null/);
+  assert.match(utils, /latestWorkflow: mapSnapshotXhsCommercialWorkflow/);
+  assert.match(utils, /latestWorkflow: snapshot\.latestWorkflow/);
+
+  assert.match(editor, /canRepairPublishPackage/);
+  assert.match(editor, /isRepairingPublishPackage/);
+  assert.match(editor, /onRepairPublishPackage/);
+  assert.match(editor, /修复发布包/);
+
+  assert.match(source, /latestWorkflow, setLatestWorkflow/);
+  assert.match(source, /isRepairingPublishPackage, setIsRepairingPublishPackage/);
+  assert.match(source, /function mapXhsPublishPackageToPostDraft/);
+  assert.match(source, /setLatestWorkflow\(workflow\)/);
+  assert.match(source, /async function repairPublishPackage/);
+  assert.match(source, /api\.xhs\.repairPublishPackage/);
+  assert.match(
+    source,
+    /setPostDraft\(mapXhsPublishPackageToPostDraft\(result\.publishPackage\)\)/,
+  );
+  assert.match(source, /canRepairPublishPackage=\{Boolean\(/);
+  assert.match(source, /onRepairPublishPackage=\{repairPublishPackage\}/);
 });

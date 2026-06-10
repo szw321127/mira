@@ -5,6 +5,7 @@ import type {
   BackendSavedDraft,
   ImportedXhsAccountAnalysis,
   ImportedXhsPostAnalysis,
+  XhsCommercialWorkflow,
   XhsProviderImportSummary,
   XhsStoredReference,
 } from "@/lib/api";
@@ -99,6 +100,29 @@ function imageStatus(value: unknown): PostDraft["imageStatus"] {
   return value === "generating" || value === "ready" || value === "failed"
     ? value
     : "idle";
+}
+
+function isXhsPublishAudit(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.ready === "boolean" &&
+    typeof value.score === "number" &&
+    Array.isArray(value.blockers) &&
+    Array.isArray(value.passedChecks) &&
+    Array.isArray(value.repairActions) &&
+    Array.isArray(value.warnings)
+  );
+}
+
+export function mapSnapshotXhsCommercialWorkflow(
+  value: unknown,
+): XhsCommercialWorkflow | null {
+  if (!isRecord(value)) return null;
+  if (!isRecord(value.publishPackage) || !isXhsPublishAudit(value.audit)) {
+    return null;
+  }
+
+  return value as unknown as XhsCommercialWorkflow;
 }
 
 export function createEmptyReferenceImport(): ReferenceImportState {
@@ -404,6 +428,7 @@ export function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
     draftStale:
       typeof value.draftStale === "boolean" ? value.draftStale : false,
     lastSnapshot: mapUndoSnapshot(value.lastSnapshot),
+    latestWorkflow: mapSnapshotXhsCommercialWorkflow(value.latestWorkflow),
     outlines,
     postDraft,
     referenceImport: mapReferenceImportState(value.referenceImport),
@@ -422,6 +447,7 @@ export function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
     batch: snapshot.batch,
     briefError: snapshot.briefError,
     draftStale: snapshot.draftStale,
+    latestWorkflow: snapshot.latestWorkflow,
     outlines: snapshot.outlines,
     postDraft: snapshot.postDraft,
     referenceImport: snapshot.referenceImport,

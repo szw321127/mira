@@ -6,6 +6,7 @@ import {
 import {
   analyzeXhsAccount,
   analyzeXhsPost,
+  auditXhsImageTextPublishPackage,
   buildXhsCommercialWorkflow,
   buildXhsGenerationBrief,
   buildXhsOutlineCandidates,
@@ -15,18 +16,24 @@ import {
 import type {
   XhsAccountInput,
   XhsGenerationBriefInput,
+  XhsImageTextPage,
+  XhsImageTextPublishPackage,
   XhsImportedAccountNormalization,
   XhsImportedPostsNormalization,
   XhsCommercialWorkflowInput,
   XhsOutlineCandidateInput,
   XhsPostAnalysis,
   XhsPostInput,
+  XhsPublishPackageAudit,
 } from '@rednote/agent';
+import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
 import type { AdminContentProviderType } from '../admin-content-providers/admin-content-providers.types';
 import {
   createProviderEndpoint,
+  extractChatContent,
   isRecord,
+  parseProviderJsonObject,
   postProviderJson,
 } from '../model-provider/openai-compatible';
 import { PrismaService } from '../prisma/prisma.service';
@@ -44,6 +51,12 @@ type ImportXhsAccountInput = {
   providerType?: AdminContentProviderType;
   url?: string;
   userId?: string;
+};
+
+type RepairXhsPublishPackageInput = {
+  idea: string;
+  publishPackage: XhsImageTextPublishPackage;
+  repairActions?: string[];
 };
 
 type XhsProviderImportSummary = {
@@ -81,6 +94,17 @@ export type XhsStoredReference = {
   updatedAt: Date;
 };
 
+export type RepairedXhsPublishPackage = {
+  audit: XhsPublishPackageAudit;
+  publishPackage: XhsImageTextPublishPackage;
+  repaired: boolean;
+  summary: {
+    ready: boolean;
+    repairActionCount: number;
+    score: number;
+  };
+};
+
 export type ImportedXhsPostAnalysis = {
   analysis: XhsPostAnalysis;
   imported: XhsImportedPostsNormalization;
@@ -100,6 +124,7 @@ export class XhsAnalysisService {
   constructor(
     private readonly contentProviders: AdminContentProvidersService,
     private readonly prisma: PrismaService,
+    private readonly modelConfigs: AdminModelConfigsService,
   ) {}
 
   analyzePost(input: XhsPostInput) {
@@ -120,6 +145,45 @@ export class XhsAnalysisService {
 
   buildCommercialWorkflow(input: XhsCommercialWorkflowInput) {
     return buildXhsCommercialWorkflow(input);
+  }
+
+  async repairPublishPackage(
+    input: RepairXhsPublishPackageInput,
+  ): Promise<RepairedXhsPublishPackage> {
+    const currentAudit = auditXhsImageTextPublishPackage(input.publishPackage);
+
+    if (currentAudit.ready) {
+      return this.toRepairResult(input.publishPackage, currentAudit, false);
+    }
+
+    const payload = await this.requestTextJson([
+      {
+        content:
+          '你是小红书图文发布包质检编辑。只返回 JSON，不要 Markdown，不要解释。',
+        role: 'system',
+      },
+      {
+        content: [
+          `用户想法：${this.requireText(input.idea, '创作想法')}`,
+          `当前发布包：${JSON.stringify(input.publishPackage)}`,
+          `审核阻塞项：${JSON.stringify(currentAudit.blockers)}`,
+          `审核警告：${JSON.stringify(currentAudit.warnings)}`,
+          `修复动作：${JSON.stringify(input.repairActions ?? currentAudit.repairActions)}`,
+          '请返回完整 JSON：{"publishPackage":{...}}。',
+          'publishPackage 必须包含 titleCandidates、pages、caption、hashtags、imagePromptPack。',
+          'pages 保持 4 到 7 页，每页包含 pageNumber、role、headline、body、imagePrompt、designNotes。',
+          '结果必须是用户可直接复制发布的小红书图文内容，不要返回创作建议或提示词说明。',
+        ].join('\n'),
+        role: 'user',
+      },
+    ]);
+    const repairedPackage = this.toRepairedPublishPackage(
+      payload,
+      input.publishPackage,
+    );
+    const repairedAudit = auditXhsImageTextPublishPackage(repairedPackage);
+
+    return this.toRepairResult(repairedPackage, repairedAudit, true);
   }
 
   async listReferences(
@@ -376,6 +440,169 @@ export class XhsAnalysisService {
     }
 
     return payload;
+  }
+
+  private async requestTextJson(
+    messages: Array<{ content: string; role: 'system' | 'user' }>,
+  ): Promise<Record<string, unknown>> {
+    const config = await this.modelConfigs.getRuntimeConfig('text');
+    const response = await postProviderJson(
+      createProviderEndpoint(config.baseUrl, 'chat/completions'),
+      config.apiKey,
+      {
+        messages,
+        model: config.modelName,
+        response_format: { type: 'json_object' },
+        temperature: 0.55,
+      },
+    );
+
+    return parseProviderJsonObject(extractChatContent(response));
+  }
+
+  private toRepairedPublishPackage(
+    payload: Record<string, unknown>,
+    current: XhsImageTextPublishPackage,
+  ): XhsImageTextPublishPackage {
+    const rawPackage = isRecord(payload.publishPackage)
+      ? payload.publishPackage
+      : payload;
+    const pages = this.requirePages(rawPackage.pages);
+    const titleCandidates = this.requireStringArray(
+      rawPackage.titleCandidates,
+      '标题候选',
+      1,
+    );
+    const caption = this.requireText(rawPackage.caption, '正文');
+    const hashtags = this.requireStringArray(
+      rawPackage.hashtags,
+      '标签',
+      1,
+    ).map((tag) => tag.replace(/^#+/, ''));
+    const imagePromptPack = this.requireStringArray(
+      rawPackage.imagePromptPack,
+      '图片提示词',
+      pages.length,
+    );
+    const hashtagText = hashtags.map((tag) => `#${tag}`).join(' ');
+    const pageText = pages
+      .map(
+        (page) =>
+          `P${page.pageNumber} ${page.headline}\n${page.body.join('\n')}`,
+      )
+      .join('\n\n');
+    const title =
+      titleCandidates[0] ?? current.titleCandidates[0] ?? current.idea;
+
+    return {
+      ...current,
+      caption,
+      copyBlocks: {
+        caption,
+        hashtags: hashtagText,
+        pageText,
+        publishText: `${title}\n\n${caption}\n\n${hashtagText}`,
+        title,
+      },
+      hashtags,
+      imagePromptPack,
+      pages,
+      platform: 'xiaohongshu',
+      titleCandidates,
+    };
+  }
+
+  private requirePages(value: unknown): XhsImageTextPage[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException('修复后的分页格式无效。');
+    }
+
+    const pages = value.map((page, index) => this.requirePage(page, index));
+
+    if (pages.length < 4 || pages.length > 7) {
+      throw new BadRequestException('修复后的分页需要保持 4 到 7 页。');
+    }
+
+    return pages;
+  }
+
+  private requirePage(value: unknown, index: number): XhsImageTextPage {
+    if (!isRecord(value)) {
+      throw new BadRequestException(`第 ${index + 1} 页格式无效。`);
+    }
+
+    return {
+      body: this.requireStringArray(value.body, `第 ${index + 1} 页正文`, 1),
+      designNotes: this.requireStringArray(
+        value.designNotes,
+        `第 ${index + 1} 页设计说明`,
+        1,
+      ),
+      headline: this.requireText(value.headline, `第 ${index + 1} 页标题`),
+      imagePrompt: this.requireText(
+        value.imagePrompt,
+        `第 ${index + 1} 页图片提示词`,
+      ),
+      pageNumber: index + 1,
+      role: this.requirePageRole(value.role, index),
+    };
+  }
+
+  private requirePageRole(
+    value: unknown,
+    index: number,
+  ): XhsImageTextPage['role'] {
+    if (value === 'cover' || value === 'content' || value === 'summary') {
+      return value;
+    }
+
+    if (index === 0) return 'cover';
+    return 'content';
+  }
+
+  private requireStringArray(
+    value: unknown,
+    fieldName: string,
+    minLength: number,
+  ): string[] {
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName}格式无效。`);
+    }
+
+    const items = value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+
+    if (items.length < minLength) {
+      throw new BadRequestException(`${fieldName}数量不足。`);
+    }
+
+    return items;
+  }
+
+  private requireText(value: unknown, fieldName: string): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new BadRequestException(`${fieldName}不能为空。`);
+    }
+
+    return value.trim();
+  }
+
+  private toRepairResult(
+    publishPackage: XhsImageTextPublishPackage,
+    audit: XhsPublishPackageAudit,
+    repaired: boolean,
+  ): RepairedXhsPublishPackage {
+    return {
+      audit,
+      publishPackage,
+      repaired,
+      summary: {
+        ready: audit.ready,
+        repairActionCount: audit.repairActions.length,
+        score: audit.score,
+      },
+    };
   }
 
   private async persistImportedReference(input: {
