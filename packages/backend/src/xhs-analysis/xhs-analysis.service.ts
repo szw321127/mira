@@ -16,108 +16,40 @@ import {
 import type {
   XhsAccountInput,
   XhsGenerationBriefInput,
-  XhsImageTextPage,
-  XhsImageTextPublishPackage,
-  XhsImportedAccountNormalization,
-  XhsImportedPostsNormalization,
   XhsCommercialWorkflowInput,
   XhsOutlineCandidateInput,
-  XhsPostAnalysis,
   XhsPostInput,
-  XhsPublishPackageAudit,
 } from '@rednote/agent';
 import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
-import type { AdminContentProviderType } from '../admin-content-providers/admin-content-providers.types';
 import {
   createProviderEndpoint,
-  extractChatContent,
-  isRecord,
-  parseProviderJsonObject,
   postProviderJson,
 } from '../model-provider/openai-compatible';
 import { PrismaService } from '../prisma/prisma.service';
-
-type ImportXhsPostInput = {
-  conversationId?: string;
-  noteId?: string;
-  providerType?: AdminContentProviderType;
-  url?: string;
-};
-
-type ImportXhsAccountInput = {
-  conversationId?: string;
-  limit?: number;
-  providerType?: AdminContentProviderType;
-  url?: string;
-  userId?: string;
-};
-
-type RepairXhsPublishPackageInput = {
-  idea: string;
-  publishPackage: XhsImageTextPublishPackage;
-  repairActions?: string[];
-};
-
-type XhsProviderImportSummary = {
-  complianceNote: string;
-  endpoint: string;
-  rateLimitPerMinute: number | null;
-  sourceId: string;
-  type: AdminContentProviderType;
-};
-
-type XhsReferenceKind = 'account' | 'post';
-
-type SavedXhsReference = {
-  conversationId: string;
-  createdAt: Date;
-  id: string;
-  kind: XhsReferenceKind;
-  sourceId: string;
-  title: string;
-};
-
-export type XhsStoredReference = {
-  analysis: unknown;
-  conversationId: string;
-  createdAt: Date;
-  id: string;
-  imported: unknown;
-  kind: XhsReferenceKind;
-  providerEndpoint: string | null;
-  providerType: string;
-  reference: SavedXhsReference;
-  sourceId: string;
-  sourceUrl: string | null;
-  title: string;
-  updatedAt: Date;
-};
-
-export type RepairedXhsPublishPackage = {
-  audit: XhsPublishPackageAudit;
-  publishPackage: XhsImageTextPublishPackage;
-  repaired: boolean;
-  summary: {
-    ready: boolean;
-    repairActionCount: number;
-    score: number;
-  };
-};
-
-export type ImportedXhsPostAnalysis = {
-  analysis: XhsPostAnalysis;
-  imported: XhsImportedPostsNormalization;
-  provider: XhsProviderImportSummary;
-  reference?: SavedXhsReference;
-};
-
-export type ImportedXhsAccountAnalysis = {
-  analysis: ReturnType<typeof analyzeXhsAccount>;
-  imported: XhsImportedAccountNormalization;
-  provider: XhsProviderImportSummary;
-  reference?: SavedXhsReference;
-};
+import {
+  requestTextJson,
+  requireText,
+  toRepairedPublishPackage,
+  toRepairResult,
+} from './xhs-publish-repair.utils';
+import {
+  extractProviderRecord,
+  normalizeAccountImportInput,
+  normalizePostImportInput,
+} from './xhs-provider-import.utils';
+import type {
+  ImportedXhsAccountAnalysis,
+  ImportedXhsPostAnalysis,
+  ImportXhsAccountInput,
+  ImportXhsPostInput,
+  RepairedXhsPublishPackage,
+  RepairXhsPublishPackageInput,
+  SavedXhsReference,
+  XhsProviderImportSummary,
+  XhsReferenceKind,
+  XhsStoredReference,
+} from './xhs-analysis.types';
 
 @Injectable()
 export class XhsAnalysisService {
@@ -153,10 +85,10 @@ export class XhsAnalysisService {
     const currentAudit = auditXhsImageTextPublishPackage(input.publishPackage);
 
     if (currentAudit.ready) {
-      return this.toRepairResult(input.publishPackage, currentAudit, false);
+      return toRepairResult(input.publishPackage, currentAudit, false);
     }
 
-    const payload = await this.requestTextJson([
+    const payload = await requestTextJson(this.modelConfigs, [
       {
         content:
           '你是小红书图文发布包质检编辑。只返回 JSON，不要 Markdown，不要解释。',
@@ -164,7 +96,7 @@ export class XhsAnalysisService {
       },
       {
         content: [
-          `用户想法：${this.requireText(input.idea, '创作想法')}`,
+          `用户想法：${requireText(input.idea, '创作想法')}`,
           `当前发布包：${JSON.stringify(input.publishPackage)}`,
           `审核阻塞项：${JSON.stringify(currentAudit.blockers)}`,
           `审核警告：${JSON.stringify(currentAudit.warnings)}`,
@@ -177,13 +109,13 @@ export class XhsAnalysisService {
         role: 'user',
       },
     ]);
-    const repairedPackage = this.toRepairedPublishPackage(
+    const repairedPackage = toRepairedPublishPackage(
       payload,
       input.publishPackage,
     );
     const repairedAudit = auditXhsImageTextPublishPackage(repairedPackage);
 
-    return this.toRepairResult(repairedPackage, repairedAudit, true);
+    return toRepairResult(repairedPackage, repairedAudit, true);
   }
 
   async listReferences(
@@ -243,7 +175,7 @@ export class XhsAnalysisService {
     input: ImportXhsPostInput,
     userId?: string,
   ): Promise<ImportedXhsPostAnalysis> {
-    const normalizedInput = this.normalizePostImportInput(input);
+    const normalizedInput = normalizePostImportInput(input);
     const providerType = normalizedInput.providerType ?? 'tikhub';
     const runtimeConfig =
       await this.contentProviders.getRuntimeConfig(providerType);
@@ -255,7 +187,7 @@ export class XhsAnalysisService {
       noteId: normalizedInput.noteId,
       url: normalizedInput.url,
     });
-    const raw = this.extractProviderRecord(payload, ['note', 'post', 'item']);
+    const raw = extractProviderRecord(payload, ['note', 'post', 'item']);
     const sourceId =
       normalizedInput.noteId ?? normalizedInput.url ?? 'unknown-post';
     const imported = normalizeXhsImportedPosts([
@@ -302,7 +234,7 @@ export class XhsAnalysisService {
     input: ImportXhsAccountInput,
     userId?: string,
   ): Promise<ImportedXhsAccountAnalysis> {
-    const normalizedInput = this.normalizeAccountImportInput(input);
+    const normalizedInput = normalizeAccountImportInput(input);
     const providerType = normalizedInput.providerType ?? 'tikhub';
     const runtimeConfig =
       await this.contentProviders.getRuntimeConfig(providerType);
@@ -315,11 +247,7 @@ export class XhsAnalysisService {
       url: normalizedInput.url,
       userId: normalizedInput.userId,
     });
-    const raw = this.extractProviderRecord(payload, [
-      'account',
-      'profile',
-      'user',
-    ]);
+    const raw = extractProviderRecord(payload, ['account', 'profile', 'user']);
     const sourceId =
       normalizedInput.userId ?? normalizedInput.url ?? 'unknown-account';
     const imported = normalizeXhsImportedAccount({
@@ -353,255 +281,6 @@ export class XhsAnalysisService {
       imported,
       provider,
       ...(reference ? { reference } : {}),
-    };
-  }
-
-  private normalizePostImportInput(
-    input: ImportXhsPostInput,
-  ): Required<Pick<ImportXhsPostInput, 'providerType'>> &
-    Pick<ImportXhsPostInput, 'conversationId' | 'noteId' | 'url'> {
-    const conversationId = input.conversationId?.trim();
-    const noteId = input.noteId?.trim();
-    const url = input.url?.trim();
-
-    if (!noteId && !url) {
-      throw new BadRequestException('请提供小红书帖子 URL 或 noteId。');
-    }
-
-    return {
-      conversationId,
-      noteId,
-      providerType: input.providerType ?? 'tikhub',
-      url,
-    };
-  }
-
-  private normalizeAccountImportInput(
-    input: ImportXhsAccountInput,
-  ): Required<Pick<ImportXhsAccountInput, 'providerType'>> &
-    Pick<ImportXhsAccountInput, 'conversationId' | 'limit' | 'url' | 'userId'> {
-    const conversationId = input.conversationId?.trim();
-    const userId = input.userId?.trim();
-    const url = input.url?.trim();
-
-    if (!userId && !url) {
-      throw new BadRequestException('请提供小红书账号 URL 或 userId。');
-    }
-
-    return {
-      conversationId,
-      limit: input.limit,
-      providerType: input.providerType ?? 'tikhub',
-      url,
-      userId,
-    };
-  }
-
-  private extractProviderRecord(
-    payload: unknown,
-    preferredKeys: string[],
-  ): Record<string, unknown> {
-    const data = this.unwrapProviderEnvelope(payload);
-
-    if (Array.isArray(data)) {
-      const first: unknown = data[0];
-
-      if (isRecord(first)) {
-        return first;
-      }
-    }
-
-    if (!isRecord(data)) {
-      throw new BadRequestException('内容来源响应格式无效。');
-    }
-
-    for (const key of preferredKeys) {
-      const nested: unknown = data[key];
-
-      if (isRecord(nested)) {
-        return nested;
-      }
-    }
-
-    return data;
-  }
-
-  private unwrapProviderEnvelope(payload: unknown): unknown {
-    if (!isRecord(payload)) {
-      return payload;
-    }
-
-    if ('data' in payload) {
-      return this.unwrapProviderEnvelope(payload.data);
-    }
-
-    if ('result' in payload) {
-      return this.unwrapProviderEnvelope(payload.result);
-    }
-
-    return payload;
-  }
-
-  private async requestTextJson(
-    messages: Array<{ content: string; role: 'system' | 'user' }>,
-  ): Promise<Record<string, unknown>> {
-    const config = await this.modelConfigs.getRuntimeConfig('text');
-    const response = await postProviderJson(
-      createProviderEndpoint(config.baseUrl, 'chat/completions'),
-      config.apiKey,
-      {
-        messages,
-        model: config.modelName,
-        response_format: { type: 'json_object' },
-        temperature: 0.55,
-      },
-    );
-
-    return parseProviderJsonObject(extractChatContent(response));
-  }
-
-  private toRepairedPublishPackage(
-    payload: Record<string, unknown>,
-    current: XhsImageTextPublishPackage,
-  ): XhsImageTextPublishPackage {
-    const rawPackage = isRecord(payload.publishPackage)
-      ? payload.publishPackage
-      : payload;
-    const pages = this.requirePages(rawPackage.pages);
-    const titleCandidates = this.requireStringArray(
-      rawPackage.titleCandidates,
-      '标题候选',
-      1,
-    );
-    const caption = this.requireText(rawPackage.caption, '正文');
-    const hashtags = this.requireStringArray(
-      rawPackage.hashtags,
-      '标签',
-      1,
-    ).map((tag) => tag.replace(/^#+/, ''));
-    const imagePromptPack = this.requireStringArray(
-      rawPackage.imagePromptPack,
-      '图片提示词',
-      pages.length,
-    );
-    const hashtagText = hashtags.map((tag) => `#${tag}`).join(' ');
-    const pageText = pages
-      .map(
-        (page) =>
-          `P${page.pageNumber} ${page.headline}\n${page.body.join('\n')}`,
-      )
-      .join('\n\n');
-    const title =
-      titleCandidates[0] ?? current.titleCandidates[0] ?? current.idea;
-
-    return {
-      ...current,
-      caption,
-      copyBlocks: {
-        caption,
-        hashtags: hashtagText,
-        pageText,
-        publishText: `${title}\n\n${caption}\n\n${hashtagText}`,
-        title,
-      },
-      hashtags,
-      imagePromptPack,
-      pages,
-      platform: 'xiaohongshu',
-      titleCandidates,
-    };
-  }
-
-  private requirePages(value: unknown): XhsImageTextPage[] {
-    if (!Array.isArray(value)) {
-      throw new BadRequestException('修复后的分页格式无效。');
-    }
-
-    const pages = value.map((page, index) => this.requirePage(page, index));
-
-    if (pages.length < 4 || pages.length > 7) {
-      throw new BadRequestException('修复后的分页需要保持 4 到 7 页。');
-    }
-
-    return pages;
-  }
-
-  private requirePage(value: unknown, index: number): XhsImageTextPage {
-    if (!isRecord(value)) {
-      throw new BadRequestException(`第 ${index + 1} 页格式无效。`);
-    }
-
-    return {
-      body: this.requireStringArray(value.body, `第 ${index + 1} 页正文`, 1),
-      designNotes: this.requireStringArray(
-        value.designNotes,
-        `第 ${index + 1} 页设计说明`,
-        1,
-      ),
-      headline: this.requireText(value.headline, `第 ${index + 1} 页标题`),
-      imagePrompt: this.requireText(
-        value.imagePrompt,
-        `第 ${index + 1} 页图片提示词`,
-      ),
-      pageNumber: index + 1,
-      role: this.requirePageRole(value.role, index),
-    };
-  }
-
-  private requirePageRole(
-    value: unknown,
-    index: number,
-  ): XhsImageTextPage['role'] {
-    if (value === 'cover' || value === 'content' || value === 'summary') {
-      return value;
-    }
-
-    if (index === 0) return 'cover';
-    return 'content';
-  }
-
-  private requireStringArray(
-    value: unknown,
-    fieldName: string,
-    minLength: number,
-  ): string[] {
-    if (!Array.isArray(value)) {
-      throw new BadRequestException(`${fieldName}格式无效。`);
-    }
-
-    const items = value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean);
-
-    if (items.length < minLength) {
-      throw new BadRequestException(`${fieldName}数量不足。`);
-    }
-
-    return items;
-  }
-
-  private requireText(value: unknown, fieldName: string): string {
-    if (typeof value !== 'string' || !value.trim()) {
-      throw new BadRequestException(`${fieldName}不能为空。`);
-    }
-
-    return value.trim();
-  }
-
-  private toRepairResult(
-    publishPackage: XhsImageTextPublishPackage,
-    audit: XhsPublishPackageAudit,
-    repaired: boolean,
-  ): RepairedXhsPublishPackage {
-    return {
-      audit,
-      publishPackage,
-      repaired,
-      summary: {
-        ready: audit.ready,
-        repairActionCount: audit.repairActions.length,
-        score: audit.score,
-      },
     };
   }
 
