@@ -266,6 +266,10 @@ async function main() {
 
     // 持久化本轮新增的消息（agent loop 会往 messages 里 push assistant/tool 消息）
     const newMessages = messages.slice(beforeLen);
+    const now = Date.now();
+    for (let i = beforeLen; i < messages.length; i++) {
+      timestamps.set(i, now);
+    }
     store.appendAll(newMessages);
 
     // Check if compaction needed after each turn

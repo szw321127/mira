@@ -211,17 +211,17 @@ export async function* agentLoop(
 
     // cache 命中时才打印一行简洁状态，让 cache hit 立刻可见
     if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {
-      const tag =
-        norm.cacheReadTokens > 0
-          ? `\x1b[38;5;36m✓ cache hit\x1b[0m`
-          : `\x1b[38;5;220m✎ cache write\x1b[0m`;
+      // const tag =
+      //   norm.cacheReadTokens > 0
+      //     ? `\x1b[38;5;36m✓ cache hit\x1b[0m`
+      //     : `\x1b[38;5;220m✎ cache write\x1b[0m`;
       const detail =
         norm.cacheReadTokens > 0
           ? `read ${norm.cacheReadTokens}`
           : `write ${norm.cacheWriteTokens}`;
-      console.log(
-        `  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`,
-      );
+      // console.log(
+      //   `  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`,
+      // );
       yield {
         type: 'token-cost',
         detail,
