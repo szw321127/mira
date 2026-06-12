@@ -4,6 +4,7 @@ export {
   toolGuide,
   deferredTools,
   sessionContext,
+  type PipeFn,
   type PromptContext,
 } from './prompt-builder';
 export {

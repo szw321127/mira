@@ -50,6 +50,11 @@ export type AgentLoopEvent =
       error: string;
     }
   | {
+      type: 'token-cost';
+      detail: string;
+      cost: string;
+    }
+  | {
       type: 'token-usage';
       totalTokens: number;
       tokenBudget: number;
@@ -217,12 +222,14 @@ export async function* agentLoop(
       console.log(
         `  [${tag}] ${detail} tokens · 本步 $${stepRecord.cost.toFixed(5)}`,
       );
+      yield {
+        type: 'token-cost',
+        detail,
+        cost: stepRecord.cost.toFixed(5),
+      };
     }
 
     if (totalTokens > tokenBudget * 0.9) {
-      console.log(
-        `  [Token] ${totalTokens}/${tokenBudget} (${Math.round((totalTokens / tokenBudget) * 100)}%)`,
-      );
       yield {
         type: 'token-usage',
         totalTokens,

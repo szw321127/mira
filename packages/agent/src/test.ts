@@ -103,6 +103,10 @@ function renderAgentLoopEvent(event: AgentLoopEvent): void {
       console.log(event.error);
       break;
     }
+    case 'token-cost': {
+      console.log(`${event.detail}  [cost] $${event.cost}`);
+      break;
+    }
     case 'token-usage': {
       console.log(
         `  [Token] ${event.totalTokens}/${event.tokenBudget} (${event.percent}%)`,

@@ -1,0 +1,1 @@
+export { generateOutline } from './outline';

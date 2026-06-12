@@ -5,7 +5,7 @@ export interface PromptContext {
   sessionId: string;
 }
 
-type PipeFn = (ctx: PromptContext) => string | null;
+export type PipeFn = (ctx: PromptContext) => string | null;
 
 export class PromptBuilder {
   private pipes: { name: string; fn: PipeFn }[] = [];
