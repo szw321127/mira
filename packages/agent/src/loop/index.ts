@@ -202,7 +202,10 @@ export async function* agentLoop(
 
     // 把 usage 喂给 tracker；tracker 内部按四类 token 分别累加并算 cost
     const norm = normalizeUsage(stepUsage);
-    const stepRecord = tracker?.record(model?.modelId || 'mock-model', norm);
+    const modelRecord = model as { modelId?: unknown };
+    const modelId =
+      typeof modelRecord.modelId === 'string' ? modelRecord.modelId : 'mock-model';
+    const stepRecord = tracker?.record(modelId, norm);
     totalTokens +=
       norm.inputTokens +
       norm.outputTokens +

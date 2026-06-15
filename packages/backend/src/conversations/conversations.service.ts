@@ -10,6 +10,7 @@ import type {
   PostDraft,
   Prisma,
   SavedDraft,
+  XhsResearchRun,
 } from '@prisma/client';
 import {
   parseJsonRecord,
@@ -50,6 +51,10 @@ const conversationInclude = {
     orderBy: { createdAt: 'desc' as const },
     take: 8,
   },
+  researchRuns: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+  },
   snapshots: {
     orderBy: { createdAt: 'desc' as const },
     take: 8,
@@ -71,6 +76,12 @@ type ConversationAggregate = Prisma.ConversationGetPayload<{
 type PostDraftWithConversation = Prisma.PostDraftGetPayload<{
   include: typeof postDraftInclude;
 }>;
+
+function parseStringArrayFromRecord(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
 
 @Injectable()
 export class ConversationsService {
@@ -613,6 +624,10 @@ export class ConversationsService {
           : null,
       id: conversation.id,
       lastOpenedAt: conversation.lastOpenedAt,
+      latestResearchRun:
+        conversation.researchRuns.length > 0
+          ? this.toXhsResearchRun(conversation.researchRuns[0])
+          : null,
       outlineBatches: conversation.outlineBatches.map((batch) =>
         this.toOutlineBatch(batch),
       ),
@@ -694,6 +709,32 @@ export class ConversationsService {
       createdAt: snapshot.createdAt,
       id: snapshot.id,
       snapshot: parseJsonRecord(snapshot.snapshot),
+    };
+  }
+
+  private toXhsResearchRun(run: XhsResearchRun) {
+    const analysis = parseJsonRecord(run.analysis);
+
+    return {
+      confidence:
+        analysis.confidence === 'high' ||
+        analysis.confidence === 'medium' ||
+        analysis.confidence === 'low'
+          ? analysis.confidence
+          : 'low',
+      createdAt: run.createdAt,
+      failedKeywords: parseStringArrayFromRecord(analysis.failedKeywords),
+      id: run.id,
+      idea: run.idea,
+      keywords: parseStringArray(run.keywords),
+      mode: run.mode === 'deep' ? 'deep' : 'quick',
+      providerEndpoint: run.providerEndpoint,
+      providerType: run.providerType,
+      sampleCount: run.sampleCount,
+      status:
+        typeof analysis.status === 'string' ? analysis.status : run.status,
+      summary: parseJsonRecord(run.summary),
+      warnings: parseStringArrayFromRecord(analysis.warnings),
     };
   }
 

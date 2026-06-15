@@ -1,11 +1,14 @@
 import {
   analyzeXhsAccount,
+  analyzeXhsPopularSamples,
   analyzeXhsPost,
   auditXhsImageTextPublishPackage,
   buildXhsCommercialWorkflow,
   buildXhsOutlineCandidates,
   buildXhsImageTextPublishPackage,
   buildXhsGenerationBrief,
+  buildXhsResearchBackedOutlines,
+  buildXhsSearchKeywords,
   normalizeXhsImportedAccount,
   normalizeXhsImportedPosts,
   normalizeXhsCount,
@@ -157,6 +160,110 @@ describe('xhs analysis primitives', () => {
     expect(candidates[0]?.outline[0]).toContain('痛点');
     expect(candidates[1]?.outline[1]).toContain('步骤');
     expect(candidates[2]?.selectionReason).toContain('收藏');
+  });
+
+  it('builds bounded Xiaohongshu search keywords from one idea', () => {
+    const quickKeywords = buildXhsSearchKeywords({
+      idea: '给初入职场女生做低预算通勤穿搭',
+      mode: 'quick',
+    });
+    const deepKeywords = buildXhsSearchKeywords({
+      idea: '给初入职场女生做低预算通勤穿搭',
+      mode: 'deep',
+    });
+
+    expect(quickKeywords.length).toBeGreaterThanOrEqual(3);
+    expect(quickKeywords.length).toBeLessThanOrEqual(5);
+    expect(deepKeywords.length).toBeGreaterThanOrEqual(5);
+    expect(deepKeywords.length).toBeLessThanOrEqual(8);
+    expect(quickKeywords).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('初入职场女生'),
+        expect.stringContaining('低预算通勤穿搭'),
+      ]),
+    );
+  });
+
+  it('analyzes popular samples without exposing raw note bodies', () => {
+    const analysis = analyzeXhsPopularSamples({
+      failedKeywords: ['平价职场穿搭'],
+      idea: '给初入职场女生做低预算通勤穿搭',
+      keywords: ['低预算通勤穿搭', '初入职场女生穿搭'],
+      samples: [
+        {
+          content: '这是一段很长的原始笔记正文，不应该出现在摘要里。',
+          keyword: '低预算通勤穿搭',
+          metrics: { collects: '1.2万', comments: 280, likes: '2.1万' },
+          sourceId: 'note-a',
+          tags: ['通勤穿搭', '低预算'],
+          title: '普通女生也能复制的 12 件通勤衣橱',
+          url: 'https://www.xiaohongshu.com/explore/note-a',
+        },
+        {
+          content: '重复内容也不应该影响去重。',
+          keyword: '初入职场女生穿搭',
+          metrics: { collects: '8000', comments: 90, likes: '1.4万' },
+          sourceId: 'note-a',
+          tags: ['通勤穿搭'],
+          title: '普通女生也能复制的 12 件通勤衣橱',
+        },
+        {
+          content: '先讲痛点，再给清单和避坑。',
+          keyword: '初入职场女生穿搭',
+          metrics: { collects: '3000', comments: 188, likes: '9000' },
+          sourceId: 'note-b',
+          tags: ['职场穿搭', '避坑'],
+          title: '刚上班别乱买衣服，先看这 5 个避坑点',
+        },
+      ],
+    });
+
+    expect(analysis.sampleCount).toBe(2);
+    expect(analysis.confidence).toBe('medium');
+    expect(analysis.failedKeywords).toEqual(['平价职场穿搭']);
+    expect(analysis.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('部分关键词')]),
+    );
+    expect(analysis.summary.hookPatterns).toEqual(
+      expect.arrayContaining(['低门槛痛点钩子', '数字化清单结构']),
+    );
+    expect(analysis.summary.standoutSamples[0]).toMatchObject({
+      engagementTotal: 33280,
+      matchedKeyword: '低预算通勤穿搭',
+      sourceId: 'note-a',
+      title: '普通女生也能复制的 12 件通勤衣橱',
+    });
+    expect(JSON.stringify(analysis.summary.standoutSamples)).not.toContain(
+      '原始笔记正文',
+    );
+  });
+
+  it('keeps sparse research usable with low-confidence editable outlines', () => {
+    const analysis = analyzeXhsPopularSamples({
+      idea: '新手做小红书早餐内容',
+      keywords: ['小红书早餐内容', '新手早餐图文'],
+      samples: [
+        {
+          keyword: '小红书早餐内容',
+          metrics: { collects: 28, comments: 2, likes: 96 },
+          sourceId: 'breakfast-1',
+          tags: ['早餐', '新手'],
+          title: '新手早餐记录',
+        },
+      ],
+    });
+    const outlines = buildXhsResearchBackedOutlines({
+      analysis,
+      idea: '新手做小红书早餐内容',
+    });
+
+    expect(analysis.confidence).toBe('low');
+    expect(analysis.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('样本较少')]),
+    );
+    expect(outlines).toHaveLength(3);
+    expect(outlines.every((outline) => outline.outline.length >= 4)).toBe(true);
+    expect(outlines[0]?.selectionReason).toContain('低置信度');
   });
 
   it('builds a Xiaohongshu image-text publish package from an idea and reference brief', () => {

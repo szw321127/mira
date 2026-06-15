@@ -2,6 +2,7 @@ import type {
   ImportedXhsAccountAnalysis,
   ImportedXhsPostAnalysis,
   XhsCommercialWorkflow,
+  XhsResearchRun,
 } from "@/lib/api";
 
 export type OutlineTone = "guide" | "story" | "checklist";
@@ -50,6 +51,7 @@ export type PostDraft = {
 
 export type Snapshot = {
   batch: number;
+  latestResearch: XhsResearchRun | null;
   outlines: Outline[];
   postDraft: PostDraft | null;
   selectedId: string;
@@ -65,6 +67,7 @@ export type WorkspaceSnapshot = {
   briefError: string;
   draftStale: boolean;
   lastSnapshot: Snapshot | null;
+  latestResearch: XhsResearchRun | null;
   latestWorkflow: XhsCommercialWorkflow | null;
   outlines: Outline[];
   postDraft: PostDraft | null;

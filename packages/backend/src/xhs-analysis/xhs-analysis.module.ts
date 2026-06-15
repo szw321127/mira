@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { XhsAnalysisController } from './xhs-analysis.controller';
 import { XhsAnalysisService } from './xhs-analysis.service';
 import { XhsReferencesController } from './xhs-references.controller';
+import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
 
 @Module({
   controllers: [XhsAnalysisController, XhsReferencesController],
@@ -16,6 +17,6 @@ import { XhsReferencesController } from './xhs-references.controller';
     AuthModule,
     PrismaModule,
   ],
-  providers: [XhsAnalysisService],
+  providers: [XhsAnalysisService, XhsResearchOutlinesService],
 })
 export class XhsAnalysisModule {}

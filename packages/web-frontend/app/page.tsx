@@ -12,12 +12,10 @@ import {
   type BackendConversation,
   type ImportedXhsPostAnalysis,
   type XhsCommercialWorkflow,
-  type XhsGenerationBrief,
   type XhsImageTextPublishPackage,
   type XhsImportedAccountRecord,
   type XhsImportedPostRecord,
-  type XhsOutlineCandidate,
-  type XhsOutlineStrategy,
+  type XhsResearchRun,
 } from "@/lib/api";
 import type {
   ConversationRecord,
@@ -115,36 +113,24 @@ function getWorkspaceErrorMessage(error: unknown, fallback: string) {
   return `${fallback}（${detail}）`;
 }
 
+function buildResearchStatusMessage(research: XhsResearchRun) {
+  if (research.status === "fallback_no_samples") {
+    return "样本不足，已生成可编辑大纲，请先 review 再生成图文。";
+  }
+
+  if (research.confidence === "low") {
+    return "已生成低置信度大纲，建议先检查和编辑结构。";
+  }
+
+  if (research.warnings.length) {
+    return "已生成研究参考大纲，部分关键词或样本需要复核。";
+  }
+
+  return "已根据小红书热门样本追加新一批大纲，之前生成的仍保留。";
+}
+
 function isLocalXhsId(id: string | null | undefined) {
   return Boolean(id?.startsWith(LOCAL_XHS_ID_PREFIX));
-}
-
-function mapXhsStrategyToTone(strategy: XhsOutlineStrategy): Outline["tone"] {
-  if (strategy === "checklist") return "checklist";
-  if (strategy === "pain-point") return "story";
-  return "guide";
-}
-
-function mapXhsStrategyLabel(strategy: XhsOutlineStrategy) {
-  if (strategy === "pain-point") return "痛点切入";
-  if (strategy === "step-by-step") return "步骤教程";
-  return "收藏清单";
-}
-
-function mapXhsOutlineCandidate(
-  candidate: XhsOutlineCandidate,
-  batchNo: number,
-  index: number,
-): Outline {
-  return {
-    batch: batchNo,
-    hook: candidate.selectionReason,
-    id: `${LOCAL_XHS_ID_PREFIX}outline:${batchNo}:${index}:${candidate.id}`,
-    label: mapXhsStrategyLabel(candidate.strategy),
-    points: candidate.outline,
-    title: candidate.title,
-    tone: mapXhsStrategyToTone(candidate.strategy),
-  };
 }
 
 function mapXhsPublishPackageToPostDraft(
@@ -202,23 +188,6 @@ function dedupeImportedPostAnalyses(posts: ImportedXhsPostAnalysis[]) {
 
     seen.add(key);
     return true;
-  });
-}
-
-async function buildReferenceBrief(
-  token: string,
-  idea: string,
-  referenceImport: ReferenceImportState,
-): Promise<XhsGenerationBrief | undefined> {
-  const accountAnalysis = referenceImport.importedAccount?.analysis;
-  const postAnalyses = referenceImport.importedPosts.map((post) => post.analysis);
-
-  if (!accountAnalysis && !postAnalyses.length) return undefined;
-
-  return api.xhs.buildGenerationBrief(token, {
-    account: accountAnalysis,
-    idea: idea.trim(),
-    references: postAnalyses,
   });
 }
 
@@ -287,6 +256,9 @@ export default function Home() {
   const [postDraft, setPostDraft] = useState<PostDraft | null>(null);
   const [latestWorkflow, setLatestWorkflow] =
     useState<XhsCommercialWorkflow | null>(null);
+  const [latestResearch, setLatestResearch] = useState<XhsResearchRun | null>(
+    null,
+  );
   const [referenceImport, setReferenceImport] =
     useState<ReferenceImportState>(() => createEmptyReferenceImport());
   const [draftStale, setDraftStale] = useState(false);
@@ -425,6 +397,7 @@ export default function Home() {
       briefError,
       draftStale,
       lastSnapshot,
+      latestResearch,
       latestWorkflow,
       outlines,
       postDraft,
@@ -439,6 +412,7 @@ export default function Home() {
       briefError,
       draftStale,
       lastSnapshot,
+      latestResearch,
       latestWorkflow,
       outlines,
       postDraft,
@@ -532,6 +506,7 @@ export default function Home() {
     setConversationId(conversation.id);
     setDraftStale(Boolean(nextPostDraft?.stale));
     if (!options.keepLastSnapshot) setLastSnapshot(null);
+    setLatestResearch(conversation.latestResearchRun);
     setLatestWorkflow(null);
     setOutlines(nextOutlines);
     setPostDraft(nextPostDraft);
@@ -558,6 +533,7 @@ export default function Home() {
     setBriefError(snapshot.briefError);
     setDraftStale(snapshot.draftStale);
     setLastSnapshot(snapshot.lastSnapshot);
+    setLatestResearch(snapshot.latestResearch);
     setLatestWorkflow(snapshot.latestWorkflow);
     setOutlines(snapshot.outlines);
     setPostDraft(snapshot.postDraft);
@@ -746,6 +722,7 @@ export default function Home() {
       setConversationId(conversation.id);
       setDraftStale(false);
       setLastSnapshot(null);
+      setLatestResearch(null);
       setLatestWorkflow(null);
       setOutlines([]);
       setPostDraft(null);
@@ -860,34 +837,26 @@ export default function Home() {
 
     try {
       const currentConversationId = await ensureConversation(accessToken);
-      const referenceBrief = await buildReferenceBrief(
-        accessToken,
-        seed,
-        referenceImport,
-      );
-      const candidates = await api.xhs.buildOutlines(accessToken, {
-        brief: referenceBrief,
+      const result = await api.xhs.researchOutlines(accessToken, {
+        conversationId: currentConversationId,
         idea: seed,
+        mode: "quick",
       });
-      const nextBatch = latestBatch + 1;
-      const nextOutlines = candidates.map((candidate, index) =>
-        mapXhsOutlineCandidate(candidate, nextBatch, index),
+      const nextBatch = result.batch.batchNo;
+      const nextOutlines = result.batch.outlines.map((outline) =>
+        mapBackendOutline(outline, nextBatch),
       );
 
       setLastSnapshot(previousSnapshot);
       setBatch(nextBatch);
+      setLatestResearch(result.research);
       setOutlines((currentOutlines) => [...currentOutlines, ...nextOutlines]);
       setSelectedId(nextOutlines[0]?.id ?? selectedId);
       if (postDraft) {
         setDraftStale(true);
         setLatestWorkflow(null);
       }
-      await api.conversations.update(accessToken, currentConversationId, {
-        statusMessage: "已追加新一批小红书大纲，之前生成的仍保留。",
-        title: seed.trim() || selectedOutline?.title || "新对话",
-        topic: seed,
-      });
-      setStatusMessage("已追加新一批小红书大纲，之前生成的仍保留。");
+      setStatusMessage(buildResearchStatusMessage(result.research));
       await refreshConversationRecordsSafely(
         "大纲已生成，但记录列表刷新失败。",
         accessToken,
@@ -913,6 +882,7 @@ export default function Home() {
     setPostDraft(lastSnapshot.postDraft);
     setDraftStale(false);
     setLastSnapshot(null);
+    setLatestResearch(lastSnapshot.latestResearch);
     setLatestWorkflow(null);
     setStatusMessage("已移除刚追加的大纲，之前生成的内容仍在。");
   }
@@ -1586,6 +1556,7 @@ export default function Home() {
         setConversationId(null);
         setDraftStale(false);
         setLastSnapshot(null);
+        setLatestResearch(null);
         setLatestWorkflow(null);
         setOutlines([]);
         setPostDraft(null);
@@ -1699,6 +1670,7 @@ export default function Home() {
     setLoginPassword("");
     setLoginError("");
     setLatestWorkflow(null);
+    setLatestResearch(null);
     setOutlines([]);
     setPostDraft(null);
     setReferenceImport(createEmptyReferenceImport());
@@ -1959,6 +1931,7 @@ export default function Home() {
                 isGenerating={isGenerating}
                 isStartingConversation={isStartingConversation}
                 latestBatch={latestBatch}
+                latestResearch={latestResearch}
                 onConfirmOutline={() => void confirmOutline()}
                 onRegenerate={regenerateOutlines}
                 onSelectOutline={(outline) => {

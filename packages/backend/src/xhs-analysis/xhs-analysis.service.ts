@@ -46,10 +46,13 @@ import type {
   RepairedXhsPublishPackage,
   RepairXhsPublishPackageInput,
   SavedXhsReference,
+  BuildXhsResearchOutlinesInput,
+  XhsResearchOutlinesResult,
   XhsProviderImportSummary,
   XhsReferenceKind,
   XhsStoredReference,
 } from './xhs-analysis.types';
+import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
 
 @Injectable()
 export class XhsAnalysisService {
@@ -57,6 +60,7 @@ export class XhsAnalysisService {
     private readonly contentProviders: AdminContentProvidersService,
     private readonly prisma: PrismaService,
     private readonly modelConfigs: AdminModelConfigsService,
+    private readonly researchOutlines: XhsResearchOutlinesService,
   ) {}
 
   analyzePost(input: XhsPostInput) {
@@ -77,6 +81,13 @@ export class XhsAnalysisService {
 
   buildCommercialWorkflow(input: XhsCommercialWorkflowInput) {
     return buildXhsCommercialWorkflow(input);
+  }
+
+  async buildResearchOutlines(
+    input: BuildXhsResearchOutlinesInput,
+    userId: string,
+  ): Promise<XhsResearchOutlinesResult> {
+    return this.researchOutlines.buildResearchOutlines(input, userId);
   }
 
   async repairPublishPackage(

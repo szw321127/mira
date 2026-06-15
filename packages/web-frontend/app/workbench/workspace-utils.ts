@@ -7,6 +7,8 @@ import type {
   ImportedXhsPostAnalysis,
   XhsCommercialWorkflow,
   XhsProviderImportSummary,
+  XhsResearchRun,
+  XhsResearchSummary,
   XhsStoredReference,
 } from "@/lib/api";
 import type {
@@ -123,6 +125,62 @@ export function mapSnapshotXhsCommercialWorkflow(
   }
 
   return value as unknown as XhsCommercialWorkflow;
+}
+
+function isXhsResearchSummary(value: unknown): value is XhsResearchSummary {
+  return (
+    isRecord(value) &&
+    isStringArray(value.avoidPatterns) &&
+    isStringArray(value.contentAngles) &&
+    isStringArray(value.hookPatterns) &&
+    isStringArray(value.outlinePatterns) &&
+    Array.isArray(value.standoutSamples) &&
+    isStringArray(value.tagPatterns)
+  );
+}
+
+export function mapSnapshotXhsResearchRun(value: unknown): XhsResearchRun | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.idea !== "string" ||
+    !isStringArray(value.keywords) ||
+    typeof value.sampleCount !== "number" ||
+    !isStringArray(value.warnings) ||
+    !isStringArray(value.failedKeywords) ||
+    !isXhsResearchSummary(value.summary)
+  ) {
+    return null;
+  }
+
+  return {
+    confidence:
+      value.confidence === "high" ||
+      value.confidence === "medium" ||
+      value.confidence === "low"
+        ? value.confidence
+        : "low",
+    createdAt:
+      typeof value.createdAt === "string"
+        ? value.createdAt
+        : new Date().toISOString(),
+    failedKeywords: value.failedKeywords,
+    id: value.id,
+    idea: value.idea,
+    keywords: value.keywords,
+    mode: value.mode === "deep" ? "deep" : "quick",
+    providerEndpoint: optionalString(value.providerEndpoint),
+    providerType: value.providerType === "tikhub" ? "tikhub" : "custom",
+    sampleCount: value.sampleCount,
+    status:
+      value.status === "completed" ||
+      value.status === "completed_with_warning" ||
+      value.status === "fallback_no_samples"
+        ? value.status
+        : "completed_with_warning",
+    summary: value.summary,
+    warnings: value.warnings,
+  };
 }
 
 export function createEmptyReferenceImport(): ReferenceImportState {
@@ -364,6 +422,7 @@ export function mapUndoSnapshot(value: unknown): Snapshot | null {
 
   return {
     batch: value.batch,
+    latestResearch: mapSnapshotXhsResearchRun(value.latestResearch),
     outlines: mappedOutlines,
     postDraft,
     selectedId: value.selectedId,
@@ -428,6 +487,7 @@ export function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
     draftStale:
       typeof value.draftStale === "boolean" ? value.draftStale : false,
     lastSnapshot: mapUndoSnapshot(value.lastSnapshot),
+    latestResearch: mapSnapshotXhsResearchRun(value.latestResearch),
     latestWorkflow: mapSnapshotXhsCommercialWorkflow(value.latestWorkflow),
     outlines,
     postDraft,
@@ -447,6 +507,7 @@ export function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
     batch: snapshot.batch,
     briefError: snapshot.briefError,
     draftStale: snapshot.draftStale,
+    latestResearch: snapshot.latestResearch,
     latestWorkflow: snapshot.latestWorkflow,
     outlines: snapshot.outlines,
     postDraft: snapshot.postDraft,

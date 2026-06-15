@@ -280,12 +280,33 @@ test("workbench imports Xiaohongshu reference sources into generation", () => {
   assert.match(source, /loadConversationReferences/);
   assert.match(source, /api\.xhs\.listReferences/);
   assert.match(source, /api\.xhs\.deleteReference/);
-  assert.match(source, /api\.xhs\.buildGenerationBrief/);
-  assert.match(source, /buildReferenceBrief/);
-  assert.match(source, /const referenceBrief = await buildReferenceBrief/);
-  assert.match(source, /brief: referenceBrief/);
   assert.match(source, /buildReferenceWorkflowInputs/);
   assert.match(source, /\.\.\.buildReferenceWorkflowInputs/);
+});
+
+test("workbench generates outlines through Xiaohongshu research", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+  const types = readWorkbenchFile("types.ts");
+  const utils = readWorkbenchFile("workspace-utils.ts");
+  const outline = readWorkbenchFile("outline-workspace.tsx");
+
+  assert.match(api, /XhsResearchRun/);
+  assert.match(api, /researchOutlines:/);
+  assert.match(api, /\/xhs-analysis\/research\/outlines/);
+  assert.match(types, /latestResearch: XhsResearchRun \| null/);
+  assert.match(utils, /mapSnapshotXhsResearchRun/);
+  assert.match(utils, /latestResearch: mapSnapshotXhsResearchRun/);
+  assert.match(utils, /latestResearch: snapshot\.latestResearch/);
+  assert.match(source, /latestResearch, setLatestResearch/);
+  assert.match(source, /api\.xhs\.researchOutlines/);
+  assert.match(source, /mode: "quick"/);
+  assert.match(source, /setLatestResearch\(result\.research\)/);
+  assert.match(source, /mapBackendOutline\(outline, nextBatch\)/);
+  assert.match(outline, /ResearchSummary/);
+  assert.match(outline, /研究参考/);
+  assert.match(outline, /standoutSamples/);
+  assert.doesNotMatch(outline, /content/);
 });
 
 test("workbench can repair an unready Xiaohongshu publish package", () => {

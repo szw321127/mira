@@ -6,6 +6,7 @@ import { AnalyzeXhsAccountDto } from './dto/analyze-xhs-account.dto';
 import { AnalyzeXhsPostDto } from './dto/analyze-xhs-post.dto';
 import { BuildXhsCommercialWorkflowDto } from './dto/build-xhs-commercial-workflow.dto';
 import { BuildXhsGenerationBriefDto } from './dto/build-xhs-generation-brief.dto';
+import { BuildXhsResearchOutlinesDto } from './dto/build-xhs-research-outlines.dto';
 import { BuildXhsOutlineCandidatesDto } from './dto/build-xhs-outline-candidates.dto';
 import { ImportXhsAccountDto } from './dto/import-xhs-account.dto';
 import { ImportXhsPostDto } from './dto/import-xhs-post.dto';
@@ -51,6 +52,14 @@ export class XhsAnalysisController {
   @Post('outlines')
   buildOutlineCandidates(@Body() dto: BuildXhsOutlineCandidatesDto) {
     return this.xhsAnalysisService.buildOutlineCandidates(dto);
+  }
+
+  @Post('research/outlines')
+  buildResearchOutlines(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BuildXhsResearchOutlinesDto,
+  ) {
+    return this.xhsAnalysisService.buildResearchOutlines(dto, user.id);
   }
 
   @Post('workflows/commercial-draft')

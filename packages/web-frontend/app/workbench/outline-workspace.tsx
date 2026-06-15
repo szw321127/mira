@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { XhsResearchRun } from "@/lib/api";
 import type { Outline, OutlineGroup } from "./types";
 import { toneMeta } from "./workspace-utils";
 
@@ -9,6 +10,7 @@ type OutlineWorkspaceProps = {
   isGenerating: boolean;
   isStartingConversation: boolean;
   latestBatch: number;
+  latestResearch: XhsResearchRun | null;
   onConfirmOutline: () => void;
   onRegenerate: () => void;
   onSelectOutline: (outline: Outline) => void;
@@ -24,6 +26,7 @@ export function OutlineWorkspace({
   isGenerating,
   isStartingConversation,
   latestBatch,
+  latestResearch,
   onConfirmOutline,
   onRegenerate,
   onSelectOutline,
@@ -82,6 +85,8 @@ export function OutlineWorkspace({
           {isGenerating ? "生成中" : "换一批"}
         </button>
       </div>
+
+      {latestResearch ? <ResearchSummary research={latestResearch} /> : null}
 
       <div className="grid gap-3" aria-label="大纲方向">
         {outlineGroups.map((group) => {
@@ -214,5 +219,63 @@ export function OutlineWorkspace({
         </article>
       ) : null}
     </section>
+  );
+}
+
+function ResearchSummary({ research }: { research: XhsResearchRun }) {
+  const confidenceText = {
+    high: "高",
+    low: "低",
+    medium: "中",
+  }[research.confidence];
+  const patterns = [
+    ...research.summary.hookPatterns,
+    ...research.summary.outlinePatterns,
+  ].slice(0, 4);
+
+  return (
+    <aside className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-tint)] p-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-[0.72rem] font-black text-[var(--muted)]">
+        <span className="rounded bg-[var(--surface)] px-2 py-0.5 text-[var(--red-strong)]">
+          研究参考
+        </span>
+        <span>置信度 {confidenceText}</span>
+        <span>样本 {research.sampleCount}</span>
+        <span>关键词 {research.keywords.slice(0, 3).join(" / ")}</span>
+      </div>
+
+      {research.warnings[0] ? (
+        <p className="m-0 text-[0.76rem] font-bold leading-normal text-[var(--red-strong)]">
+          {research.warnings[0]}
+        </p>
+      ) : null}
+
+      {patterns.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {patterns.map((pattern) => (
+            <span
+              className="rounded bg-[var(--surface)] px-2 py-1 text-[0.72rem] font-bold text-[var(--ink-soft)]"
+              key={pattern}
+            >
+              {pattern}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {research.summary.standoutSamples.length ? (
+        <div className="grid gap-1">
+          {research.summary.standoutSamples.slice(0, 2).map((sample) => (
+            <p
+              className="m-0 line-clamp-1 text-[0.74rem] font-semibold text-[var(--muted)]"
+              key={`${sample.sourceId}:${sample.matchedKeyword}`}
+            >
+              {sample.title} · {sample.interactionSummary} ·{" "}
+              {sample.matchedKeyword}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </aside>
   );
 }

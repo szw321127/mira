@@ -109,6 +109,7 @@ describe('XhsAnalysisService', () => {
       contentProviders as never,
       prisma as never,
       modelConfigs as never,
+      { buildResearchOutlines: jest.fn() } as never,
     );
   });
 
@@ -484,4 +485,5 @@ describe('XhsAnalysisService', () => {
     });
     expect(result).toEqual({ ok: true });
   });
+
 });

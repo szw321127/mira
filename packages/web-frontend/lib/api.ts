@@ -95,6 +95,7 @@ export type BackendConversation = {
   currentPostDraft: BackendPostDraft | null;
   id: string;
   lastOpenedAt: string | null;
+  latestResearchRun: XhsResearchRun | null;
   outlineBatches: BackendOutlineBatch[];
   savedDrafts: BackendSavedDraft[];
   selectedOutlineId: string | null;
@@ -290,6 +291,53 @@ export type XhsOutlineCandidate = {
   sourcePatterns: string[];
   strategy: XhsOutlineStrategy;
   title: string;
+};
+
+export type XhsResearchConfidence = "high" | "low" | "medium";
+
+export type XhsResearchStatus =
+  | "completed"
+  | "completed_with_warning"
+  | "fallback_no_samples";
+
+export type XhsResearchSourceSummary = {
+  engagementTotal: number;
+  interactionSummary: string;
+  matchedKeyword: string;
+  matchReason: string;
+  sourceId: string;
+  title: string;
+  url?: string;
+};
+
+export type XhsResearchSummary = {
+  avoidPatterns: string[];
+  contentAngles: string[];
+  hookPatterns: string[];
+  outlinePatterns: string[];
+  standoutSamples: XhsResearchSourceSummary[];
+  tagPatterns: string[];
+};
+
+export type XhsResearchRun = {
+  confidence: XhsResearchConfidence;
+  createdAt: string;
+  failedKeywords: string[];
+  id: string;
+  idea: string;
+  keywords: string[];
+  mode: "deep" | "quick";
+  providerEndpoint: string | null;
+  providerType: "custom" | "tikhub";
+  sampleCount: number;
+  status: XhsResearchStatus;
+  summary: XhsResearchSummary;
+  warnings: string[];
+};
+
+export type XhsResearchOutlinesResult = {
+  batch: BackendOutlineBatch;
+  research: XhsResearchRun;
 };
 
 export type XhsPublishAuditIssue = {
@@ -721,6 +769,19 @@ export const api = {
       body: { audience?: string; brief?: XhsGenerationBrief; idea: string },
     ) =>
       request<XhsOutlineCandidate[]>("/xhs-analysis/outlines", {
+        body,
+        method: "POST",
+        token,
+      }),
+    researchOutlines: (
+      token: string,
+      body: {
+        conversationId: string;
+        idea: string;
+        mode?: "deep" | "quick";
+      },
+    ) =>
+      request<XhsResearchOutlinesResult>("/xhs-analysis/research/outlines", {
         body,
         method: "POST",
         token,
