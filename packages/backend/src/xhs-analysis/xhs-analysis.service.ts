@@ -34,6 +34,11 @@ import {
   toRepairResult,
 } from './xhs-publish-repair.utils';
 import {
+  toBackendPostDraftView,
+  toPostDraftDataFromPublishPackage,
+  toPublishStatusMessage,
+} from './xhs-publish-package-draft.utils';
+import {
   extractProviderRecord,
   normalizeAccountImportInput,
   normalizePostImportInput,
@@ -46,6 +51,8 @@ import type {
   RepairedXhsPublishPackage,
   RepairXhsPublishPackageInput,
   SavedXhsReference,
+  BuildPersistedXhsCommercialWorkflowInput,
+  PersistedXhsCommercialWorkflowResult,
   BuildXhsResearchOutlinesInput,
   XhsResearchOutlinesResult,
   XhsProviderImportSummary,
@@ -81,6 +88,61 @@ export class XhsAnalysisService {
 
   buildCommercialWorkflow(input: XhsCommercialWorkflowInput) {
     return buildXhsCommercialWorkflow(input);
+  }
+
+  async buildPersistedCommercialWorkflow(
+    input: BuildPersistedXhsCommercialWorkflowInput,
+    userId: string,
+  ): Promise<PersistedXhsCommercialWorkflowResult> {
+    const conversationId = input.conversationId.trim();
+    const outlineId = input.outlineId?.trim();
+
+    await this.ensureOwnedConversation(userId, conversationId);
+    if (outlineId) {
+      await this.ensureOwnedOutline(userId, outlineId, conversationId);
+    }
+
+    const workflow = buildXhsCommercialWorkflow(input);
+    const draftData = toPostDraftDataFromPublishPackage(workflow.publishPackage);
+    const draft = await this.prisma.$transaction(async (tx) => {
+      await tx.postDraft.updateMany({
+        data: { stale: true },
+        where: { conversationId },
+      });
+      const created = await tx.postDraft.create({
+        data: {
+          caption: draftData.caption,
+          conversationId,
+          coverLine: draftData.coverLine,
+          imageError: draftData.imageError,
+          imageGeneratedAt: draftData.imageGeneratedAt,
+          imagePrompt: draftData.imagePrompt,
+          imageProvider: draftData.imageProvider,
+          imageStatus: draftData.imageStatus,
+          imageUrl: draftData.imageUrl,
+          outlineId: outlineId || undefined,
+          sections: JSON.stringify(draftData.sections),
+          stale: draftData.stale,
+          tags: JSON.stringify(draftData.tags),
+          title: draftData.title,
+        },
+      });
+
+      await tx.conversation.update({
+        data: {
+          selectedOutlineId: outlineId || null,
+          statusMessage: toPublishStatusMessage(workflow.audit),
+        },
+        where: { id: conversationId },
+      });
+
+      return created;
+    });
+
+    return {
+      draft: toBackendPostDraftView(draft),
+      workflow,
+    };
   }
 
   async buildResearchOutlines(
@@ -367,6 +429,29 @@ export class XhsAnalysisService {
     }
 
     return conversation;
+  }
+
+  private async ensureOwnedOutline(
+    userId: string,
+    outlineId: string,
+    conversationId: string,
+  ) {
+    const outline = await this.prisma.outline.findFirst({
+      select: { id: true },
+      where: {
+        batch: {
+          conversationId,
+          conversation: { userId },
+        },
+        id: outlineId,
+      },
+    });
+
+    if (!outline) {
+      throw new BadRequestException('大纲不存在或无权生成发布包。');
+    }
+
+    return outline;
   }
 
   private parseStoredReferenceJson(value: string): unknown {

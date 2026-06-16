@@ -285,6 +285,7 @@ export interface XhsPopularSamplesAnalysisInput {
   idea: string;
   keywords: string[];
   samples: XhsPopularSampleInput[];
+  warnings?: string[];
 }
 
 export interface XhsResearchBackedOutlineInput {

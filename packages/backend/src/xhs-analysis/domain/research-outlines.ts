@@ -61,7 +61,10 @@ export function analyzeXhsPopularSamples(
     sampleCount,
     failedKeywords.length,
   );
-  const warnings = buildResearchWarnings(sampleCount, failedKeywords);
+  const warnings = uniqueClean([
+    ...(input.warnings ?? []),
+    ...buildResearchWarnings(sampleCount, failedKeywords),
+  ]);
   const hookPatterns = uniqueClean(
     rankedSamples.flatMap((sample) => sample.analysis.viralSignals),
   ).slice(0, 8);

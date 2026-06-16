@@ -1,6 +1,16 @@
 import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
 
 const contentProviders = {
+  getFirstAvailableRuntimeConfig: jest.fn(() =>
+    Promise.resolve({
+      apiKey: 'provider-key',
+      baseUrl: 'https://provider.example',
+      complianceNote: 'Only use authorized imports.',
+      enabled: true,
+      rateLimitPerMinute: 60,
+      type: 'custom' as const,
+    }),
+  ),
   getRuntimeConfig: jest.fn(() =>
     Promise.resolve({
       apiKey: 'provider-key',
@@ -62,6 +72,15 @@ describe('XhsResearchOutlinesService', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    contentProviders.getFirstAvailableRuntimeConfig.mockClear();
+    contentProviders.getFirstAvailableRuntimeConfig.mockResolvedValue({
+      apiKey: 'provider-key',
+      baseUrl: 'https://provider.example',
+      complianceNote: 'Only use authorized imports.',
+      enabled: true,
+      rateLimitPerMinute: 60,
+      type: 'custom' as const,
+    });
     contentProviders.getRuntimeConfig.mockClear();
     prisma.$transaction.mockClear();
     prisma.conversation.findFirst.mockClear();
@@ -118,7 +137,10 @@ describe('XhsResearchOutlinesService', () => {
     const firstCall = fetchMock.mock.calls[0];
     const requestInit = firstCall?.[1];
 
-    expect(contentProviders.getRuntimeConfig).toHaveBeenCalledWith('custom');
+    expect(contentProviders.getFirstAvailableRuntimeConfig).toHaveBeenCalledWith([
+      'custom',
+      'tikhub',
+    ]);
     expect(firstCall?.[0]).toBe('https://provider.example/xhs/posts/search');
     expect(requestInit?.headers).toMatchObject({
       Authorization: 'Bearer provider-key',
@@ -191,6 +213,29 @@ describe('XhsResearchOutlinesService', () => {
 
     expect(result.research.status).toBe('fallback_no_samples');
     expect(result.research.confidence).toBe('low');
+    expect(result.batch.outlines).toHaveLength(3);
+  });
+
+  it('returns fallback outlines when no search provider is configured', async () => {
+    contentProviders.getFirstAvailableRuntimeConfig.mockResolvedValueOnce(null);
+    const fetchMock = jest.spyOn(global, 'fetch');
+
+    const result = await service.buildResearchOutlines(
+      {
+        conversationId: 'conversation-1',
+        idea: '新手做小红书早餐内容',
+        mode: 'quick',
+      },
+      'user-1',
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.research.providerType).toBe('none');
+    expect(result.research.providerEndpoint).toBeNull();
+    expect(result.research.status).toBe('fallback_no_samples');
+    expect(result.research.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('未配置小红书搜索连接器')]),
+    );
     expect(result.batch.outlines).toHaveLength(3);
   });
 

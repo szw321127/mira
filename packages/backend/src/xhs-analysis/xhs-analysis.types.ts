@@ -1,5 +1,7 @@
 import type {
   XhsAccountAnalysis,
+  XhsCommercialWorkflow,
+  XhsCommercialWorkflowInput,
   XhsImageTextPublishPackage,
   XhsImportedAccountNormalization,
   XhsImportedPostsNormalization,
@@ -9,6 +11,9 @@ import type {
   XhsResearchMode,
 } from './domain';
 import type { AdminContentProviderType } from '../admin-content-providers/admin-content-providers.types';
+import type { BackendPostDraftView } from '../conversations/conversations.types';
+
+export type XhsResearchProviderType = AdminContentProviderType | 'none';
 
 export type ImportXhsPostInput = {
   conversationId?: string;
@@ -36,6 +41,12 @@ export type BuildXhsResearchOutlinesInput = {
   idea: string;
   mode?: XhsResearchMode;
 };
+
+export type BuildPersistedXhsCommercialWorkflowInput =
+  XhsCommercialWorkflowInput & {
+    conversationId: string;
+    outlineId?: string;
+  };
 
 export type XhsProviderImportSummary = {
   complianceNote: string;
@@ -106,7 +117,7 @@ export type XhsResearchRunView = {
   keywords: string[];
   mode: XhsResearchMode;
   providerEndpoint: string | null;
-  providerType: AdminContentProviderType;
+  providerType: XhsResearchProviderType;
   sampleCount: number;
   status: XhsPopularSamplesAnalysis['status'];
   summary: XhsPopularSamplesAnalysis['summary'];
@@ -136,4 +147,9 @@ export type XhsResearchOutlineBatchView = {
 export type XhsResearchOutlinesResult = {
   batch: XhsResearchOutlineBatchView;
   research: XhsResearchRunView;
+};
+
+export type PersistedXhsCommercialWorkflowResult = {
+  draft: BackendPostDraftView;
+  workflow: XhsCommercialWorkflow;
 };

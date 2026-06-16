@@ -184,6 +184,9 @@ test("page merges generated image fields without overwriting local copy", () => 
     generationGuardStart,
     generationGuardEnd,
   );
+  const generateImageStart = source.indexOf("async function generateImage");
+  const generateImageEnd = source.indexOf("function downloadImage", generateImageStart);
+  const generateImageSource = source.slice(generateImageStart, generateImageEnd);
 
   assert.match(source, /async function generateImage/);
   assert.match(source, /function mergePostDraftImageFields/);
@@ -191,6 +194,8 @@ test("page merges generated image fields without overwriting local copy", () => 
   assert.ok(mergeEnd > mergeStart);
   assert.ok(generationGuardStart !== -1);
   assert.ok(generationGuardEnd > generationGuardStart);
+  assert.ok(generateImageStart !== -1);
+  assert.ok(generateImageEnd > generateImageStart);
   for (const field of [
     "caption",
     "title",
@@ -209,6 +214,11 @@ test("page merges generated image fields without overwriting local copy", () => 
   assert.match(source, /Boolean\(generatingImageDraftId\)/);
   assert.match(source, /isRepairingPublishPackage/);
   assert.match(source, /草稿同步失败，封面图生成未开始。/);
+  assert.doesNotMatch(source, /当前发布包已包含封面提示词，独立封面出图稍后接入。/);
+  assert.doesNotMatch(
+    generateImageSource,
+    /if \(isLocalXhsId\(postDraft\.id\)\)[\s\S]{0,120}return;/,
+  );
   assert.match(
     source,
     /api\.postDrafts\.generateImage\(\s*accessToken,\s*draftId,\s*\{\s*\}/,
@@ -299,6 +309,9 @@ test("workbench can repair an unready Xiaohongshu publish package", () => {
   const utils = readWorkbenchFile("workspace-utils.ts");
 
   assert.match(api, /XhsPublishRepairResult/);
+  assert.match(api, /XhsPersistedCommercialWorkflowResult/);
+  assert.match(api, /buildPersistedCommercialDraft:/);
+  assert.match(api, /\/xhs-analysis\/workflows\/persisted-commercial-draft/);
   assert.match(api, /repairPublishPackage:/);
   assert.match(api, /\/xhs-analysis\/workflows\/repair-publish-package/);
 
@@ -314,13 +327,37 @@ test("workbench can repair an unready Xiaohongshu publish package", () => {
   assert.match(source, /latestWorkflow, setLatestWorkflow/);
   assert.match(source, /isRepairingPublishPackage, setIsRepairingPublishPackage/);
   assert.match(source, /function mapXhsPublishPackageToPostDraft/);
-  assert.match(source, /setLatestWorkflow\(workflow\)/);
+  assert.match(source, /api\.xhs\.buildPersistedCommercialDraft/);
+  assert.match(source, /selectedOutlineId: toBackendSelectedOutlineId\(selectedOutline\.id\)/);
+  assert.match(source, /outlineId: toBackendOptionalOutlineId\(selectedOutline\.id\)/);
+  assert.match(source, /setLatestWorkflow\(result\.workflow\)/);
+  assert.match(source, /setPostDraft\(mapBackendPostDraft\(result\.draft\)\)/);
   assert.match(source, /async function repairPublishPackage/);
   assert.match(source, /api\.xhs\.repairPublishPackage/);
-  assert.match(
-    source,
-    /setPostDraft\(mapXhsPublishPackageToPostDraft\(result\.publishPackage\)\)/,
-  );
+  assert.match(source, /api\.postDrafts\.update\(\s*accessToken,\s*postDraft\.id/);
+  assert.match(source, /setPostDraft\(mapBackendPostDraft\(updatedDraft\)\)/);
   assert.match(source, /canRepairPublishPackage=\{Boolean\(/);
   assert.match(source, /onRepairPublishPackage=\{repairPublishPackage\}/);
+});
+
+test("workbench never sends local Xiaohongshu outline ids as backend selections", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const utils = readWorkbenchFile("workspace-utils.ts");
+  const autosave = readWorkbenchFile("use-workspace-autosave.ts");
+
+  assert.match(utils, /export const LOCAL_XHS_ID_PREFIX = "xhs:"/);
+  assert.match(utils, /function isLocalXhsId/);
+  assert.match(utils, /export function toBackendSelectedOutlineId/);
+  assert.match(utils, /export function toBackendOptionalOutlineId/);
+  assert.match(source, /selectedOutlineId: toBackendSelectedOutlineId\(selectedId\)/);
+  assert.match(source, /selectedOutlineId: toBackendSelectedOutlineId\(outline\.id\)/);
+  assert.match(autosave, /selectedOutlineId: toBackendSelectedOutlineId\(selectedId\)/);
+  assert.doesNotMatch(
+    source,
+    /selectedOutlineId:\s*(selectedId|selectedOutline\.id|outline\.id)/,
+  );
+  assert.doesNotMatch(
+    autosave,
+    /selectedOutlineId:\s*selectedId/,
+  );
 });

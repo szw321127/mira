@@ -272,6 +272,24 @@ export class AdminContentProvidersService {
     };
   }
 
+  async getFirstAvailableRuntimeConfig(
+    types: string[],
+  ): Promise<AdminContentProviderRuntimeConfig | null> {
+    for (const type of types) {
+      try {
+        return await this.getRuntimeConfig(type);
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    return null;
+  }
+
   private parseType(type: string): AdminContentProviderType {
     if (adminContentProviderTypes.includes(type as AdminContentProviderType)) {
       return type as AdminContentProviderType;

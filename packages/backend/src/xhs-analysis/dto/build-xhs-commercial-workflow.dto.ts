@@ -42,3 +42,13 @@ export class BuildXhsCommercialWorkflowDto {
   @IsString()
   tone?: string;
 }
+
+export class BuildPersistedXhsCommercialWorkflowDto extends BuildXhsCommercialWorkflowDto {
+  @IsString()
+  @MinLength(1)
+  conversationId!: string;
+
+  @IsOptional()
+  @IsString()
+  outlineId?: string;
+}

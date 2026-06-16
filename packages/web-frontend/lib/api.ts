@@ -328,7 +328,7 @@ export type XhsResearchRun = {
   keywords: string[];
   mode: "deep" | "quick";
   providerEndpoint: string | null;
-  providerType: "custom" | "tikhub";
+  providerType: "custom" | "none" | "tikhub";
   sampleCount: number;
   status: XhsResearchStatus;
   summary: XhsResearchSummary;
@@ -338,6 +338,11 @@ export type XhsResearchRun = {
 export type XhsResearchOutlinesResult = {
   batch: BackendOutlineBatch;
   research: XhsResearchRun;
+};
+
+export type XhsPersistedCommercialWorkflowResult = {
+  draft: BackendPostDraft;
+  workflow: XhsCommercialWorkflow;
 };
 
 export type XhsPublishAuditIssue = {
@@ -742,6 +747,28 @@ export const api = {
     ) =>
       request<XhsCommercialWorkflow>(
         "/xhs-analysis/workflows/commercial-draft",
+        {
+          body,
+          method: "POST",
+          token,
+        },
+      ),
+    buildPersistedCommercialDraft: (
+      token: string,
+      body: {
+        account?: XhsImportedAccountRecord;
+        audience?: string;
+        conversationId: string;
+        idea: string;
+        outline: string[];
+        outlineId?: string;
+        pageCount?: number;
+        posts?: XhsImportedPostRecord[];
+        tone?: string;
+      },
+    ) =>
+      request<XhsPersistedCommercialWorkflowResult>(
+        "/xhs-analysis/workflows/persisted-commercial-draft",
         {
           body,
           method: "POST",

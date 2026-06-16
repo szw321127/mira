@@ -221,4 +221,36 @@ describe('AdminContentProvidersService', () => {
       type: 'custom',
     });
   });
+
+  it('returns the first configured runtime provider from a priority list', async () => {
+    const { service } = createService();
+
+    await service.save('tikhub', {
+      baseUrl: 'https://api.tikhub.example',
+      enabled: true,
+      name: 'TikHub',
+      rateLimitPerMinute: 20,
+    });
+    await service.addApiKey('tikhub', {
+      apiKey: 'tikhub-key',
+      enabled: true,
+      name: 'TikHub Key',
+    });
+
+    await expect(
+      service.getFirstAvailableRuntimeConfig(['custom', 'tikhub']),
+    ).resolves.toMatchObject({
+      apiKey: 'tikhub-key',
+      baseUrl: 'https://api.tikhub.example',
+      type: 'tikhub',
+    });
+  });
+
+  it('returns null when no runtime provider is configured', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.getFirstAvailableRuntimeConfig(['custom', 'tikhub']),
+    ).resolves.toBeNull();
+  });
 });

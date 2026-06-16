@@ -33,6 +33,7 @@ import type { GeneratePostDraftDto } from './dto/generate-post-draft.dto';
 import type { UpdateConversationDto } from './dto/update-conversation.dto';
 import type { UpdateOutlineDto } from './dto/update-outline.dto';
 import type { UpdatePostDraftDto } from './dto/update-post-draft.dto';
+import type { BackendPostDraftView } from './conversations.types';
 
 const outlineBatchInclude = {
   outlines: { orderBy: { position: 'asc' as const } },
@@ -671,7 +672,7 @@ export class ConversationsService {
     };
   }
 
-  private toPostDraft(draft: PostDraft) {
+  private toPostDraft(draft: PostDraft): BackendPostDraftView {
     return {
       caption: draft.caption,
       conversationId: draft.conversationId,
@@ -729,7 +730,7 @@ export class ConversationsService {
       keywords: parseStringArray(run.keywords),
       mode: run.mode === 'deep' ? 'deep' : 'quick',
       providerEndpoint: run.providerEndpoint,
-      providerType: run.providerType,
+      providerType: this.toXhsResearchProviderType(run.providerType),
       sampleCount: run.sampleCount,
       status:
         typeof analysis.status === 'string' ? analysis.status : run.status,
@@ -749,6 +750,11 @@ export class ConversationsService {
       title: outline.title,
       tone: this.toOutlineTone(outline.tone),
     };
+  }
+
+  private toXhsResearchProviderType(value: string) {
+    if (value === 'none') return 'none';
+    return value === 'tikhub' ? 'tikhub' : 'custom';
   }
 
   private toOutlineTone(tone: string): OutlineTone {

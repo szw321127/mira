@@ -4,7 +4,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { AnalyzeXhsAccountDto } from './dto/analyze-xhs-account.dto';
 import { AnalyzeXhsPostDto } from './dto/analyze-xhs-post.dto';
-import { BuildXhsCommercialWorkflowDto } from './dto/build-xhs-commercial-workflow.dto';
+import {
+  BuildPersistedXhsCommercialWorkflowDto,
+  BuildXhsCommercialWorkflowDto,
+} from './dto/build-xhs-commercial-workflow.dto';
 import { BuildXhsGenerationBriefDto } from './dto/build-xhs-generation-brief.dto';
 import { BuildXhsResearchOutlinesDto } from './dto/build-xhs-research-outlines.dto';
 import { BuildXhsOutlineCandidatesDto } from './dto/build-xhs-outline-candidates.dto';
@@ -65,6 +68,14 @@ export class XhsAnalysisController {
   @Post('workflows/commercial-draft')
   buildCommercialWorkflow(@Body() dto: BuildXhsCommercialWorkflowDto) {
     return this.xhsAnalysisService.buildCommercialWorkflow(dto);
+  }
+
+  @Post('workflows/persisted-commercial-draft')
+  buildPersistedCommercialWorkflow(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BuildPersistedXhsCommercialWorkflowDto,
+  ) {
+    return this.xhsAnalysisService.buildPersistedCommercialWorkflow(dto, user.id);
   }
 
   @Post('workflows/repair-publish-package')

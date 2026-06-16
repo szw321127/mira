@@ -14,6 +14,7 @@ import {
   createAutoSaveKey,
   formatAutoSaveTime,
   formatRecordTime,
+  toBackendSelectedOutlineId,
 } from "./workspace-utils";
 
 type UseWorkspaceAutosaveOptions = {
@@ -88,7 +89,7 @@ export function useWorkspaceAutosave({
         title?: string;
         topic?: string;
       } = {
-        selectedOutlineId: selectedId,
+        selectedOutlineId: toBackendSelectedOutlineId(selectedId),
         statusMessage,
         title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
         topic,

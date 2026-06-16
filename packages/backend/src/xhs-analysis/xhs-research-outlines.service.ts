@@ -19,6 +19,10 @@ import {
 } from '../model-provider/openai-compatible';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
+  AdminContentProviderRuntimeConfig,
+  AdminContentProviderType,
+} from '../admin-content-providers/admin-content-providers.types';
+import type {
   BuildXhsResearchOutlinesInput,
   XhsResearchOutlinesResult,
   XhsResearchRunView,
@@ -27,6 +31,8 @@ import type {
 const outlineBatchInclude = {
   outlines: { orderBy: { position: 'asc' as const } },
 };
+
+const researchProviderPriority: AdminContentProviderType[] = ['custom', 'tikhub'];
 
 @Injectable()
 export class XhsResearchOutlinesService {
@@ -51,25 +57,35 @@ export class XhsResearchOutlinesService {
 
     await this.ensureOwnedConversation(userId, conversationId);
 
-    const runtimeConfig =
-      await this.contentProviders.getRuntimeConfig('custom');
-    const endpoint = createProviderEndpoint(
-      runtimeConfig.baseUrl,
-      'xhs/posts/search',
-    );
     const keywords = buildXhsSearchKeywords({ idea, mode });
     const startedAt = Date.now();
-    const searchResult = await this.searchPopularSamples({
-      apiKey: runtimeConfig.apiKey,
-      endpoint,
-      keywords,
-      limit: mode === 'deep' ? 10 : 5,
-    });
+    const runtimeConfig =
+      await this.contentProviders.getFirstAvailableRuntimeConfig(
+        researchProviderPriority,
+      );
+    const endpoint = runtimeConfig
+      ? createProviderEndpoint(runtimeConfig.baseUrl, 'xhs/posts/search')
+      : null;
+    const searchResult = runtimeConfig
+      ? await this.searchPopularSamples({
+          apiKey: runtimeConfig.apiKey,
+          endpoint: endpoint ?? '',
+          keywords,
+          limit: mode === 'deep' ? 10 : 5,
+        })
+      : {
+          failedKeywords: keywords,
+          samples: [],
+          warnings: [
+            '后台未配置小红书搜索连接器，已先生成可编辑大纲；需要爆款样本分析时请让管理员配置内容来源。',
+          ],
+        };
     const analysis = analyzeXhsPopularSamples({
       failedKeywords: searchResult.failedKeywords,
       idea,
       keywords,
       samples: searchResult.samples,
+      warnings: searchResult.warnings,
     });
     const candidates = buildXhsResearchBackedOutlines({ analysis, idea });
 
@@ -88,7 +104,7 @@ export class XhsResearchOutlinesService {
           keywords: stringifyJson(keywords),
           mode,
           providerEndpoint: endpoint,
-          providerType: runtimeConfig.type,
+          providerType: runtimeConfig?.type ?? 'none',
           sampleCount: analysis.sampleCount,
           samples: stringifyJson(analysis.summary.standoutSamples),
           status: analysis.status,
@@ -158,9 +174,11 @@ export class XhsResearchOutlinesService {
   }): Promise<{
     failedKeywords: string[];
     samples: XhsPopularSampleInput[];
+    warnings: string[];
   }> {
     const failedKeywords: string[] = [];
     const samples: XhsPopularSampleInput[] = [];
+    const warnings: string[] = [];
     let validResponseCount = 0;
 
     for (const chunk of this.chunk(input.keywords, 2)) {
@@ -203,12 +221,12 @@ export class XhsResearchOutlinesService {
     }
 
     if (validResponseCount === 0 && failedKeywords.length) {
-      throw new BadRequestException(
-        '小红书连接器搜索失败，请检查内容来源配置或稍后重试。',
+      warnings.push(
+        '小红书搜索连接器全部关键词请求失败，已先生成可编辑大纲；请稍后重试或让管理员检查内容来源配置。',
       );
     }
 
-    return { failedKeywords, samples };
+    return { failedKeywords, samples, warnings };
   }
 
   private extractSearchRecords(payload: unknown): Record<string, unknown>[] {
@@ -374,6 +392,7 @@ export class XhsResearchOutlinesService {
   }
 
   private toProviderType(value: string): XhsResearchRunView['providerType'] {
+    if (value === 'none') return 'none';
     return value === 'tikhub' ? 'tikhub' : 'custom';
   }
 

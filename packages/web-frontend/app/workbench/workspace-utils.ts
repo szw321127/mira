@@ -20,6 +20,7 @@ import type {
 
 export const DEFAULT_SEED =
   "周末在家低成本做一顿有仪式感的晚餐，适合发小红书";
+export const LOCAL_XHS_ID_PREFIX = "xhs:";
 
 export const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
   guide: { name: "实用攻略", mark: "攻略" },
@@ -29,6 +30,20 @@ export const toneMeta: Record<OutlineTone, { name: string; mark: string }> = {
 
 export function isOutlineTone(tone: string): tone is OutlineTone {
   return tone === "guide" || tone === "story" || tone === "checklist";
+}
+
+export function isLocalXhsId(id: string | null | undefined) {
+  return Boolean(id?.startsWith(LOCAL_XHS_ID_PREFIX));
+}
+
+export function toBackendSelectedOutlineId(id: string | null | undefined) {
+  if (!id || isLocalXhsId(id)) return "";
+  return id;
+}
+
+export function toBackendOptionalOutlineId(id: string | null | undefined) {
+  if (!id || isLocalXhsId(id)) return undefined;
+  return id;
 }
 
 export function formatRecordTime(value: string) {
@@ -164,7 +179,12 @@ export function mapSnapshotXhsResearchRun(value: unknown): XhsResearchRun | null
     keywords: value.keywords,
     mode: value.mode === "deep" ? "deep" : "quick",
     providerEndpoint: optionalString(value.providerEndpoint),
-    providerType: value.providerType === "tikhub" ? "tikhub" : "custom",
+    providerType:
+      value.providerType === "tikhub"
+        ? "tikhub"
+        : value.providerType === "none"
+          ? "none"
+          : "custom",
     sampleCount: value.sampleCount,
     status:
       value.status === "completed" ||

@@ -28,11 +28,14 @@ import {
   formatAutoSaveTime,
   getDraftSignature,
   groupOutlines,
+  isLocalXhsId,
   mapBackendOutline,
   mapBackendPostDraft,
   mapConversationRecord,
   mapSavedDraft,
   mapWorkspaceSnapshot,
+  toBackendOptionalOutlineId,
+  toBackendSelectedOutlineId,
   toneMeta,
 } from "./workbench/workspace-utils";
 import { useWorkspaceAutosave } from "./workbench/use-workspace-autosave";
@@ -94,7 +97,6 @@ type PostDraftPatchInFlight = {
 const AUTH_STORAGE_KEY = "rednote:auth-session";
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 const POST_DRAFT_UPDATE_DEBOUNCE_MS = 500;
-const LOCAL_XHS_ID_PREFIX = "xhs:";
 
 function getWorkspaceErrorMessage(error: unknown, fallback: string) {
   const detail = getApiErrorMessage(error);
@@ -121,10 +123,6 @@ function buildResearchStatusMessage(research: XhsResearchRun) {
   return "已根据小红书热门样本追加新一批大纲，之前生成的仍保留。";
 }
 
-function isLocalXhsId(id: string | null | undefined) {
-  return Boolean(id?.startsWith(LOCAL_XHS_ID_PREFIX));
-}
-
 function mapXhsPublishPackageToPostDraft(
   publishPackage: XhsImageTextPublishPackage,
 ): PostDraft {
@@ -139,7 +137,7 @@ function mapXhsPublishPackageToPostDraft(
         0,
         18,
       ) || publishPackage.idea.slice(0, 18),
-    id: `${LOCAL_XHS_ID_PREFIX}draft:${Date.now()}`,
+    id: `xhs:draft:${Date.now()}`,
     imageError: null,
     imageGeneratedAt: null,
     imageProvider: null,
@@ -156,10 +154,6 @@ function mapXhsPublishPackageToPostDraft(
       publishPackage.titleCandidates[0] ||
       publishPackage.idea,
   };
-}
-
-function mapXhsWorkflowToPostDraft(workflow: XhsCommercialWorkflow): PostDraft {
-  return mapXhsPublishPackageToPostDraft(workflow.publishPackage);
 }
 
 function mergePostDraftImageFields(
@@ -569,7 +563,7 @@ export default function Home() {
           title?: string;
           topic?: string;
         } = {
-          selectedOutlineId: selectedId,
+          selectedOutlineId: toBackendSelectedOutlineId(selectedId),
           statusMessage,
           title: postDraft?.title ?? selectedOutline?.title ?? fallbackTitle,
           topic,
@@ -795,22 +789,24 @@ export default function Home() {
     try {
       const currentConversationId = await ensureConversation(accessToken);
       await api.conversations.update(accessToken, currentConversationId, {
-        selectedOutlineId: selectedOutline.id,
+        selectedOutlineId: toBackendSelectedOutlineId(selectedOutline.id),
         topic: seed,
       });
-      const workflow = await api.xhs.buildCommercialDraft(accessToken, {
+      const result = await api.xhs.buildPersistedCommercialDraft(accessToken, {
+        conversationId: currentConversationId,
         idea: seed,
         outline: selectedOutline.points,
+        outlineId: toBackendOptionalOutlineId(selectedOutline.id),
         pageCount: Math.min(Math.max(selectedOutline.points.length + 1, 4), 7),
       });
 
-      setLatestWorkflow(workflow);
-      setPostDraft(mapXhsWorkflowToPostDraft(workflow));
+      setLatestWorkflow(result.workflow);
+      setPostDraft(mapBackendPostDraft(result.draft));
       setDraftStale(false);
       setStatusMessage(
-        workflow.audit.ready
+        result.workflow.audit.ready
           ? "小红书发布包已生成，可以复制或继续微调。"
-          : `发布包已生成，建议先处理：${workflow.audit.repairActions[0] ?? "检查内容完整度。"}`,
+          : `发布包已生成，建议先处理：${result.workflow.audit.repairActions[0] ?? "检查内容完整度。"}`,
       );
       await refreshConversationRecordsSafely(
         "图文已生成，但记录列表刷新失败。",
@@ -863,7 +859,25 @@ export default function Home() {
       };
 
       setLatestWorkflow(nextWorkflow);
-      setPostDraft(mapXhsPublishPackageToPostDraft(result.publishPackage));
+      const repairedDraft = mapXhsPublishPackageToPostDraft(result.publishPackage);
+
+      if (isLocalXhsId(postDraft.id)) {
+        setPostDraft(repairedDraft);
+      } else {
+        const updatedDraft = await api.postDrafts.update(
+          accessToken,
+          postDraft.id,
+          {
+            caption: repairedDraft.caption,
+            coverLine: repairedDraft.coverLine,
+            imagePrompt: repairedDraft.imagePrompt,
+            sections: repairedDraft.sections,
+            tags: repairedDraft.tags,
+            title: repairedDraft.title,
+          },
+        );
+        setPostDraft(mapBackendPostDraft(updatedDraft));
+      }
       setDraftStale(false);
       setStatusMessage(
         result.audit.ready
@@ -953,11 +967,6 @@ export default function Home() {
     if (!postDraft) return;
     if (!accessToken) {
       setStatusMessage("请先登录，再生成封面图。");
-      return;
-    }
-
-    if (isLocalXhsId(postDraft.id)) {
-      setStatusMessage("当前发布包已包含封面提示词，独立封面出图稍后接入。");
       return;
     }
 
@@ -1201,7 +1210,7 @@ export default function Home() {
       await api.conversations.update(accessToken, currentConversationId, {
         title,
         topic,
-        selectedOutlineId: selectedId,
+        selectedOutlineId: toBackendSelectedOutlineId(selectedId),
         statusMessage,
       });
       const savedSnapshot = await api.conversations.createSnapshot(
@@ -1658,7 +1667,7 @@ export default function Home() {
                   if (accessToken && conversationId) {
                     void api.conversations
                       .update(accessToken, conversationId, {
-                        selectedOutlineId: outline.id,
+                        selectedOutlineId: toBackendSelectedOutlineId(outline.id),
                       })
                       .catch(() => {});
                   }
