@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.venv/
 
 # Logs
 logs
@@ -53,4 +54,3 @@ artifacts/
 .usage/*
 .sessions/*
 .memory/*
-
