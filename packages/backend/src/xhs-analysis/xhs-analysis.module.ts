@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AdminContentProvidersModule } from '../admin-content-providers/admin-content-providers.module';
-import { AdminModelConfigsModule } from '../admin-model-configs/admin-model-configs.module';
 import { AuthModule } from '../auth/auth.module';
+import { ModelProviderModule } from '../model-provider/model-provider.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { XhsAnalysisController } from './xhs-analysis.controller';
 import { XhsAnalysisService } from './xhs-analysis.service';
 import { XhsReferencesController } from './xhs-references.controller';
+import { XhsResearchAiService } from './xhs-research-ai.service';
 import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
 
 @Module({
@@ -13,10 +14,14 @@ import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
   exports: [XhsAnalysisService],
   imports: [
     AdminContentProvidersModule,
-    AdminModelConfigsModule,
     AuthModule,
+    ModelProviderModule,
     PrismaModule,
   ],
-  providers: [XhsAnalysisService, XhsResearchOutlinesService],
+  providers: [
+    XhsAnalysisService,
+    XhsResearchAiService,
+    XhsResearchOutlinesService,
+  ],
 })
 export class XhsAnalysisModule {}

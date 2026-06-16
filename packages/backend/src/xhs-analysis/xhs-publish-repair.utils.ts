@@ -4,33 +4,15 @@ import type {
   XhsImageTextPublishPackage,
   XhsPublishPackageAudit,
 } from './domain';
-import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
-import {
-  createProviderEndpoint,
-  extractChatContent,
-  isRecord,
-  parseProviderJsonObject,
-  postProviderJson,
-} from '../model-provider/openai-compatible';
+import { AiTextModelService } from '../model-provider/ai-text-model.service';
+import { isRecord } from '../model-provider/openai-compatible';
 import type { RepairedXhsPublishPackage } from './xhs-analysis.types';
 
 export async function requestTextJson(
-  modelConfigs: AdminModelConfigsService,
+  textModel: AiTextModelService,
   messages: Array<{ content: string; role: 'system' | 'user' }>,
 ): Promise<Record<string, unknown>> {
-  const config = await modelConfigs.getRuntimeConfig('text');
-  const response = await postProviderJson(
-    createProviderEndpoint(config.baseUrl, 'chat/completions'),
-    config.apiKey,
-    {
-      messages,
-      model: config.modelName,
-      response_format: { type: 'json_object' },
-      temperature: 0.55,
-    },
-  );
-
-  return parseProviderJsonObject(extractChatContent(response));
+  return textModel.generateTextJson({ messages, temperature: 0.55 });
 }
 
 export function toRepairedPublishPackage(

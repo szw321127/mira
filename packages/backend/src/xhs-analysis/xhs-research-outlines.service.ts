@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   analyzeXhsPopularSamples,
-  buildXhsResearchBackedOutlines,
   buildXhsSearchKeywords,
   normalizeXhsImportedPosts,
 } from './domain';
@@ -27,12 +26,16 @@ import type {
   XhsResearchOutlinesResult,
   XhsResearchRunView,
 } from './xhs-analysis.types';
+import { XhsResearchAiService } from './xhs-research-ai.service';
 
 const outlineBatchInclude = {
   outlines: { orderBy: { position: 'asc' as const } },
 };
 
-const researchProviderPriority: AdminContentProviderType[] = ['custom', 'tikhub'];
+const researchProviderPriority: AdminContentProviderType[] = [
+  'custom',
+  'tikhub',
+];
 
 @Injectable()
 export class XhsResearchOutlinesService {
@@ -41,6 +44,7 @@ export class XhsResearchOutlinesService {
   constructor(
     private readonly contentProviders: AdminContentProvidersService,
     private readonly prisma: PrismaService,
+    private readonly researchAi: XhsResearchAiService,
   ) {}
 
   async buildResearchOutlines(
@@ -80,14 +84,21 @@ export class XhsResearchOutlinesService {
             '后台未配置小红书搜索连接器，已先生成可编辑大纲；需要爆款样本分析时请让管理员配置内容来源。',
           ],
         };
-    const analysis = analyzeXhsPopularSamples({
+    const baseAnalysis = analyzeXhsPopularSamples({
       failedKeywords: searchResult.failedKeywords,
       idea,
       keywords,
       samples: searchResult.samples,
       warnings: searchResult.warnings,
     });
-    const candidates = buildXhsResearchBackedOutlines({ analysis, idea });
+    const { analysis, outlines } =
+      await this.researchAi.generateResearchOutlines({
+        analysis: baseAnalysis,
+        idea,
+        keywords,
+        mode,
+        samples: searchResult.samples,
+      });
 
     const result = await this.prisma.$transaction(async (tx) => {
       const latestBatch = await tx.outlineBatch.findFirst({
@@ -116,13 +127,13 @@ export class XhsResearchOutlinesService {
           batchNo,
           conversationId,
           outlines: {
-            create: candidates.map((outline, position) => ({
-              hook: outline.selectionReason,
-              label: this.toOutlineLabel(outline.strategy),
-              points: stringifyJson(outline.outline),
+            create: outlines.map((outline, position) => ({
+              hook: outline.hook,
+              label: outline.label,
+              points: stringifyJson(outline.points),
               position,
               title: outline.title,
-              tone: this.toOutlineTone(outline.strategy),
+              tone: outline.tone,
             })),
           },
           prompt: idea,
@@ -355,7 +366,9 @@ export class XhsResearchOutlinesService {
     };
   }
 
-  private parseStoredResearchAnalysis(value: string): XhsPopularSamplesAnalysis {
+  private parseStoredResearchAnalysis(
+    value: string,
+  ): XhsPopularSamplesAnalysis {
     try {
       const parsed = JSON.parse(value) as XhsPopularSamplesAnalysis;
 
@@ -378,7 +391,9 @@ export class XhsResearchOutlinesService {
     try {
       const parsed: unknown = JSON.parse(value);
       if (Array.isArray(parsed)) {
-        return parsed.filter((item): item is string => typeof item === 'string');
+        return parsed.filter(
+          (item): item is string => typeof item === 'string',
+        );
       }
     } catch {
       // handled below
@@ -394,18 +409,6 @@ export class XhsResearchOutlinesService {
   private toProviderType(value: string): XhsResearchRunView['providerType'] {
     if (value === 'none') return 'none';
     return value === 'tikhub' ? 'tikhub' : 'custom';
-  }
-
-  private toOutlineTone(strategy: string) {
-    if (strategy === 'checklist') return 'checklist';
-    if (strategy === 'pain-point') return 'story';
-    return 'guide';
-  }
-
-  private toOutlineLabel(strategy: string) {
-    if (strategy === 'pain-point') return '痛点切入';
-    if (strategy === 'step-by-step') return '步骤教程';
-    return '收藏清单';
   }
 
   private buildResearchStatusMessage(analysis: XhsPopularSamplesAnalysis) {

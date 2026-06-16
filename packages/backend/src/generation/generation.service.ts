@@ -1,12 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
-import {
-  createProviderEndpoint,
-  extractChatContent,
-  isRecord,
-  parseProviderJsonObject,
-  postProviderJson,
-} from '../model-provider/openai-compatible';
+import { AiTextModelService } from '../model-provider/ai-text-model.service';
+import { isRecord } from '../model-provider/openai-compatible';
 import type {
   GeneratedOutline,
   GeneratedPostDraft,
@@ -18,7 +12,7 @@ const outlineTones: OutlineTone[] = ['checklist', 'guide', 'story'];
 
 @Injectable()
 export class GenerationService {
-  constructor(private readonly modelConfigs: AdminModelConfigsService) {}
+  constructor(private readonly textModel: AiTextModelService) {}
 
   async createOutlines(
     topic: string,
@@ -79,19 +73,7 @@ export class GenerationService {
   private async requestTextJson(
     messages: Array<{ content: string; role: 'system' | 'user' }>,
   ): Promise<Record<string, unknown>> {
-    const config = await this.modelConfigs.getRuntimeConfig('text');
-    const response = await postProviderJson(
-      createProviderEndpoint(config.baseUrl, 'chat/completions'),
-      config.apiKey,
-      {
-        messages,
-        model: config.modelName,
-        response_format: { type: 'json_object' },
-        temperature: 0.8,
-      },
-    );
-
-    return parseProviderJsonObject(extractChatContent(response));
+    return this.textModel.generateTextJson({ messages, temperature: 0.8 });
   }
 
   private toGeneratedOutline(value: unknown, index: number): GeneratedOutline {

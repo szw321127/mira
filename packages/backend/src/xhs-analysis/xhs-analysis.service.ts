@@ -20,8 +20,8 @@ import type {
   XhsOutlineCandidateInput,
   XhsPostInput,
 } from './domain';
-import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
+import { AiTextModelService } from '../model-provider/ai-text-model.service';
 import {
   createProviderEndpoint,
   postProviderJson,
@@ -66,7 +66,7 @@ export class XhsAnalysisService {
   constructor(
     private readonly contentProviders: AdminContentProvidersService,
     private readonly prisma: PrismaService,
-    private readonly modelConfigs: AdminModelConfigsService,
+    private readonly textModel: AiTextModelService,
     private readonly researchOutlines: XhsResearchOutlinesService,
   ) {}
 
@@ -103,7 +103,9 @@ export class XhsAnalysisService {
     }
 
     const workflow = buildXhsCommercialWorkflow(input);
-    const draftData = toPostDraftDataFromPublishPackage(workflow.publishPackage);
+    const draftData = toPostDraftDataFromPublishPackage(
+      workflow.publishPackage,
+    );
     const draft = await this.prisma.$transaction(async (tx) => {
       await tx.postDraft.updateMany({
         data: { stale: true },
@@ -161,7 +163,7 @@ export class XhsAnalysisService {
       return toRepairResult(input.publishPackage, currentAudit, false);
     }
 
-    const payload = await requestTextJson(this.modelConfigs, [
+    const payload = await requestTextJson(this.textModel, [
       {
         content:
           '你是小红书图文发布包质检编辑。只返回 JSON，不要 Markdown，不要解释。',

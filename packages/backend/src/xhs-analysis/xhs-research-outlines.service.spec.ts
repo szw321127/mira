@@ -67,6 +67,37 @@ const prisma = {
   },
 };
 
+const researchAi = {
+  generateResearchOutlines: jest.fn(
+    async ({ analysis }: { analysis: Record<string, unknown> }) => ({
+      analysis,
+      outlines: [
+        {
+          hook: 'AI 认为痛点切入更适合这批样本。',
+          label: '痛点切入',
+          points: ['P1 先讲乱买痛点', 'P2 给低预算清单', 'P3 做避坑复盘'],
+          title: 'AI 生成：初入职场低预算通勤衣橱',
+          tone: 'story',
+        },
+        {
+          hook: 'AI 认为步骤结构降低执行门槛。',
+          label: '步骤教程',
+          points: ['P1 定场景', 'P2 定颜色', 'P3 定单品'],
+          title: 'AI 生成：低预算通勤穿搭三步走',
+          tone: 'guide',
+        },
+        {
+          hook: 'AI 认为清单结构更适合收藏。',
+          label: '收藏清单',
+          points: ['P1 必备项', 'P2 可选项', 'P3 避坑项'],
+          title: 'AI 生成：通勤衣橱收藏清单',
+          tone: 'checklist',
+        },
+      ],
+    }),
+  ),
+};
+
 describe('XhsResearchOutlinesService', () => {
   let service: XhsResearchOutlinesService;
 
@@ -89,9 +120,11 @@ describe('XhsResearchOutlinesService', () => {
     prisma.outlineBatch.findFirst.mockClear();
     prisma.postDraft.updateMany.mockClear();
     prisma.xhsResearchRun.create.mockClear();
+    researchAi.generateResearchOutlines.mockClear();
     service = new XhsResearchOutlinesService(
       contentProviders as never,
       prisma as never,
+      researchAi as never,
     );
   });
 
@@ -137,10 +170,9 @@ describe('XhsResearchOutlinesService', () => {
     const firstCall = fetchMock.mock.calls[0];
     const requestInit = firstCall?.[1];
 
-    expect(contentProviders.getFirstAvailableRuntimeConfig).toHaveBeenCalledWith([
-      'custom',
-      'tikhub',
-    ]);
+    expect(
+      contentProviders.getFirstAvailableRuntimeConfig,
+    ).toHaveBeenCalledWith(['custom', 'tikhub']);
     expect(firstCall?.[0]).toBe('https://provider.example/xhs/posts/search');
     expect(requestInit?.headers).toMatchObject({
       Authorization: 'Bearer provider-key',
@@ -152,10 +184,24 @@ describe('XhsResearchOutlinesService', () => {
       sourceId: 'note-a',
       title: '普通女生也能复制的 12 件通勤衣橱',
     });
-    expect(JSON.stringify(result.research.summary.standoutSamples)).not.toContain(
-      '原始正文',
+    expect(
+      JSON.stringify(result.research.summary.standoutSamples),
+    ).not.toContain('原始正文');
+    expect(researchAi.generateResearchOutlines).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idea: '给初入职场女生做低预算通勤穿搭',
+        samples: expect.arrayContaining([
+          expect.objectContaining({ sourceId: 'note-a' }),
+        ]),
+      }),
     );
     expect(result.batch.outlines).toHaveLength(3);
+    expect(result.batch.outlines[0]).toMatchObject({
+      hook: 'AI 认为痛点切入更适合这批样本。',
+      label: '痛点切入',
+      title: 'AI 生成：初入职场低预算通勤衣橱',
+      tone: 'story',
+    });
     expect(prisma.xhsResearchRun.create).toHaveBeenCalled();
     expect(prisma.outlineBatch.create).toHaveBeenCalled();
   });
@@ -234,7 +280,9 @@ describe('XhsResearchOutlinesService', () => {
     expect(result.research.providerEndpoint).toBeNull();
     expect(result.research.status).toBe('fallback_no_samples');
     expect(result.research.warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining('未配置小红书搜索连接器')]),
+      expect.arrayContaining([
+        expect.stringContaining('未配置小红书搜索连接器'),
+      ]),
     );
     expect(result.batch.outlines).toHaveLength(3);
   });
