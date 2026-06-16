@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -239,49 +239,30 @@ test("login page supports Google email sign-in", () => {
   assert.ok(googleFallbackStart > loginActionsStart);
 });
 
-test("workbench imports Xiaohongshu reference sources into generation", () => {
+test("workbench keeps Xiaohongshu research automatic instead of manual reference imports", () => {
   const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
-  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
   const types = readWorkbenchFile("types.ts");
   const utils = readWorkbenchFile("workspace-utils.ts");
-  const importer = readWorkbenchFile("reference-importer.tsx");
 
-  assert.match(api, /importPost:/);
-  assert.match(api, /\/xhs-analysis\/posts\/import/);
-  assert.match(api, /importAccount:/);
-  assert.match(api, /\/xhs-analysis\/accounts\/import/);
-  assert.match(api, /buildGenerationBrief:/);
-  assert.match(api, /\/xhs-analysis\/generation-brief/);
-  assert.match(api, /listReferences:/);
-  assert.match(api, /\/conversations\/\$\{conversationId\}\/xhs-references/);
-  assert.match(api, /deleteReference:/);
-  assert.match(api, /\/xhs-references\/\$\{referenceId\}/);
+  assert.equal(existsSync(join(root, "reference-importer.tsx")), false);
 
-  assert.match(types, /ReferenceImportState/);
-  assert.match(types, /backendReferenceId\?: string/);
-  assert.match(types, /referenceImport: ReferenceImportState/);
-  assert.match(utils, /mapReferenceImportState/);
-  assert.match(utils, /mapXhsStoredReferenceToReferenceImport/);
-  assert.match(utils, /referenceImport: mapReferenceImportState/);
-  assert.match(utils, /referenceImport: snapshot\.referenceImport/);
+  assert.doesNotMatch(types, /ReferenceImportState/);
+  assert.doesNotMatch(types, /referenceImport/);
+  assert.doesNotMatch(utils, /mapReferenceImportState/);
+  assert.doesNotMatch(utils, /mapXhsStoredReferenceToReferenceImport/);
+  assert.doesNotMatch(utils, /referenceImport/);
 
-  assert.match(importer, /参考来源/);
-  assert.match(importer, /帖子 URL/);
-  assert.match(importer, /账号 URL/);
-  assert.match(importer, /爆点信号/);
-  assert.match(importer, /账号定位/);
-
-  assert.match(source, /ReferenceImporter/);
-  assert.match(source, /referenceImport/);
-  assert.match(source, /api\.xhs\.importPost/);
-  assert.match(source, /api\.xhs\.importAccount/);
+  assert.doesNotMatch(source, /ReferenceImporter/);
+  assert.doesNotMatch(source, /referenceImport/);
+  assert.doesNotMatch(source, /api\.xhs\.importPost/);
+  assert.doesNotMatch(source, /api\.xhs\.importAccount/);
   assert.match(source, /const currentConversationId = await ensureConversation/);
   assert.match(source, /conversationId: currentConversationId/);
-  assert.match(source, /loadConversationReferences/);
-  assert.match(source, /api\.xhs\.listReferences/);
-  assert.match(source, /api\.xhs\.deleteReference/);
-  assert.match(source, /buildReferenceWorkflowInputs/);
-  assert.match(source, /\.\.\.buildReferenceWorkflowInputs/);
+  assert.doesNotMatch(source, /loadConversationReferences/);
+  assert.doesNotMatch(source, /api\.xhs\.listReferences/);
+  assert.doesNotMatch(source, /api\.xhs\.deleteReference/);
+  assert.doesNotMatch(source, /buildReferenceWorkflowInputs/);
+  assert.doesNotMatch(source, /\.\.\.buildReferenceWorkflowInputs/);
 });
 
 test("workbench generates outlines through Xiaohongshu research", () => {
@@ -304,7 +285,8 @@ test("workbench generates outlines through Xiaohongshu research", () => {
   assert.match(source, /setLatestResearch\(result\.research\)/);
   assert.match(source, /mapBackendOutline\(outline, nextBatch\)/);
   assert.match(outline, /ResearchSummary/);
-  assert.match(outline, /研究参考/);
+  assert.match(outline, /爆款研究/);
+  assert.doesNotMatch(outline, /参考来源/);
   assert.match(outline, /standoutSamples/);
   assert.doesNotMatch(outline, /content/);
 });

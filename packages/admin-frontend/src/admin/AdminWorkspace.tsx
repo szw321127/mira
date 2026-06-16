@@ -43,6 +43,7 @@ import {
   loadProjectManagementDashboard,
   saveContentProvider,
   saveModelConfig,
+  testModelConfigConnection,
   updateAdminProfile,
   updateContentProviderApiKey,
   updateModelApiKey,
@@ -64,6 +65,7 @@ import {
   emptyContentProviderApiKeyForm,
   emptyContentProviderForm,
   emptyDashboard,
+  emptyModelConnectionTestState,
   emptyModelApiKeyForm,
   emptyModelConfigForm,
   matchesQuery,
@@ -82,6 +84,7 @@ import {
   type ExportStatus,
   type ModelApiKeyForm,
   type ModelApiKeyFormState,
+  type ModelConnectionTestState,
   type ModelConfigForm,
   type ModelConfigFormState,
   type ModelConfigState,
@@ -146,6 +149,8 @@ export function AdminWorkspace({
     errorMessage: null,
     status: "loading",
   });
+  const [modelConnectionTestState, setModelConnectionTestState] =
+    useState<ModelConnectionTestState>(emptyModelConnectionTestState);
   const [contentProviderState, setContentProviderState] =
     useState<ContentProviderState>({
       data: [],
@@ -457,11 +462,62 @@ export function AdminWorkspace({
           modelName: saved.modelName,
         },
       }));
+      setModelConnectionTestState((current) => ({
+        ...current,
+        [type]: {
+          errorMessage: null,
+          result: null,
+          status: "idle",
+        },
+      }));
       setOperationNotice(`${type === "text" ? "文本模型" : "图片模型"}已保存`);
     } catch (error) {
       handleAdminApiError(error);
     } finally {
       setSavingModelConfig(null);
+    }
+  };
+
+  const handleTestModelConnection = async (type: AdminModelConfigType) => {
+    setModelConnectionTestState((current) => ({
+      ...current,
+      [type]: {
+        errorMessage: null,
+        result: null,
+        status: "testing",
+      },
+    }));
+
+    try {
+      const result = await testModelConfigConnection(type);
+
+      setModelConnectionTestState((current) => ({
+        ...current,
+        [type]: {
+          errorMessage: null,
+          result,
+          status: "success",
+        },
+      }));
+      setOperationNotice(
+        `${type === "text" ? "文本模型" : "图片模型"}连接测试通过`,
+      );
+    } catch (error) {
+      const errorMessage = getApiErrorMessage(error);
+
+      if (onUnauthorized(error)) {
+        return;
+      }
+
+      setModelConnectionTestState((current) => ({
+        ...current,
+        [type]: {
+          errorMessage,
+          result: null,
+          status: "error",
+        },
+      }));
+      setOperationNotice(errorMessage);
     }
   };
 
@@ -978,10 +1034,12 @@ export function AdminWorkspace({
             modelConfigForms={modelConfigForms}
             modelConfigLoading={modelConfigLoading}
             modelConfigState={modelConfigState}
+            modelConnectionTestState={modelConnectionTestState}
             mutatingApiKeyId={mutatingApiKeyId}
             onCreateModelApiKey={handleCreateModelApiKey}
             onDeleteModelApiKey={handleDeleteModelApiKey}
             onSaveModelConfig={handleSaveModelConfig}
+            onTestModelConnection={handleTestModelConnection}
             onToggleModelApiKey={handleToggleModelApiKey}
             savingModelConfig={savingModelConfig}
             updateModelApiKeyForm={updateModelApiKeyForm}

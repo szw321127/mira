@@ -157,8 +157,13 @@ test("admin frontend manages text and image model configs without exposing api k
   assert.match(settings, /baseUrl/);
   assert.match(settings, /apiKeys/);
   assert.match(settings, /新增 API Key/);
+  assert.match(settings, /连接验证/);
+  assert.match(settings, /测试连接/);
+  assert.match(settings, /连接测试通过/);
+  assert.match(settings, /连接测试失败/);
   assert.match(settings, /Switch/);
   assert.match(settings, /Popconfirm/);
+  assert.match(css, /connection-test-panel/);
   assert.match(css, /model-config-grid/);
   assert.match(css, /api-key-list/);
 });

@@ -237,7 +237,7 @@ function ResearchSummary({ research }: { research: XhsResearchRun }) {
     <aside className="grid gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-tint)] p-2.5">
       <div className="flex flex-wrap items-center gap-2 text-[0.72rem] font-black text-[var(--muted)]">
         <span className="rounded bg-[var(--surface)] px-2 py-0.5 text-[var(--red-strong)]">
-          研究参考
+          爆款研究
         </span>
         <span>置信度 {confidenceText}</span>
         <span>样本 {research.sampleCount}</span>

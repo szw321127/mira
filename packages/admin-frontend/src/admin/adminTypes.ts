@@ -2,6 +2,7 @@ import type {
   AdminContentProviderConfig,
   AdminContentProviderType,
   AdminDashboard,
+  AdminModelConnectionTestResult,
   AdminModelConfig,
   AdminModelConfigType,
   AdminProject as Project,
@@ -89,6 +90,15 @@ export type ModelConfigState = {
   status: "error" | "loading" | "ready";
 };
 
+export type ModelConnectionTestState = Record<
+  AdminModelConfigType,
+  {
+    errorMessage: string | null;
+    result: AdminModelConnectionTestResult | null;
+    status: "error" | "idle" | "success" | "testing";
+  }
+>;
+
 export type ContentProviderState = {
   data: AdminContentProviderConfig[];
   errorMessage: string | null;
@@ -148,6 +158,19 @@ export const emptyModelApiKeyForm: ModelApiKeyFormState = {
   text: {
     apiKey: "",
     name: "",
+  },
+};
+
+export const emptyModelConnectionTestState: ModelConnectionTestState = {
+  image: {
+    errorMessage: null,
+    result: null,
+    status: "idle",
+  },
+  text: {
+    errorMessage: null,
+    result: null,
+    status: "idle",
   },
 };
 

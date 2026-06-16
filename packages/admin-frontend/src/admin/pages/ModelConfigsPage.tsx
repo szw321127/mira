@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   DeleteOutlined,
   KeyOutlined,
   PlusOutlined,
@@ -27,6 +28,7 @@ import {
   modelConfigTypes,
   type ModelApiKeyForm,
   type ModelApiKeyFormState,
+  type ModelConnectionTestState,
   type ModelConfigForm,
   type ModelConfigFormState,
   type ModelConfigState,
@@ -41,6 +43,7 @@ type ModelConfigsPageProps = {
   modelConfigForms: ModelConfigFormState;
   modelConfigLoading: boolean;
   modelConfigState: ModelConfigState;
+  modelConnectionTestState: ModelConnectionTestState;
   mutatingApiKeyId: string | null;
   onCreateModelApiKey: (type: AdminModelConfigType) => void;
   onDeleteModelApiKey: (
@@ -48,6 +51,7 @@ type ModelConfigsPageProps = {
     apiKey: AdminModelApiKey,
   ) => void;
   onSaveModelConfig: (type: AdminModelConfigType) => void;
+  onTestModelConnection: (type: AdminModelConfigType) => void;
   onToggleModelApiKey: (
     type: AdminModelConfigType,
     apiKey: AdminModelApiKey,
@@ -73,10 +77,12 @@ export function ModelConfigsPage({
   modelConfigForms,
   modelConfigLoading,
   modelConfigState,
+  modelConnectionTestState,
   mutatingApiKeyId,
   onCreateModelApiKey,
   onDeleteModelApiKey,
   onSaveModelConfig,
+  onTestModelConnection,
   onToggleModelApiKey,
   savingModelConfig,
   updateModelApiKeyForm,
@@ -112,10 +118,17 @@ export function ModelConfigsPage({
               (apiKey) => apiKey.enabled,
             )?.id;
             const form = modelConfigForms[type];
+            const connectionTest = modelConnectionTestState[type];
             const saveDisabled =
               modelConfigLoading ||
               !form.baseUrl.trim() ||
               !form.modelName.trim();
+            const testDisabled =
+              modelConfigLoading ||
+              !config?.baseUrl ||
+              !config.modelName ||
+              !activeRuntimeKeyId ||
+              savingModelConfig === type;
 
             return (
               <Card
@@ -179,6 +192,48 @@ export function ModelConfigsPage({
                     保存配置
                   </Button>
                 </Flex>
+
+                <div className="connection-test-panel">
+                  <Flex align="center" justify="space-between" wrap>
+                    <div className="connection-test-copy">
+                      <Text strong>连接验证</Text>
+                      <Text type="secondary">
+                        {activeRuntimeKeyId
+                          ? "使用当前启用的 API Key 发起一次后台探测"
+                          : "启用至少一个 API Key 后才能测试连接"}
+                      </Text>
+                    </div>
+                    <Button
+                      disabled={testDisabled}
+                      icon={<ApiOutlined />}
+                      loading={connectionTest.status === "testing"}
+                      onClick={() => void onTestModelConnection(type)}
+                    >
+                      测试连接
+                    </Button>
+                  </Flex>
+
+                  {connectionTest.status === "success" &&
+                  connectionTest.result ? (
+                    <Alert
+                      description={`${connectionTest.result.modelName} · ${connectionTest.result.endpoint} · ${new Date(
+                        connectionTest.result.checkedAt,
+                      ).toLocaleString("zh-CN")}`}
+                      showIcon
+                      title="连接测试通过"
+                      type="success"
+                    />
+                  ) : null}
+
+                  {connectionTest.status === "error" ? (
+                    <Alert
+                      description={connectionTest.errorMessage}
+                      showIcon
+                      title="连接测试失败"
+                      type="error"
+                    />
+                  ) : null}
+                </div>
 
                 <div className="api-key-panel">
                   <Flex align="center" justify="space-between" wrap>

@@ -1,6 +1,4 @@
 import type {
-  ImportedXhsAccountAnalysis,
-  ImportedXhsPostAnalysis,
   XhsCommercialWorkflow,
   XhsResearchRun,
 } from "@/lib/api";
@@ -8,20 +6,6 @@ import type {
 export type OutlineTone = "guide" | "story" | "checklist";
 
 export type ImageStatus = "idle" | "generating" | "ready" | "failed";
-
-export type ReferenceImportMode = "account" | "post";
-
-export type ReferenceBackedImport = {
-  backendReferenceId?: string;
-};
-
-export type ReferenceImportState = {
-  error: string;
-  importedAccount: (ImportedXhsAccountAnalysis & ReferenceBackedImport) | null;
-  importedPosts: Array<ImportedXhsPostAnalysis & ReferenceBackedImport>;
-  mode: ReferenceImportMode;
-  url: string;
-};
 
 export type Outline = {
   id: string;
@@ -71,7 +55,6 @@ export type WorkspaceSnapshot = {
   latestWorkflow: XhsCommercialWorkflow | null;
   outlines: Outline[];
   postDraft: PostDraft | null;
-  referenceImport: ReferenceImportState;
   savedDrafts: SavedDraft[];
   seed: string;
   selectedId: string;

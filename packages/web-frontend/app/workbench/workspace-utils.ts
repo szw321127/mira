@@ -3,13 +3,9 @@ import type {
   BackendOutline,
   BackendPostDraft,
   BackendSavedDraft,
-  ImportedXhsAccountAnalysis,
-  ImportedXhsPostAnalysis,
   XhsCommercialWorkflow,
-  XhsProviderImportSummary,
   XhsResearchRun,
   XhsResearchSummary,
-  XhsStoredReference,
 } from "@/lib/api";
 import type {
   ConversationRecord,
@@ -17,8 +13,6 @@ import type {
   OutlineGroup,
   OutlineTone,
   PostDraft,
-  ReferenceImportMode,
-  ReferenceImportState,
   SavedDraft,
   Snapshot,
   WorkspaceSnapshot,
@@ -180,101 +174,6 @@ export function mapSnapshotXhsResearchRun(value: unknown): XhsResearchRun | null
         : "completed_with_warning",
     summary: value.summary,
     warnings: value.warnings,
-  };
-}
-
-export function createEmptyReferenceImport(): ReferenceImportState {
-  return {
-    error: "",
-    importedAccount: null,
-    importedPosts: [],
-    mode: "post",
-    url: "",
-  };
-}
-
-function referenceImportMode(value: unknown): ReferenceImportMode {
-  return value === "account" ? "account" : "post";
-}
-
-function mapImportedPostAnalysis(value: unknown): ImportedXhsPostAnalysis | null {
-  if (!isRecord(value) || !isRecord(value.analysis) || !isRecord(value.imported)) {
-    return null;
-  }
-
-  return value as unknown as ImportedXhsPostAnalysis;
-}
-
-function mapImportedAccountAnalysis(
-  value: unknown,
-): ImportedXhsAccountAnalysis | null {
-  if (!isRecord(value) || !isRecord(value.analysis) || !isRecord(value.imported)) {
-    return null;
-  }
-
-  return value as unknown as ImportedXhsAccountAnalysis;
-}
-
-function referenceProviderType(
-  value: string,
-): XhsProviderImportSummary["type"] {
-  return value === "tikhub" ? "tikhub" : "custom";
-}
-
-export function mapXhsStoredReferenceToReferenceImport(
-  reference: XhsStoredReference,
-): ReferenceImportState {
-  const provider: XhsProviderImportSummary = {
-    complianceNote: "",
-    endpoint: reference.providerEndpoint ?? "",
-    rateLimitPerMinute: null,
-    sourceId: reference.sourceId,
-    type: referenceProviderType(reference.providerType),
-  };
-  const mapped = {
-    analysis: reference.analysis,
-    backendReferenceId: reference.id,
-    imported: reference.imported,
-    provider,
-    reference: reference.reference,
-  };
-  const empty = createEmptyReferenceImport();
-
-  if (reference.kind === "account") {
-    const account = mapImportedAccountAnalysis(mapped);
-
-    return {
-      ...empty,
-      importedAccount: account
-        ? { ...account, backendReferenceId: reference.id }
-        : null,
-    };
-  }
-
-  const post = mapImportedPostAnalysis(mapped);
-
-  return {
-    ...empty,
-    importedPosts: post ? [{ ...post, backendReferenceId: reference.id }] : [],
-  };
-}
-
-export function mapReferenceImportState(value: unknown): ReferenceImportState {
-  if (!isRecord(value)) return createEmptyReferenceImport();
-
-  return {
-    error: typeof value.error === "string" ? value.error : "",
-    importedAccount:
-      value.importedAccount === null || value.importedAccount === undefined
-        ? null
-        : mapImportedAccountAnalysis(value.importedAccount),
-    importedPosts: Array.isArray(value.importedPosts)
-      ? value.importedPosts
-          .map((post) => mapImportedPostAnalysis(post))
-          .filter((post): post is ImportedXhsPostAnalysis => Boolean(post))
-      : [],
-    mode: referenceImportMode(value.mode),
-    url: typeof value.url === "string" ? value.url : "",
   };
 }
 
@@ -491,7 +390,6 @@ export function mapWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
     latestWorkflow: mapSnapshotXhsCommercialWorkflow(value.latestWorkflow),
     outlines,
     postDraft,
-    referenceImport: mapReferenceImportState(value.referenceImport),
     savedDrafts,
     seed: value.seed,
     selectedId: value.selectedId,
@@ -511,7 +409,6 @@ export function createAutoSaveKey(snapshot: WorkspaceSnapshot) {
     latestWorkflow: snapshot.latestWorkflow,
     outlines: snapshot.outlines,
     postDraft: snapshot.postDraft,
-    referenceImport: snapshot.referenceImport,
     savedDrafts: snapshot.savedDrafts,
     seed: snapshot.seed,
     selectedId: snapshot.selectedId,
