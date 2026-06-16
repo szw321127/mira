@@ -9,18 +9,14 @@ import type {
   XhsPopularSamplesAnalysis,
   XhsResearchMode,
 } from './domain';
-import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
 import { parseStringArray, stringifyJson } from '../common/json';
-import {
-  createProviderEndpoint,
-  isRecord,
-  postProviderJson,
-} from '../model-provider/openai-compatible';
 import { PrismaService } from '../prisma/prisma.service';
+import { XhsAuthorizationsService } from '../xhs-authorizations/xhs-authorizations.service';
 import type {
-  AdminContentProviderRuntimeConfig,
-  AdminContentProviderType,
-} from '../admin-content-providers/admin-content-providers.types';
+  XhsAuthorizationRuntime,
+  XhsConnectorPost,
+} from '../xhs-authorizations/xhs-authorizations.types';
+import { XhsConnectorClient } from '../xhs-connector/xhs-connector.client';
 import type {
   BuildXhsResearchOutlinesInput,
   XhsResearchOutlinesResult,
@@ -32,19 +28,15 @@ const outlineBatchInclude = {
   outlines: { orderBy: { position: 'asc' as const } },
 };
 
-const researchProviderPriority: AdminContentProviderType[] = [
-  'custom',
-  'tikhub',
-];
-
 @Injectable()
 export class XhsResearchOutlinesService {
   private readonly logger = new Logger(XhsResearchOutlinesService.name);
 
   constructor(
-    private readonly contentProviders: AdminContentProvidersService,
     private readonly prisma: PrismaService,
     private readonly researchAi: XhsResearchAiService,
+    private readonly authorizations: XhsAuthorizationsService,
+    private readonly connector: XhsConnectorClient,
   ) {}
 
   async buildResearchOutlines(
@@ -63,27 +55,13 @@ export class XhsResearchOutlinesService {
 
     const keywords = buildXhsSearchKeywords({ idea, mode });
     const startedAt = Date.now();
-    const runtimeConfig =
-      await this.contentProviders.getFirstAvailableRuntimeConfig(
-        researchProviderPriority,
-      );
-    const endpoint = runtimeConfig
-      ? createProviderEndpoint(runtimeConfig.baseUrl, 'xhs/posts/search')
-      : null;
-    const searchResult = runtimeConfig
-      ? await this.searchPopularSamples({
-          apiKey: runtimeConfig.apiKey,
-          endpoint: endpoint ?? '',
-          keywords,
-          limit: mode === 'deep' ? 10 : 5,
-        })
-      : {
-          failedKeywords: keywords,
-          samples: [],
-          warnings: [
-            '后台未配置小红书搜索连接器，已先生成可编辑大纲；需要爆款样本分析时请让管理员配置内容来源。',
-          ],
-        };
+    const authorization =
+      await this.authorizations.getActiveRuntimeAuthorization(userId);
+    const searchResult = await this.searchPopularSamples({
+      authorization,
+      keywords,
+      limit: mode === 'deep' ? 10 : 5,
+    });
     const baseAnalysis = analyzeXhsPopularSamples({
       failedKeywords: searchResult.failedKeywords,
       idea,
@@ -114,8 +92,8 @@ export class XhsResearchOutlinesService {
           idea,
           keywords: stringifyJson(keywords),
           mode,
-          providerEndpoint: endpoint,
-          providerType: runtimeConfig?.type ?? 'none',
+          providerEndpoint: null,
+          providerType: 'xhs_connector',
           sampleCount: analysis.sampleCount,
           samples: stringifyJson(analysis.summary.standoutSamples),
           status: analysis.status,
@@ -178,8 +156,7 @@ export class XhsResearchOutlinesService {
   }
 
   private async searchPopularSamples(input: {
-    apiKey: string;
-    endpoint: string;
+    authorization: XhsAuthorizationRuntime;
     keywords: string[];
     limit: number;
   }): Promise<{
@@ -196,17 +173,18 @@ export class XhsResearchOutlinesService {
       await Promise.all(
         chunk.map(async (keyword) => {
           try {
-            const payload = await postProviderJson(
-              input.endpoint,
-              input.apiKey,
-              { keyword, limit: input.limit, sort: 'popular' },
-            );
-            const records = this.extractSearchRecords(payload);
+            const records = await this.connector.searchPosts({
+              authorizationId: input.authorization.id,
+              cookie: input.authorization.cookie,
+              keyword,
+              limit: input.limit,
+              sort: 'popular',
+            });
             validResponseCount += 1;
             const imported = normalizeXhsImportedPosts(
               records.map((record, index) => ({
                 raw: record,
-                source: 'provider',
+                source: 'browser',
                 sourceId:
                   this.pickRawSourceId(record) ??
                   this.pickRawTitle(record) ??
@@ -233,44 +211,14 @@ export class XhsResearchOutlinesService {
 
     if (validResponseCount === 0 && failedKeywords.length) {
       warnings.push(
-        '小红书搜索连接器全部关键词请求失败，已先生成可编辑大纲；请稍后重试或让管理员检查内容来源配置。',
+        '小红书搜索请求全部关键词失败，已先生成可编辑大纲；请确认授权有效后重试。',
       );
     }
 
     return { failedKeywords, samples, warnings };
   }
 
-  private extractSearchRecords(payload: unknown): Record<string, unknown>[] {
-    const data = this.unwrapProviderEnvelope(payload);
-
-    if (Array.isArray(data)) return data.filter(isRecord);
-    if (!isRecord(data)) {
-      throw new BadRequestException('内容来源响应格式无效。');
-    }
-
-    const records = [
-      data.posts,
-      data.items,
-      data.notes,
-      data.noteList,
-      data.note_list,
-    ].find(Array.isArray);
-
-    if (!records) {
-      throw new BadRequestException('内容来源响应格式无效。');
-    }
-
-    return records.filter(isRecord);
-  }
-
-  private unwrapProviderEnvelope(payload: unknown): unknown {
-    if (!isRecord(payload)) return payload;
-    if ('data' in payload) return this.unwrapProviderEnvelope(payload.data);
-    if ('result' in payload) return this.unwrapProviderEnvelope(payload.result);
-    return payload;
-  }
-
-  private pickRawSourceId(record: Record<string, unknown>): string | undefined {
+  private pickRawSourceId(record: XhsConnectorPost): string | undefined {
     const value =
       record.note_id ??
       record.noteId ??
@@ -281,7 +229,7 @@ export class XhsResearchOutlinesService {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
 
-  private pickRawTitle(record: Record<string, unknown>): string | undefined {
+  private pickRawTitle(record: XhsConnectorPost): string | undefined {
     const value = record.title;
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
   }
@@ -407,6 +355,7 @@ export class XhsResearchOutlinesService {
   }
 
   private toProviderType(value: string): XhsResearchRunView['providerType'] {
+    if (value === 'xhs_connector') return 'xhs_connector';
     if (value === 'none') return 'none';
     return value === 'tikhub' ? 'tikhub' : 'custom';
   }

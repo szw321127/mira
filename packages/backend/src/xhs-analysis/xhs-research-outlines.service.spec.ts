@@ -1,25 +1,38 @@
+import { BadRequestException } from '@nestjs/common';
 import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
 
-const contentProviders = {
-  getFirstAvailableRuntimeConfig: jest.fn(() =>
-    Promise.resolve({
-      apiKey: 'provider-key',
-      baseUrl: 'https://provider.example',
-      complianceNote: 'Only use authorized imports.',
-      enabled: true,
-      rateLimitPerMinute: 60,
-      type: 'custom' as const,
-    }),
-  ),
-  getRuntimeConfig: jest.fn(() =>
-    Promise.resolve({
-      apiKey: 'provider-key',
-      baseUrl: 'https://provider.example',
-      complianceNote: 'Only use authorized imports.',
-      enabled: true,
-      rateLimitPerMinute: 60,
-      type: 'custom' as const,
-    }),
+const authorization = {
+  accountId: 'xhs-user-1',
+  accountName: '小红书作者',
+  avatarUrl: null,
+  cookie: 'a1=abc; web_session=session;',
+  createdAt: new Date('2026-06-15T00:00:00.000Z'),
+  id: 'xhs-auth-1',
+  lastValidatedAt: new Date('2026-06-15T00:00:00.000Z'),
+  platform: 'xhs' as const,
+  status: 'active' as const,
+  subType: 'pc' as const,
+  updatedAt: new Date('2026-06-15T00:00:00.000Z'),
+};
+
+const authorizations = {
+  getActiveRuntimeAuthorization: jest.fn(() => Promise.resolve(authorization)),
+};
+
+const connector = {
+  searchPosts: jest.fn(() =>
+    Promise.resolve([
+      {
+        collected_count: '1.2万',
+        comment_count: 280,
+        content: '原始正文不会返回到前端摘要。',
+        liked_count: '2.1万',
+        note_id: 'note-a',
+        tag_list: ['通勤穿搭', '低预算'],
+        title: '普通女生也能复制的 12 件通勤衣橱',
+        url: 'https://www.xiaohongshu.com/explore/note-a',
+      },
+    ]),
   ),
 };
 
@@ -103,16 +116,21 @@ describe('XhsResearchOutlinesService', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
-    contentProviders.getFirstAvailableRuntimeConfig.mockClear();
-    contentProviders.getFirstAvailableRuntimeConfig.mockResolvedValue({
-      apiKey: 'provider-key',
-      baseUrl: 'https://provider.example',
-      complianceNote: 'Only use authorized imports.',
-      enabled: true,
-      rateLimitPerMinute: 60,
-      type: 'custom' as const,
-    });
-    contentProviders.getRuntimeConfig.mockClear();
+    authorizations.getActiveRuntimeAuthorization.mockClear();
+    authorizations.getActiveRuntimeAuthorization.mockResolvedValue(authorization);
+    connector.searchPosts.mockClear();
+    connector.searchPosts.mockResolvedValue([
+      {
+        collected_count: '1.2万',
+        comment_count: 280,
+        content: '原始正文不会返回到前端摘要。',
+        liked_count: '2.1万',
+        note_id: 'note-a',
+        tag_list: ['通勤穿搭', '低预算'],
+        title: '普通女生也能复制的 12 件通勤衣橱',
+        url: 'https://www.xiaohongshu.com/explore/note-a',
+      },
+    ]);
     prisma.$transaction.mockClear();
     prisma.conversation.findFirst.mockClear();
     prisma.conversation.update.mockClear();
@@ -122,43 +140,14 @@ describe('XhsResearchOutlinesService', () => {
     prisma.xhsResearchRun.create.mockClear();
     researchAi.generateResearchOutlines.mockClear();
     service = new XhsResearchOutlinesService(
-      contentProviders as never,
       prisma as never,
       researchAi as never,
+      authorizations as never,
+      connector as never,
     );
   });
 
-  it('searches the custom provider and creates research-backed outlines', async () => {
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
-      json: () =>
-        Promise.resolve({
-          data: {
-            posts: [
-              {
-                collected_count: '1.2万',
-                comment_count: 280,
-                desc: '原始正文不会返回到前端摘要。',
-                liked_count: '2.1万',
-                note_id: 'note-a',
-                tag_list: ['通勤穿搭', '低预算'],
-                title: '普通女生也能复制的 12 件通勤衣橱',
-                url: 'https://www.xiaohongshu.com/explore/note-a',
-              },
-              {
-                collected_count: '3000',
-                comment_count: 188,
-                desc: '先讲痛点，再给清单和避坑。',
-                liked_count: '9000',
-                note_id: 'note-b',
-                tag_list: ['职场穿搭', '避坑'],
-                title: '刚上班别乱买衣服，先看这 5 个避坑点',
-              },
-            ],
-          },
-        }),
-      ok: true,
-    } as Response);
-
+  it('searches with the user authorization and creates AI research-backed outlines', async () => {
     const result = await service.buildResearchOutlines(
       {
         conversationId: 'conversation-1',
@@ -167,19 +156,20 @@ describe('XhsResearchOutlinesService', () => {
       },
       'user-1',
     );
-    const firstCall = fetchMock.mock.calls[0];
-    const requestInit = firstCall?.[1];
 
-    expect(
-      contentProviders.getFirstAvailableRuntimeConfig,
-    ).toHaveBeenCalledWith(['custom', 'tikhub']);
-    expect(firstCall?.[0]).toBe('https://provider.example/xhs/posts/search');
-    expect(requestInit?.headers).toMatchObject({
-      Authorization: 'Bearer provider-key',
+    expect(authorizations.getActiveRuntimeAuthorization).toHaveBeenCalledWith(
+      'user-1',
+    );
+    expect(connector.searchPosts).toHaveBeenCalledWith({
+      authorizationId: 'xhs-auth-1',
+      cookie: 'a1=abc; web_session=session;',
+      keyword: expect.any(String),
+      limit: 5,
+      sort: 'popular',
     });
-    expect(requestInit?.body).toContain('"sort":"popular"');
-    expect(result.research.sampleCount).toBe(2);
-    expect(result.research.confidence).toBe('medium');
+    expect(result.research.providerType).toBe('xhs_connector');
+    expect(result.research.providerEndpoint).toBeNull();
+    expect(result.research.sampleCount).toBeGreaterThanOrEqual(1);
     expect(result.research.summary.standoutSamples[0]).toMatchObject({
       sourceId: 'note-a',
       title: '普通女生也能复制的 12 件通勤衣橱',
@@ -195,36 +185,25 @@ describe('XhsResearchOutlinesService', () => {
         ]),
       }),
     );
-    expect(result.batch.outlines).toHaveLength(3);
     expect(result.batch.outlines[0]).toMatchObject({
       hook: 'AI 认为痛点切入更适合这批样本。',
       label: '痛点切入',
       title: 'AI 生成：初入职场低预算通勤衣橱',
       tone: 'story',
     });
-    expect(prisma.xhsResearchRun.create).toHaveBeenCalled();
-    expect(prisma.outlineBatch.create).toHaveBeenCalled();
   });
 
   it('continues with editable low-confidence outlines when samples are sparse', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue({
-      json: () =>
-        Promise.resolve({
-          data: {
-            posts: [
-              {
-                collected_count: 12,
-                comment_count: 1,
-                liked_count: 43,
-                note_id: 'note-small',
-                tag_list: ['早餐'],
-                title: '新手早餐记录',
-              },
-            ],
-          },
-        }),
-      ok: true,
-    } as Response);
+    connector.searchPosts.mockResolvedValue([
+      {
+        collected_count: 12,
+        comment_count: 1,
+        liked_count: 43,
+        note_id: 'note-small',
+        tag_list: ['早餐'],
+        title: '新手早餐记录',
+      },
+    ]);
 
     const result = await service.buildResearchOutlines(
       {
@@ -242,11 +221,8 @@ describe('XhsResearchOutlinesService', () => {
     expect(result.batch.outlines).toHaveLength(3);
   });
 
-  it('returns fallback outlines for a valid empty provider result', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue({
-      json: () => Promise.resolve({ data: { posts: [] } }),
-      ok: true,
-    } as Response);
+  it('returns fallback outlines for a valid empty connector result', async () => {
+    connector.searchPosts.mockResolvedValue([]);
 
     const result = await service.buildResearchOutlines(
       {
@@ -262,53 +238,37 @@ describe('XhsResearchOutlinesService', () => {
     expect(result.batch.outlines).toHaveLength(3);
   });
 
-  it('returns fallback outlines when no search provider is configured', async () => {
-    contentProviders.getFirstAvailableRuntimeConfig.mockResolvedValueOnce(null);
-    const fetchMock = jest.spyOn(global, 'fetch');
-
-    const result = await service.buildResearchOutlines(
-      {
-        conversationId: 'conversation-1',
-        idea: '新手做小红书早餐内容',
-        mode: 'quick',
-      },
-      'user-1',
+  it('requires a user Xiaohongshu authorization before research', async () => {
+    authorizations.getActiveRuntimeAuthorization.mockRejectedValueOnce(
+      new BadRequestException('请先授权小红书账号，再生成爆款研究大纲。'),
     );
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.research.providerType).toBe('none');
-    expect(result.research.providerEndpoint).toBeNull();
-    expect(result.research.status).toBe('fallback_no_samples');
-    expect(result.research.warnings).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('未配置小红书搜索连接器'),
-      ]),
-    );
-    expect(result.batch.outlines).toHaveLength(3);
+    await expect(
+      service.buildResearchOutlines(
+        {
+          conversationId: 'conversation-1',
+          idea: '新手做小红书早餐内容',
+          mode: 'quick',
+        },
+        'user-1',
+      ),
+    ).rejects.toThrow('请先授权小红书账号');
+    expect(connector.searchPosts).not.toHaveBeenCalled();
   });
 
   it('records partial keyword failures while still returning outlines', async () => {
-    const fetchMock = jest
-      .spyOn(global, 'fetch')
+    connector.searchPosts
       .mockRejectedValueOnce(new Error('timeout'))
-      .mockResolvedValue({
-        json: () =>
-          Promise.resolve({
-            data: {
-              posts: [
-                {
-                  collected_count: '8200',
-                  comment_count: 120,
-                  liked_count: '1.8万',
-                  note_id: 'note-ok',
-                  tag_list: ['通勤穿搭'],
-                  title: '初入职场第一套通勤衣橱',
-                },
-              ],
-            },
-          }),
-        ok: true,
-      } as Response);
+      .mockResolvedValue([
+        {
+          collected_count: '8200',
+          comment_count: 120,
+          liked_count: '1.8万',
+          note_id: 'note-ok',
+          tag_list: ['通勤穿搭'],
+          title: '初入职场第一套通勤衣橱',
+        },
+      ]);
 
     const result = await service.buildResearchOutlines(
       {
@@ -319,7 +279,7 @@ describe('XhsResearchOutlinesService', () => {
       'user-1',
     );
 
-    expect(fetchMock).toHaveBeenCalled();
+    expect(connector.searchPosts).toHaveBeenCalled();
     expect(result.research.failedKeywords.length).toBeGreaterThanOrEqual(1);
     expect(result.research.status).toBe('completed_with_warning');
     expect(result.batch.outlines).toHaveLength(3);

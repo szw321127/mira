@@ -3,6 +3,8 @@ import { AdminContentProvidersModule } from '../admin-content-providers/admin-co
 import { AuthModule } from '../auth/auth.module';
 import { ModelProviderModule } from '../model-provider/model-provider.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { XhsAuthorizationsModule } from '../xhs-authorizations/xhs-authorizations.module';
+import { XhsConnectorModule } from '../xhs-connector/xhs-connector.module';
 import { XhsAnalysisController } from './xhs-analysis.controller';
 import { XhsAnalysisService } from './xhs-analysis.service';
 import { XhsReferencesController } from './xhs-references.controller';
@@ -17,6 +19,8 @@ import { XhsResearchOutlinesService } from './xhs-research-outlines.service';
     AuthModule,
     ModelProviderModule,
     PrismaModule,
+    XhsAuthorizationsModule,
+    XhsConnectorModule,
   ],
   providers: [
     XhsAnalysisService,

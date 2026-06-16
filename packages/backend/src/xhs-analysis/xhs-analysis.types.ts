@@ -13,7 +13,10 @@ import type {
 import type { AdminContentProviderType } from '../admin-content-providers/admin-content-providers.types';
 import type { BackendPostDraftView } from '../conversations/conversations.types';
 
-export type XhsResearchProviderType = AdminContentProviderType | 'none';
+export type XhsResearchProviderType =
+  | AdminContentProviderType
+  | 'none'
+  | 'xhs_connector';
 
 export type ImportXhsPostInput = {
   conversationId?: string;

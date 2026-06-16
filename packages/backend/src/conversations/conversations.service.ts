@@ -753,6 +753,7 @@ export class ConversationsService {
   }
 
   private toXhsResearchProviderType(value: string) {
+    if (value === 'xhs_connector') return 'xhs_connector';
     if (value === 'none') return 'none';
     return value === 'tikhub' ? 'tikhub' : 'custom';
   }
