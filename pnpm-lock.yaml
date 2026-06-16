@@ -268,6 +268,8 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/xhs-connector: {}
+
 packages:
 
   '@ai-sdk/gateway@3.0.124':

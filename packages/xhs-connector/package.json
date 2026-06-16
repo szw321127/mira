@@ -1,0 +1,10 @@
+{
+  "name": "@rednote/xhs-connector",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/run-python.mjs -m uvicorn app.main:app --host 0.0.0.0 --port-env XHS_CONNECTOR_PORT --default-port 8800 --reload",
+    "start": "node scripts/run-python.mjs -m uvicorn app.main:app --host 0.0.0.0 --port-env XHS_CONNECTOR_PORT --default-port 8800",
+    "test": "node scripts/run-python.mjs -m unittest discover -s tests"
+  }
+}
