@@ -9,7 +9,7 @@
     "pnpm": ">=10.7.0"
   },
   "scripts": {
-    "dev": "concurrently -n \"backend,web,admin\" -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" \"pnpm dev:backend\" \"pnpm dev:frontend\" \"pnpm dev:admin\"",
+    "dev": "concurrently -n \"connector,backend,web,admin\" -c \"bgCyan.bold,bgBlue.bold,bgMagenta.bold,bgGreen.bold\" \"pnpm dev:connector\" \"pnpm dev:backend\" \"pnpm dev:frontend\" \"pnpm dev:admin\"",
     "dev:agent": "pnpm --filter @rednote/agent dev",
     "dev:backend": "pnpm --filter @rednote/backend start:dev",
     "dev:connector": "pnpm --filter @rednote/xhs-connector dev",
