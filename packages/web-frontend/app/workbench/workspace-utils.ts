@@ -180,7 +180,9 @@ export function mapSnapshotXhsResearchRun(value: unknown): XhsResearchRun | null
     mode: value.mode === "deep" ? "deep" : "quick",
     providerEndpoint: optionalString(value.providerEndpoint),
     providerType:
-      value.providerType === "tikhub"
+      value.providerType === "xhs_connector"
+        ? "xhs_connector"
+        : value.providerType === "tikhub"
         ? "tikhub"
         : value.providerType === "none"
           ? "none"

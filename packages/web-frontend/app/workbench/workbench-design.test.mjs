@@ -289,6 +289,7 @@ test("workbench generates outlines through Xiaohongshu research", () => {
   assert.match(utils, /mapSnapshotXhsResearchRun/);
   assert.match(utils, /latestResearch: mapSnapshotXhsResearchRun/);
   assert.match(utils, /latestResearch: snapshot\.latestResearch/);
+  assert.match(utils, /value\.providerType === "xhs_connector"/);
   assert.match(source, /latestResearch, setLatestResearch/);
   assert.match(source, /api\.xhs\.researchOutlines/);
   assert.match(source, /mode: "quick"/);
@@ -299,6 +300,25 @@ test("workbench generates outlines through Xiaohongshu research", () => {
   assert.doesNotMatch(outline, /参考来源/);
   assert.match(outline, /standoutSamples/);
   assert.doesNotMatch(outline, /content/);
+});
+
+test("workbench collects user Xiaohongshu authorization before research", () => {
+  const source = readFileSync(join(root, "..", "page.tsx"), "utf8");
+  const api = readFileSync(join(root, "..", "..", "lib", "api.ts"), "utf8");
+  const panel = readWorkbenchFile("xhs-authorization-panel.tsx");
+
+  assert.match(api, /XhsAuthorization/);
+  assert.match(api, /xhsAuthorizations:/);
+  assert.match(api, /\/xhs-authorizations\/current/);
+  assert.match(api, /\/xhs-authorizations/);
+  assert.match(source, /xhsAuthorization, setXhsAuthorization/);
+  assert.match(source, /refreshXhsAuthorization/);
+  assert.match(source, /XhsAuthorizationPanel/);
+  assert.match(source, /请先授权小红书账号/);
+  assert.match(panel, /小红书授权/);
+  assert.match(panel, /Cookie/);
+  assert.match(panel, /onSave/);
+  assert.doesNotMatch(panel, /参考来源/);
 });
 
 test("workbench can repair an unready Xiaohongshu publish package", () => {
