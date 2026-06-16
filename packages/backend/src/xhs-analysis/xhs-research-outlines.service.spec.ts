@@ -284,4 +284,21 @@ describe('XhsResearchOutlinesService', () => {
     expect(result.research.status).toBe('completed_with_warning');
     expect(result.batch.outlines).toHaveLength(3);
   });
+
+  it('fails clearly instead of generating fallback outlines when all connector searches fail', async () => {
+    connector.searchPosts.mockRejectedValue(new Error('connector unavailable'));
+
+    await expect(
+      service.buildResearchOutlines(
+        {
+          conversationId: 'conversation-1',
+          idea: '给初入职场女生做低预算通勤穿搭',
+          mode: 'quick',
+        },
+        'user-1',
+      ),
+    ).rejects.toThrow('小红书搜索服务暂时不可用');
+    expect(researchAi.generateResearchOutlines).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
 });

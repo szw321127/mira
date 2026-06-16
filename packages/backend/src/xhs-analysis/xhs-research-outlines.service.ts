@@ -210,8 +210,8 @@ export class XhsResearchOutlinesService {
     }
 
     if (validResponseCount === 0 && failedKeywords.length) {
-      warnings.push(
-        '小红书搜索请求全部关键词失败，已先生成可编辑大纲；请确认授权有效后重试。',
+      throw new BadRequestException(
+        '小红书搜索服务暂时不可用，请确认小红书授权有效并稍后重试。',
       );
     }
 
