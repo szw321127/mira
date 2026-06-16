@@ -3,7 +3,7 @@ import type {
   XhsImageTextPage,
   XhsImageTextPublishPackage,
   XhsPublishPackageAudit,
-} from '@rednote/agent/xhs-analysis';
+} from './domain';
 import { AdminModelConfigsService } from '../admin-model-configs/admin-model-configs.service';
 import {
   createProviderEndpoint,

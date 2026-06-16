@@ -1,5 +1,5 @@
 import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
-import type { XhsPostInput } from '@rednote/agent/xhs-analysis';
+import type { XhsPostInput } from '../domain';
 
 type XhsMetricValue = number | string | null | undefined;
 

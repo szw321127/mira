@@ -7,7 +7,7 @@ import type {
   XhsPublishPackageAudit,
   XhsPopularSamplesAnalysis,
   XhsResearchMode,
-} from '@rednote/agent/xhs-analysis';
+} from './domain';
 import type { AdminContentProviderType } from '../admin-content-providers/admin-content-providers.types';
 
 export type ImportXhsPostInput = {

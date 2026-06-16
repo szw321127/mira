@@ -75,9 +75,6 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
-    "moduleNameMapper": {
-      "^@rednote/agent/xhs-analysis$": "<rootDir>/../../agent/src/xhs-analysis/index.ts"
-    },
     "transform": {
       "^.+\\.(t|j)s$": [
         "ts-jest",

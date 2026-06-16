@@ -67,7 +67,7 @@ For RedNote, the safer commercial path is:
 
 1. Accept structured Xiaohongshu samples from user import, browser-assisted
    collection, or configured third-party providers.
-2. Keep the agent analysis core independent from any specific crawler.
+2. Keep the backend analysis domain independent from any specific crawler.
 3. Add provider adapters later behind explicit admin configuration and clear
    rate limits.
 4. Do not copy signing algorithms, stealth scripts, or crawler code from
@@ -76,9 +76,9 @@ For RedNote, the safer commercial path is:
 This lets the product deliver account/post analysis and better generation
 without making the first commercial release depend on fragile scraping.
 
-## Current Agent Implementation
+## Current Backend Domain Implementation
 
-Implemented in `packages/agent/src/xhs-analysis`:
+Implemented in `packages/backend/src/xhs-analysis/domain`:
 
 - `normalizeXhsCount`: converts Xiaohongshu count text like `1.2万` and `3.5w`.
 - `analyzeXhsPost`: turns one structured note into format, engagement,

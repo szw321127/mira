@@ -8,7 +8,7 @@ import {
 import type {
   XhsAccountAnalysis,
   XhsPostAnalysis,
-} from '@rednote/agent/xhs-analysis';
+} from '../domain';
 
 export class BuildXhsGenerationBriefDto {
   @IsOptional()

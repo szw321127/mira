@@ -5,7 +5,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import type { XhsPostMetrics } from '@rednote/agent/xhs-analysis';
+import type { XhsPostMetrics } from '../domain';
 
 export class AnalyzeXhsPostDto {
   @IsOptional()

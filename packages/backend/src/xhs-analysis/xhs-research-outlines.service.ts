@@ -4,12 +4,12 @@ import {
   buildXhsResearchBackedOutlines,
   buildXhsSearchKeywords,
   normalizeXhsImportedPosts,
-} from '@rednote/agent/xhs-analysis';
+} from './domain';
 import type {
   XhsPopularSampleInput,
   XhsPopularSamplesAnalysis,
   XhsResearchMode,
-} from '@rednote/agent/xhs-analysis';
+} from './domain';
 import { AdminContentProvidersService } from '../admin-content-providers/admin-content-providers.service';
 import { parseStringArray, stringifyJson } from '../common/json';
 import {

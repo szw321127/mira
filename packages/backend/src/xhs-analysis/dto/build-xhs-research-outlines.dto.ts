@@ -1,5 +1,5 @@
 import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
-import type { XhsResearchMode } from '@rednote/agent/xhs-analysis';
+import type { XhsResearchMode } from '../domain';
 
 export class BuildXhsResearchOutlinesDto {
   @IsString()

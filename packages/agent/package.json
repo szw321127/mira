@@ -11,18 +11,13 @@
       "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./xhs-analysis": {
-      "development": "./src/xhs-analysis/index.ts",
-      "types": "./src/xhs-analysis/index.ts",
-      "default": "./dist/xhs-analysis/index.js"
-    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "ts-node src/test.ts",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "jest"
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",
