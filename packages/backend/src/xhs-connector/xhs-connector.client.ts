@@ -52,24 +52,32 @@ export class XhsConnectorClient {
   }
 
   private async post(path: string, body: unknown): Promise<unknown> {
-    const baseUrl = this.configService.get<string>('XHS_CONNECTOR_BASE_URL')?.trim();
-    const apiKey = this.configService.get<string>('XHS_CONNECTOR_API_KEY')?.trim();
+    const { apiKey, baseUrl } = this.getConnectorConfig();
 
     if (!baseUrl || !apiKey) {
       throw new BadRequestException('请先配置小红书连接器服务。');
     }
 
-    const response = await fetch(
-      `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`,
-      {
-        body: JSON.stringify(body),
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`,
+        {
+          body: JSON.stringify(body),
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
         },
-        method: 'POST',
-      },
-    );
+      );
+    } catch {
+      throw new BadRequestException(
+        '小红书连接器服务不可用，请确认已启动 pnpm dev:connector。',
+      );
+    }
+
     const payload: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
@@ -77,6 +85,31 @@ export class XhsConnectorClient {
     }
 
     return payload;
+  }
+
+  private getConnectorConfig() {
+    const configuredBaseUrl = this.configService
+      .get<string>('XHS_CONNECTOR_BASE_URL')
+      ?.trim();
+    const configuredApiKey = this.configService
+      .get<string>('XHS_CONNECTOR_API_KEY')
+      ?.trim();
+
+    if (configuredBaseUrl || configuredApiKey) {
+      return {
+        apiKey: configuredApiKey,
+        baseUrl: configuredBaseUrl,
+      };
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      return {
+        apiKey: 'rednote-local-xhs-connector-key',
+        baseUrl: 'http://localhost:8800',
+      };
+    }
+
+    return { apiKey: configuredApiKey, baseUrl: configuredBaseUrl };
   }
 
   private unwrapData(payload: unknown): unknown {
