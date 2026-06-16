@@ -33,6 +33,25 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
+export type XhsAuthorizationStatus =
+  | "active"
+  | "deleted"
+  | "expired"
+  | "invalid";
+
+export type XhsAuthorization = {
+  accountId: string | null;
+  accountName: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  id: string;
+  lastValidatedAt: string | null;
+  platform: "xhs";
+  status: XhsAuthorizationStatus;
+  subType: "pc";
+  updatedAt: string;
+};
+
 export type BackendOutline = {
   batchId: string;
   createdAt: string;
@@ -328,7 +347,7 @@ export type XhsResearchRun = {
   keywords: string[];
   mode: "deep" | "quick";
   providerEndpoint: string | null;
-  providerType: "custom" | "none" | "tikhub";
+  providerType: "custom" | "none" | "tikhub" | "xhs_connector";
   sampleCount: number;
   status: XhsResearchStatus;
   summary: XhsResearchSummary;
@@ -589,6 +608,23 @@ export const api = {
     me: (token: string) => request<AuthUser>("/auth/me", { token }),
     register: (body: { account: string; name: string; password: string }) =>
       request<AuthResponse>("/auth/register", { body, method: "POST" }),
+  },
+  xhsAuthorizations: {
+    current: (token: string) =>
+      request<XhsAuthorization | null>("/xhs-authorizations/current", {
+        token,
+      }),
+    create: (token: string, body: { cookie: string }) =>
+      request<XhsAuthorization>("/xhs-authorizations", {
+        body,
+        method: "POST",
+        token,
+      }),
+    delete: (token: string, authorizationId: string) =>
+      request<XhsAuthorization>(`/xhs-authorizations/${authorizationId}`, {
+        method: "DELETE",
+        token,
+      }),
   },
   conversations: {
     create: (token: string, body: { title?: string; topic: string }) =>

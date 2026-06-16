@@ -11,6 +11,7 @@ import {
   type AuthUser,
   type BackendConversation,
   type XhsCommercialWorkflow,
+  type XhsAuthorization,
   type XhsImageTextPublishPackage,
   type XhsResearchRun,
 } from "@/lib/api";
@@ -43,6 +44,7 @@ import { ConversationRail } from "./workbench/conversation-rail";
 import { IdeaComposer } from "./workbench/idea-composer";
 import { OutlineWorkspace } from "./workbench/outline-workspace";
 import { PostEditor } from "./workbench/post-editor";
+import { XhsAuthorizationPanel } from "./workbench/xhs-authorization-panel";
 
 type AuthMode = "login" | "register";
 
@@ -181,6 +183,16 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [registerName, setRegisterName] = useState("");
+  const [xhsAuthorization, setXhsAuthorization] =
+    useState<XhsAuthorization | null>(null);
+  const [xhsAuthorizationCookie, setXhsAuthorizationCookie] = useState("");
+  const [xhsAuthorizationError, setXhsAuthorizationError] = useState("");
+  const [isXhsAuthorizationExpanded, setIsXhsAuthorizationExpanded] =
+    useState(false);
+  const [isXhsAuthorizationLoading, setIsXhsAuthorizationLoading] =
+    useState(false);
+  const [isXhsAuthorizationSaving, setIsXhsAuthorizationSaving] =
+    useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [seed, setSeed] = useState("");
   const [batch, setBatch] = useState(-1);
@@ -440,6 +452,99 @@ export default function Home() {
     }
   }
 
+  async function refreshXhsAuthorization(
+    token = accessToken,
+    options: { silent?: boolean } = {},
+  ) {
+    if (!token) return null;
+
+    setIsXhsAuthorizationLoading(true);
+
+    try {
+      const authorization = await api.xhsAuthorizations.current(token);
+
+      setXhsAuthorization(authorization);
+      setXhsAuthorizationError("");
+      if (!authorization && !options.silent) {
+        setIsXhsAuthorizationExpanded(true);
+        setStatusMessage("请先授权小红书账号，再生成爆款研究大纲。");
+      }
+
+      return authorization;
+    } catch (error) {
+      const message = getWorkspaceErrorMessage(
+        error,
+        "小红书授权状态读取失败。",
+      );
+
+      setXhsAuthorizationError(message);
+      if (!options.silent) setStatusMessage(message);
+      return null;
+    } finally {
+      setIsXhsAuthorizationLoading(false);
+    }
+  }
+
+  async function saveXhsAuthorization() {
+    if (!accessToken) {
+      setStatusMessage("请先登录，再授权小红书账号。");
+      return;
+    }
+
+    const cookie = xhsAuthorizationCookie.trim();
+
+    if (!cookie) {
+      setXhsAuthorizationError("请粘贴小红书 PC Cookie。");
+      setIsXhsAuthorizationExpanded(true);
+      return;
+    }
+
+    setIsXhsAuthorizationSaving(true);
+
+    try {
+      const authorization = await api.xhsAuthorizations.create(accessToken, {
+        cookie,
+      });
+
+      setXhsAuthorization(authorization);
+      setXhsAuthorizationCookie("");
+      setXhsAuthorizationError("");
+      setIsXhsAuthorizationExpanded(false);
+      setStatusMessage("小红书授权已保存，可以生成研究大纲。");
+    } catch (error) {
+      setXhsAuthorizationError(
+        getWorkspaceErrorMessage(error, "小红书授权保存失败。"),
+      );
+      setIsXhsAuthorizationExpanded(true);
+    } finally {
+      setIsXhsAuthorizationSaving(false);
+    }
+  }
+
+  async function deleteXhsAuthorization() {
+    if (!accessToken || !xhsAuthorization) return;
+
+    const shouldDelete = window.confirm("删除后，生成大纲前需要重新授权小红书。");
+    if (!shouldDelete) return;
+
+    setIsXhsAuthorizationSaving(true);
+
+    try {
+      await api.xhsAuthorizations.delete(accessToken, xhsAuthorization.id);
+      setXhsAuthorization(null);
+      setXhsAuthorizationCookie("");
+      setXhsAuthorizationError("");
+      setIsXhsAuthorizationExpanded(true);
+      setStatusMessage("已删除小红书授权。");
+    } catch (error) {
+      setXhsAuthorizationError(
+        getWorkspaceErrorMessage(error, "小红书授权删除失败。"),
+      );
+    } finally {
+      setIsXhsAuthorizationSaving(false);
+    }
+  }
+
   async function createInitialWorkspace(token: string) {
     const conversation = await api.conversations.create(token, {
       title: "新对话",
@@ -508,6 +613,7 @@ export default function Home() {
           AUTH_STORAGE_KEY,
           JSON.stringify(nextSession),
         );
+        void refreshXhsAuthorization(nextSession.accessToken, { silent: true });
         await bootstrapWorkspace(nextSession.accessToken);
       } catch (error) {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -631,7 +737,12 @@ export default function Home() {
     window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
     setLoginError("");
     setLoginPassword("");
+    setXhsAuthorization(null);
+    setXhsAuthorizationCookie("");
+    setXhsAuthorizationError("");
+    setIsXhsAuthorizationExpanded(false);
     setStatusMessage(message);
+    void refreshXhsAuthorization(session.accessToken, { silent: true });
     await bootstrapWorkspace(session.accessToken);
   }
 
@@ -698,6 +809,16 @@ export default function Home() {
     if (!validateSeed()) return;
     if (!accessToken) {
       setStatusMessage("请先登录，再生成大纲。");
+      return;
+    }
+
+    const currentAuthorization =
+      xhsAuthorization ??
+      (await refreshXhsAuthorization(accessToken, { silent: true }));
+
+    if (!currentAuthorization) {
+      setIsXhsAuthorizationExpanded(true);
+      setStatusMessage("请先授权小红书账号，再生成爆款研究大纲。");
       return;
     }
 
@@ -1403,6 +1524,10 @@ export default function Home() {
     setLoginError("");
     setLatestWorkflow(null);
     setLatestResearch(null);
+    setXhsAuthorization(null);
+    setXhsAuthorizationCookie("");
+    setXhsAuthorizationError("");
+    setIsXhsAuthorizationExpanded(false);
     setOutlines([]);
     setPostDraft(null);
     setSavedDrafts([]);
@@ -1646,6 +1771,24 @@ export default function Home() {
                   setStatusMessage("主题已更新，重新生成大纲后生效。");
                 }}
                 seed={seed}
+              />
+              <XhsAuthorizationPanel
+                authorization={xhsAuthorization}
+                cookieDraft={xhsAuthorizationCookie}
+                error={xhsAuthorizationError}
+                isExpanded={isXhsAuthorizationExpanded}
+                isLoading={isXhsAuthorizationLoading}
+                isSaving={isXhsAuthorizationSaving}
+                onCookieChange={(value) => {
+                  setXhsAuthorizationCookie(value);
+                  if (xhsAuthorizationError) setXhsAuthorizationError("");
+                }}
+                onDelete={() => void deleteXhsAuthorization()}
+                onRefresh={() => void refreshXhsAuthorization()}
+                onSave={() => void saveXhsAuthorization()}
+                onToggleExpanded={() =>
+                  setIsXhsAuthorizationExpanded((isExpanded) => !isExpanded)
+                }
               />
               <OutlineWorkspace
                 hasPostDraft={Boolean(postDraft)}
