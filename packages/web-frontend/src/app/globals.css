@@ -1,26 +1,240 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(0.99 0.004 20);
+  --surface: oklch(1 0 0);
+  --surface-muted: oklch(0.965 0.006 240);
+  --ink: oklch(0.18 0.01 260);
+  --muted-strong: oklch(0.39 0.018 258);
+  --muted: oklch(0.54 0.018 258);
+  --border: oklch(0.9 0.01 250);
+  --accent: oklch(0.58 0.22 25);
+  --accent-strong: oklch(0.49 0.21 25);
+  --accent-soft: oklch(0.94 0.035 25);
+  --success-soft: oklch(0.94 0.045 150);
+  --success: oklch(0.45 0.12 150);
+  --warning-soft: oklch(0.95 0.055 82);
+  --warning: oklch(0.5 0.13 75);
+  --danger-soft: oklch(0.95 0.045 25);
+  --danger: oklch(0.54 0.18 25);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-foreground: var(--ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei",
+    sans-serif;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.icon-button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+  width: 40px;
+}
+
+.icon-button:hover {
+  background: var(--surface-muted);
+}
+
+.icon-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.icon-button.primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.field {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  padding: 0 12px;
+}
+
+.conversation-item {
+  align-items: flex-start;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.conversation-item:hover,
+.conversation-item[data-active="true"] {
+  background: var(--surface);
+}
+
+.prompt-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--ink);
+  padding: 12px 14px;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.prompt-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.message {
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.message.user {
+  background: var(--accent-soft);
+  margin-left: auto;
+  max-width: min(640px, 90%);
+}
+
+.message.assistant {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.message-meta {
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.agent-event {
+  align-items: flex-start;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted-strong);
+  display: flex;
+  gap: 9px;
+  padding: 9px 10px;
+}
+
+.agent-event[data-kind="tool-result"] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.agent-event[data-kind="error"],
+.agent-event[data-kind="detection"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.agent-event-icon {
+  display: inline-flex;
+  padding-top: 1px;
+}
+
+.composer {
+  align-items: flex-end;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  gap: 10px;
+  margin: 0 auto;
+  max-width: 768px;
+  padding: 10px;
+}
+
+.composer-input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  max-height: 160px;
+  min-height: 40px;
+  outline: 0;
+  padding: 8px 4px;
+  resize: none;
+  width: 100%;
+}
+
+.notice {
+  background: var(--warning-soft);
+  border-bottom: 1px solid var(--border);
+  color: var(--warning);
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
+.retry-button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink);
+  display: inline-flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
