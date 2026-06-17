@@ -1,9 +1,3 @@
 export { agentLoop, type AgentLoopEvent, type IAgentConfig } from './loop';
-export {
-  globTool,
-  grepTool,
-  listDirectoryTool,
-  readFileTool,
-  ToolRegistry,
-} from './tools';
+export { ToolRegistry, type ToolDefinition } from './tools/registry';
 export { SessionStore, type SessionEntry } from './session';

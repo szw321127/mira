@@ -18,17 +18,18 @@ import type {
   WorkspaceState,
 } from "./types";
 
-function createInitialClientState() {
-  const loaded = loadWorkspaceState();
-
-  return {
-    storageWarning:
-      !loaded && typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY)
-        ? "本地对话数据损坏，已开启一个新对话。"
-        : null,
-    workspace: loaded ?? createInitialWorkspaceState(),
-  };
-}
+const SSR_WORKSPACE_STATE: WorkspaceState = {
+  activeConversationId: "initial-conversation",
+  conversations: [
+    {
+      id: "initial-conversation",
+      title: "新对话",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      messages: [],
+    },
+  ],
+};
 
 function now() {
   return new Date().toISOString();
@@ -92,15 +93,34 @@ function updateActiveConversation(
 
 export function useAgentConversation() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => {
-    return createInitialClientState().workspace;
+    return SSR_WORKSPACE_STATE;
   });
   const [sendState, setSendState] = useState<SendState>("idle");
-  const [storageWarning] = useState<string | null>(() => {
-    return createInitialClientState().storageWarning;
-  });
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const storageLoadedRef = useRef(false);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const loaded = loadWorkspaceState();
+
+      if (loaded) {
+        setWorkspace(loaded);
+      } else {
+        if (window.localStorage.getItem(STORAGE_KEY)) {
+          setStorageWarning("本地对话数据损坏，已开启一个新对话。");
+        }
+        setWorkspace(createInitialWorkspaceState());
+      }
+
+      storageLoadedRef.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!storageLoadedRef.current) return;
     saveWorkspaceState(workspace);
   }, [workspace]);
 

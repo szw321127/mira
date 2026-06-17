@@ -4,7 +4,7 @@ import {
   ModelMessage,
   streamText,
 } from 'ai';
-import { ToolRegistry } from '../tools';
+import { ToolRegistry } from '../tools/registry';
 import { calculateDelay, isRetryable, sleep } from './retry';
 import {
   detect,
