@@ -10,10 +10,10 @@ import {
   sessionContext,
   summarize,
   toolGuide,
-} from './context';
-import { agentLoop, AgentLoopEvent, IAgentConfig } from './loop';
-import { getToolSearchTool, ToolRegistry } from './tools';
-import { UsageTracker } from './usage';
+} from '../context';
+import { agentLoop, AgentLoopEvent, IAgentConfig } from '../loop';
+import { getToolSearchTool, ToolRegistry } from '../tools';
+import { UsageTracker } from '../usage';
 
 type RunLoop = (
   config: IAgentConfig,
