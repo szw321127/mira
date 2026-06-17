@@ -15,7 +15,7 @@ export function EmptyState({ onPrompt }: { onPrompt: (prompt: string) => void })
         <Bot aria-hidden="true" size={22} />
       </div>
       <h1 className="m-0 text-[30px] leading-[1.22] font-bold tracking-normal text-balance text-[var(--ink)] max-md:text-[25px]">
-        今天想让 agent 帮你做什么？
+        今天想让 Mira 帮你做什么？
       </h1>
       <p className="mt-3 mb-0 max-w-[58ch] text-[15px] leading-[1.8] text-pretty text-[var(--muted-strong)]">
         输入问题、资料、计划或想法。Mira 会保留上下文，并把关键过程显示出来。
