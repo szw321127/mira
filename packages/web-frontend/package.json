@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",
+    "@ant-design/x-markdown": "^2.8.0",
     "@rednote/agent": "workspace:*",
     "ai": "^6.0.196",
     "lucide-react": "^0.468.0",

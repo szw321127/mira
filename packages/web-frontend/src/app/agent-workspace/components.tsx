@@ -1,5 +1,7 @@
 "use client";
 
+import { XMarkdown } from "@ant-design/x-markdown";
+import "@ant-design/x-markdown/themes/light.css";
 import {
   AlertTriangle,
   Bot,
@@ -23,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { shouldRenderMarkdown } from "./message-rendering";
 import type { ChatEvent, ChatMessage, Conversation, SendState } from "./types";
 
 function formatTime(value: string) {
@@ -267,6 +270,7 @@ function AgentEventRow({ event }: { event: ChatEvent }) {
 
 function MessageBlock({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+  const renderMarkdown = shouldRenderMarkdown(message.role);
   const fallback =
     message.status === "streaming"
       ? "正在组织回答..."
@@ -284,7 +288,18 @@ function MessageBlock({ message }: { message: ChatMessage }) {
         <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       </div>
       {message.content ? (
-        <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
+        renderMarkdown ? (
+          <XMarkdown
+            className="message-markdown"
+            content={message.content}
+            escapeRawHtml
+            openLinksInNewTab
+          />
+        ) : (
+          <p className="whitespace-pre-wrap text-sm leading-7">
+            {message.content}
+          </p>
+        )
       ) : null}
       {!message.content && fallback ? (
         <p className="text-sm text-[var(--muted-strong)]">{fallback}</p>
