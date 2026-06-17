@@ -46,14 +46,33 @@ class XhsPcApiAdapter:
 
     def _create_spider_api(self) -> Any:
         self._ensure_spider_path()
-        from apis.xhs_pc_apis import XHS_Apis  # type: ignore
+
+        try:
+            from apis.xhs_pc_apis import XHS_Apis  # type: ignore
+        except ModuleNotFoundError as exc:
+            if exc.name == "apis":
+                raise XhsAdapterError(
+                    "SPIDER_XHS_PATH is invalid: cannot import apis.xhs_pc_apis."
+                ) from exc
+            raise
 
         return XHS_Apis()
 
     @staticmethod
     def _ensure_spider_path() -> None:
         sdk_path = os.getenv("SPIDER_XHS_PATH", "").strip()
-        if sdk_path:
-            path = Path(sdk_path).expanduser().resolve()
-            if str(path) not in sys.path:
-                sys.path.insert(0, str(path))
+        if not sdk_path:
+            raise XhsAdapterError(
+                "SPIDER_XHS_PATH is required. Set it to the local Spider_XHS repo path."
+            )
+
+        path = Path(sdk_path).expanduser().resolve()
+        api_file = path / "apis" / "xhs_pc_apis.py"
+
+        if not api_file.exists():
+            raise XhsAdapterError(
+                f"SPIDER_XHS_PATH is invalid: missing {api_file}."
+            )
+
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))

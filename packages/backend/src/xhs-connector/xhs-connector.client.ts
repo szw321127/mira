@@ -8,6 +8,7 @@ import type {
 
 type ConnectorEnvelope = {
   data?: unknown;
+  detail?: unknown;
   error?: { message?: unknown };
   message?: unknown;
 };
@@ -123,6 +124,7 @@ export class XhsConnectorClient {
     const nested = body.error?.message;
 
     if (typeof nested === 'string' && nested.trim()) return nested;
+    if (typeof body.detail === 'string' && body.detail.trim()) return body.detail;
     if (typeof body.message === 'string' && body.message.trim()) return body.message;
 
     return '小红书连接器请求失败。';

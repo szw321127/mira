@@ -111,4 +111,27 @@ describe('XhsConnectorClient', () => {
       }),
     ).rejects.toThrow('小红书连接器服务不可用');
   });
+
+  it('surfaces FastAPI detail errors from the connector', async () => {
+    const { client } = createClient({
+      XHS_CONNECTOR_API_KEY: 'connector-key',
+      XHS_CONNECTOR_BASE_URL: 'http://localhost:8800',
+    });
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail:
+            'SPIDER_XHS_PATH is required. Set it to the local Spider_XHS repo path.',
+        }),
+        { headers: { 'Content-Type': 'application/json' }, status: 502 },
+      ),
+    );
+
+    await expect(
+      client.validateCookie({
+        cookie: 'a1=abc; web_session=session;',
+        userId: 'user-1',
+      }),
+    ).rejects.toThrow('SPIDER_XHS_PATH is required');
+  });
 });

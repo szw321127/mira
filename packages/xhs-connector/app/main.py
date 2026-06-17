@@ -51,6 +51,8 @@ def validate_cookie(
         return ok(service.validate_cookie(body.cookie, body.userId))
     except ConnectorInputError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ConnectorUpstreamError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/xhs/posts/search")

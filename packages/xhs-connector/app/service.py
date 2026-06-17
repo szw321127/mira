@@ -26,6 +26,8 @@ class XhsConnectorService:
         try:
             account = self.adapter_factory(cookie).get_self_info()
         except XhsAdapterError as exc:
+            if str(exc).startswith("SPIDER_XHS_PATH"):
+                raise ConnectorUpstreamError(str(exc)) from exc
             return {"account": None, "expires_hint": None, "valid": False, "message": str(exc)}
 
         return {"account": account, "expires_hint": None, "valid": True}

@@ -1,6 +1,10 @@
 import json
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 
+from app.adapters import XhsAdapterError, XhsPcApiAdapter
 from app.auth import ConnectorAuthError, verify_internal_api_key
 from app.cookies import mask_cookie, parse_cookie
 from app.normalizer import normalize_search_note
@@ -112,6 +116,17 @@ class XhsConnectorServiceTest(unittest.TestCase):
         self.assertEqual(result["keyword"], "commute")
         self.assertEqual(result["posts"][0]["note_id"], "note-a")
         self.assertNotIn("session-value", json.dumps(result))
+
+    def test_spider_sdk_missing_path_raises_clear_adapter_error(self):
+        with patch.dict(os.environ, {"SPIDER_XHS_PATH": ""}, clear=False):
+            with self.assertRaisesRegex(XhsAdapterError, "SPIDER_XHS_PATH"):
+                XhsPcApiAdapter("a1=abc; web_session=session;").get_self_info()
+
+    def test_spider_sdk_invalid_path_raises_clear_adapter_error(self):
+        with tempfile.TemporaryDirectory() as sdk_path:
+            with patch.dict(os.environ, {"SPIDER_XHS_PATH": sdk_path}, clear=False):
+                with self.assertRaisesRegex(XhsAdapterError, "xhs_pc_apis.py"):
+                    XhsPcApiAdapter("a1=abc; web_session=session;").get_self_info()
 
 
 if __name__ == "__main__":
