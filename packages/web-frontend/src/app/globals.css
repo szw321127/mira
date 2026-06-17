@@ -20,6 +20,7 @@
   --warning: oklch(0.5 0.13 75);
   --danger-soft: oklch(0.95 0.045 25);
   --danger: oklch(0.54 0.18 25);
+  --workspace-header-height: 65px;
 }
 
 @theme inline {
@@ -128,7 +129,7 @@ input:focus-visible {
   border-bottom: 1px solid var(--border);
   display: none;
   gap: 12px;
-  min-height: 64px;
+  height: var(--workspace-header-height);
   padding: 12px 22px;
 }
 
@@ -164,7 +165,7 @@ input:focus-visible {
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 10px;
-  min-height: 64px;
+  height: var(--workspace-header-height);
   padding: 12px;
 }
 
@@ -551,11 +552,14 @@ input:focus-visible {
 }
 
 .dock-header {
+  align-items: center;
   border-bottom: 1px solid var(--border);
   display: flex;
   gap: 12px;
+  height: var(--workspace-header-height);
   justify-content: space-between;
-  padding: 16px;
+  overflow: hidden;
+  padding: 10px 16px;
 }
 
 .dock-title {
@@ -568,8 +572,12 @@ input:focus-visible {
 .dock-copy {
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.6;
-  margin: 4px 0 0;
+  line-height: 1.35;
+  margin: 2px 0 0;
+  max-width: 176px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dock-status {
