@@ -1,7 +1,6 @@
 export { agentLoop, type AgentLoopEvent, type IAgentConfig } from './loop';
 export {
   createGPTAgentHarness,
-  createGPTHarness,
   type CreateGPTHarnessOptions,
 } from './generator';
 export { ToolRegistry, type ToolDefinition } from './tools/registry';

@@ -1,10 +1,14 @@
 import { LanguageModel, ModelMessage } from 'ai';
 import {
+  applyDefense,
   coreRules,
   deferredTools,
+  estimateTokens,
+  microcompact,
   PromptBuilder,
   PromptContext,
   sessionContext,
+  summarize,
   toolGuide,
 } from './context';
 import { agentLoop, AgentLoopEvent, IAgentConfig } from './loop';
@@ -28,7 +32,7 @@ export interface CreateGPTHarnessOptions {
   runLoop?: RunLoop;
 }
 
-export function createGPTHarness({
+export function createGPTAgentHarness({
   model,
   registry = new ToolRegistry(),
   promptBuilder = new PromptBuilder().pipe('coreRules', coreRules()),
@@ -40,6 +44,8 @@ export function createGPTHarness({
   tracker,
   runLoop = agentLoop,
 }: CreateGPTHarnessOptions) {
+  let summary = '';
+  const timestamps = new Map<number, number>();
   if (!registry.get('tool_search')) {
     registry.register(getToolSearchTool(registry));
   }
@@ -67,17 +73,44 @@ export function createGPTHarness({
     }
 
     messages.push({ role: 'user', content: trimmed });
+    const beforeLen = messages.length - 1;
 
-    yield* runLoop({
-      model,
-      registry,
-      messages,
-      system: promptBuilder.build(getPromptContext()),
-      tokenBudget,
-      maxSteps,
-      maxRetries,
-      tracker,
-    });
+    try {
+      yield* runLoop({
+        model,
+        registry,
+        messages,
+        system: promptBuilder.build(getPromptContext()),
+        tokenBudget,
+        maxSteps,
+        maxRetries,
+        tracker,
+      });
+    } finally {
+      const now = Date.now();
+      for (let i = beforeLen; i < messages.length; i++) {
+        timestamps.set(i, now);
+      }
+      const currentTokens = estimateTokens(messages);
+      if (currentTokens > 50 * 1024) {
+        console.log(`\n  [压缩检查] ~${currentTokens} tokens, 触发压缩...`);
+        const mc2 = microcompact(messages);
+        messages = mc2.messages;
+        if (mc2.cleared > 0)
+          console.log(`  [Microcompact] 清理了 ${mc2.cleared} 个工具结果`);
+
+        const comp2 = await summarize(model, messages, summary);
+        if (comp2.compressedCount > 0) {
+          messages.splice(0, messages.length, ...comp2.messages);
+          summary = comp2.summary;
+          console.log(
+            `  [Summarization] 压缩了 ${comp2.compressedCount} 条消息, ~${estimateTokens(messages)} tokens`,
+          );
+        }
+      }
+      const defense = applyDefense(messages, timestamps);
+      messages.splice(0, messages.length, ...defense.messages);
+    }
   }
 
   async function* runText(content: string): AsyncGenerator<string, void, void> {
@@ -107,5 +140,3 @@ export function createGPTHarness({
     close,
   };
 }
-
-export const createGPTAgentHarness = createGPTHarness;

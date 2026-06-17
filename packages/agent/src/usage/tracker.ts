@@ -20,7 +20,7 @@ export const PRICE_TABLE: Record<string, ModelPricing> = {
     cacheWrite: 1.25,
     cacheRead: 0.1,
   },
-  'gpt-5.5': { input: 5.0, output: 15.0, cacheWrite: 5.0, cacheRead: 1.25 },
+  'gpt-5.5': { input: 5.0, output: 30.0, cacheWrite: 3.0, cacheRead: 0.5 },
   'deepseek-v3-2': {
     input: 0.27,
     output: 1.1,

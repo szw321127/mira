@@ -96,7 +96,7 @@ const COMPRESS_PROMPT = `你是一个对话压缩系统。你的任务是把 Age
 - 不要写笼统的概述，只保留具体的、可操作的信息
 - 总长度控制在 800 字以内`;
 
-const CONTEXT_TOKEN_THRESHOLD = 300;
+const CONTEXT_TOKEN_THRESHOLD = 175 * 1024;
 const KEEP_RECENT_MESSAGES = 6;
 
 export interface CompactionResult {

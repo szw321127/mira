@@ -293,6 +293,8 @@ async function main() {
     // Apply defense after each turn
     const status = estimateMessageTokens(messages);
     console.log(`  [Token] ~${status} tokens`);
+    const defense = applyDefense(messages, timestamps);
+    messages = defense.messages;
 
     ask();
   }
