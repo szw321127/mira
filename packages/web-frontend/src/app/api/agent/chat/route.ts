@@ -34,6 +34,9 @@ const PROJECT_CONTEXT = {
     "当前 Web MVP 提供左侧对话栏、中间线程、底部输入区和右侧 agent 活动面板。浏览器保存本地对话；Next.js 路由在服务端运行 agent 并流式返回事件。",
 };
 
+const MODEL_SETUP_MESSAGE =
+  "需要配置模型后才能运行 agent。请在 packages/web-frontend/.env.local 设置 AGENT_MODEL_BASE_URL、AGENT_MODEL_API_KEY 和 AGENT_MODEL_NAME；这些值只在服务端使用，不要加 NEXT_PUBLIC_。";
+
 const projectContextTool = {
   name: "project_context",
   description:
@@ -96,9 +99,7 @@ function getModel() {
   const modelName = process.env.AGENT_MODEL_NAME;
 
   if (!baseURL || !apiKey || !modelName) {
-    throw new Error(
-      "Missing AGENT_MODEL_BASE_URL, AGENT_MODEL_API_KEY, or AGENT_MODEL_NAME.",
-    );
+    throw new Error(MODEL_SETUP_MESSAGE);
   }
 
   return createOpenAI({ baseURL, apiKey }).chat(modelName);

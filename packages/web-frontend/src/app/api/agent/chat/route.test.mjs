@@ -16,3 +16,12 @@ test("chat route exposes only bounded project context tools", () => {
   );
   assert.match(routeSource, /\bproject_context\b/);
 });
+
+test("chat route returns setup-oriented guidance when model config is missing", () => {
+  assert.match(routeSource, /需要配置模型后才能运行 agent/);
+  assert.match(routeSource, /packages\/web-frontend\/\.env\.local/);
+  assert.match(routeSource, /AGENT_MODEL_BASE_URL/);
+  assert.match(routeSource, /AGENT_MODEL_API_KEY/);
+  assert.match(routeSource, /AGENT_MODEL_NAME/);
+  assert.match(routeSource, /NEXT_PUBLIC_/);
+});
