@@ -6,124 +6,129 @@ Target reviewed:
 
 - Requirements: `docs/gstack/2026-06-17-web-agent-chat-requirements.md`
 - Design: `docs/gstack/2026-06-17-web-agent-chat-frontend-design.md`
-- Current implementation evidence: `packages/web-frontend/src/app/page.tsx`
+- Implementation: `packages/web-frontend/src/app/page.tsx`
+- Components: `packages/web-frontend/src/app/agent-workspace/`
+- API route: `packages/web-frontend/src/app/api/agent/chat/route.ts`
+- Styles: `packages/web-frontend/src/app/globals.css`
 
-Scope note: this is a design-stage review. There is not yet an implemented agent workspace to inspect in browser. The current page is the default Next.js template, so live visual critique of the intended interface would be misleading. Detector check was run against the current `page.tsx` and returned no issues, but that only means the starter page did not trigger the detector. It does not prove the future design.
+Review basis:
+
+- Product register from `PRODUCT.md`.
+- Impeccable product-register guidance for restrained tool UI.
+- Deterministic detector:
+  `node /Users/szw/.agents/skills/impeccable/scripts/detect.mjs --json packages/web-frontend/src/app/page.tsx packages/web-frontend/src/app/agent-workspace packages/web-frontend/src/app/globals.css`
+- Browser smoke review against `http://localhost:3000`.
 
 ## Design Health Score
 
 | # | Heuristic | Score | Key Issue |
 |---|---:|---:|---|
-| 1 | Visibility of System Status | 3 | Agent events, retries, stop reasons, and model config states are specified. Needs implementation proof. |
-| 2 | Match System / Real World | 3 | Xiaohongshu creator language is present. Needs artifact examples in the UI. |
-| 3 | User Control and Freedom | 3 | New chat, stop, retry, local restore, and later editable artifacts are planned. |
-| 4 | Consistency and Standards | 3 | Standard chat shell and product controls are used. Must keep icon/button vocabulary consistent. |
-| 5 | Error Prevention | 3 | Empty-send blocking and missing config states are planned. Tool permission prevention is later phase. |
-| 6 | Recognition Rather Than Recall | 3 | Sidebar, activity rows, and empty-state prompt chips reduce recall. |
-| 7 | Flexibility and Efficiency | 2 | MVP has basic keyboard behavior. Power-user shortcuts and command palette are later. |
-| 8 | Aesthetic and Minimalist Design | 3 | Restrained product UI is appropriate. Right dock may overload MVP if not disciplined. |
-| 9 | Error Recovery | 3 | Retry and preserved user messages are specified. Needs concrete retry UI. |
-| 10 | Help and Documentation | 2 | Missing-model setup is named, but local env guidance must be visible. |
-| **Total** | | **28/40** | Solid design plan, not yet proven in code. |
+| 1 | Visibility of System Status | 4 | Agent event rows, retry rows, stop control, and right-side activity dock make state visible. |
+| 2 | Match System / Real World | 3 | The empty state and system prompt speak to Xiaohongshu content work. Structured artifact editing remains a later phase. |
+| 3 | User Control and Freedom | 4 | Users can create conversations, switch sessions, stop a run, retry after failure, and refresh without losing local work. |
+| 4 | Consistency and Standards | 4 | The shell uses standard side rail, central transcript, bottom composer, semantic buttons, and consistent icon vocabulary. |
+| 5 | Error Prevention | 3 | Empty submissions are blocked and model setup guidance is explicit. Tool permission prompts are intentionally later phase. |
+| 6 | Recognition Rather Than Recall | 4 | Starter prompts, local session rail, visible events, and setup copy reduce recall burden. |
+| 7 | Flexibility and Efficiency | 3 | Enter-to-send, Shift+Enter newline, search, stop, and retry cover MVP efficiency. Power shortcuts are later. |
+| 8 | Aesthetic and Minimalist Design | 4 | Restrained palette, compact event rows, and status-focused dock avoid generic card-heavy or marketing UI. |
+| 9 | Error Recovery | 4 | Missing model configuration preserves the user message and shows retry plus exact `.env.local` guidance. |
+| 10 | Help and Documentation | 3 | Package README documents setup and env vars; inline setup copy is present. Rich onboarding can wait. |
+| **Total** | | **36/40** | Strong MVP product shell with clear Phase 1 boundaries. |
 
 ## Anti-Patterns Verdict
 
-The design avoids the biggest AI slop risks: no landing-page hero, no generic card grid, no purple-blue gradient shell, no decorative glass surfaces, and no hidden black-box agent. It also avoids the easiest ChatGPT clone failure by giving RedNote a context dock and future artifact surface.
+The implemented workspace no longer looks like a starter Next page or a generic landing page. It borrows the reliable parts of ChatGPT's shell pattern (history rail, centered first action, fixed composer) while making RedNote-specific work visible through starter prompts, compact agent activity rows, and the context dock.
 
-Primary risk: the MVP could still become "ChatGPT with a red button" if the agent activity rows and RedNote-specific empty state are treated as optional polish. They are not polish. They are the differentiator.
-
-Detector result:
+AI slop scan:
 
 ```json
 []
 ```
 
-This detector result is low-value because the current file is still the starter page. Re-run `impeccable critique` after the workspace is implemented and running in the browser.
+No detector issues were found in the page, workspace components, or global styles. The UI avoids gradient text, decorative glass, nested cards, side-stripe accents, oversized rounded panels, and repeated marketing-card scaffolds.
+
+## Browser Evidence
+
+The browser smoke review verified:
+
+- Initial workspace renders the conversation rail, RedNote empty state, disabled empty send button, and desktop agent dock.
+- Sending a starter prompt reaches `/api/agent/chat` and shows a setup-oriented missing-model error.
+- Missing-model copy names `packages/web-frontend/.env.local`, `AGENT_MODEL_BASE_URL`, `AGENT_MODEL_API_KEY`, `AGENT_MODEL_NAME`, and warns not to use `NEXT_PUBLIC_`.
+- Retry remains visible after failure and the user message is preserved.
+- Reload restores the latest local conversation.
+- Mobile width hides the desktop rail and dock, shows the menu button, and opens a 280px conversation drawer.
+- Browser console showed no error or warning entries during the smoke review.
+
+Visual overlay injection was not used for this review. The available Browser surface documents Playwright `evaluate` as read-only, so the live detector overlay mutation path is not a reliable signal here. The deterministic detector and browser DOM/runtime checks were used instead.
 
 ## What's Working
 
-1. The phase split is right. Phase 1 proves the agent loop without waiting for backend auth and durable persistence.
-2. The UI structure borrows the reliable parts of ChatGPT while reserving RedNote-specific space for agent work and artifacts.
-3. The stream event schema maps cleanly to the existing `AgentLoopEvent` surface, so the UI can show real agent behavior instead of inventing fake progress states.
+1. The MVP has the right shape for a content operations workspace: side rail for recovery, transcript for conversation, and a dock for agent activity.
+2. The local-first boundary is clear in both UI and docs. Users are told conversations are browser-local and credentials stay server-side.
+3. Agent work is inspectable without taking over the transcript. Tool, retry, detection, token, stop, and error events have compact rows.
 
 ## Priority Issues
 
-### P1: Current implementation contradicts the product goal
+### P2: Model setup could become more actionable
 
-Why it matters: `packages/web-frontend/src/app/page.tsx` still shows the default Next template. A user cannot infer RedNote, agent chat, or creator workflow from the current app.
+Why it matters: The setup error now names the env vars, but a later polish pass could make first-run setup even faster.
 
-Fix: Phase 1 must replace the starter template with the workspace shell before any deeper workflow work.
+Fix: Add a small setup panel or help link in the empty state when env vars are missing, once there is a stable docs route or project settings screen.
 
-Suggested command: `$impeccable craft packages/web-frontend/src/app/page.tsx`
+Suggested command: `$impeccable onboard packages/web-frontend/src/app/page.tsx`
 
-### P1: Agent activity can become noisy
+### P2: Activity dock is status-only in Phase 1
 
-Why it matters: Showing every low-level event inline can make the conversation harder to read than a plain chat app.
+Why it matters: The dock distinguishes RedNote from generic chat, but it will matter more when outline candidates and draft artifacts exist.
 
-Fix: Render text in the transcript, render tool/status events as compact grouped rows, and move detailed activity into the dock or expandable details.
+Fix: In Phase 3, promote generated outlines, draft previews, references, and publish checks into the dock instead of adding more inline transcript noise.
 
-Suggested command: `$impeccable layout packages/web-frontend/src/app/page.tsx`
+Suggested command: `$impeccable shape packages/web-frontend/src/app/agent-workspace/components.tsx`
 
-### P1: Missing-model setup needs a first-class state
+### P3: Power-user efficiency is intentionally basic
 
-Why it matters: The first local run may fail because `AGENT_MODEL_*` variables are missing. If that appears as a generic error, users will think the product is broken.
+Why it matters: Search, Enter-to-send, retry, and stop are enough for MVP, but repeated creator workflows will eventually benefit from shortcuts and structured actions.
 
-Fix: Add a dedicated setup state with the exact required variables and a short explanation that keys stay server-side.
+Fix: Add command shortcuts only after durable conversations and artifact editing exist, so the shortcut vocabulary maps to real work.
 
-Suggested command: `$impeccable clarify packages/web-frontend/src/app/page.tsx`
-
-### P2: The right dock could overload the MVP
-
-Why it matters: Three-pane layouts are powerful on desktop but can turn the MVP into a dashboard before the primary chat loop is proven.
-
-Fix: In Phase 1, keep the right dock narrow and status-focused. Save outline and draft artifact editing for Phase 3 unless implementation stays clean.
-
-Suggested command: `$impeccable distill packages/web-frontend/src/app/page.tsx`
-
-### P2: Local persistence needs visible trust cues
-
-Why it matters: If conversations are only local, users need to know what is saved and what is not. Silent browser-only storage can create false expectations.
-
-Fix: Add a small sidebar footer or status line: local only, saved this browser, setup required for cross-device sync in later phase.
-
-Suggested command: `$impeccable clarify packages/web-frontend/src/app/page.tsx`
+Suggested command: `$impeccable harden packages/web-frontend/src/app/agent-workspace/components.tsx`
 
 ## Persona Red Flags
 
 ### First-time creator
 
-Risk: If the empty state says only "Ask anything," the user may not understand what RedNote agent is best at.
-
-Required fix: Keep RedNote-specific suggested prompts in the empty state and tie them to Xiaohongshu workflows.
+The first action is clear: the empty state asks what Xiaohongshu content to make and offers concrete starter prompts. Remaining risk is model setup; the new error copy names the exact `.env.local` file and variables.
 
 ### Power user
 
-Risk: If tool calls are hidden, the user cannot debug why an answer is slow, expensive, or wrong.
-
-Required fix: Show compact agent event rows and stop/token state from the first MVP.
+Tool activity is visible, and stop/retry controls are present. Remaining risk is lack of keyboard shortcuts beyond Enter and Shift+Enter, which is acceptable for Phase 1.
 
 ### Mobile operator
 
-Risk: A three-zone desktop layout can collapse poorly and bury the composer.
-
-Required fix: Mobile must prioritize transcript and composer. Sidebar and activity dock become temporary panels or inline expanders.
+The mobile shell prioritizes transcript and composer, with the conversation rail behind a menu. The desktop dock is hidden on mobile, which keeps the primary chat loop usable.
 
 ## Questions Skipped
 
-Questions skipped because the user already gave the strategic direction:
+Questions skipped because the remaining issues are later-phase polish, not blockers for the requested MVP:
 
-- Build `web-frontend` as a Next.js app that talks to agent.
-- Use gstack to produce requirements.
-- Use ChatGPT as a reference.
-- Design with `frontend-design`.
-- Review with `impeccable`.
-
-The remaining decisions are implementation-level and should be handled in the Phase 1 plan.
+- Setup guidance is now visible and documented.
+- Artifact editing belongs to Phase 3 per requirements.
+- Power-user shortcuts can wait until workflows are more structured.
 
 ## Recommended Actions
 
-1. Create a Phase 1 implementation plan for the MVP agent workspace.
-2. Implement the shell and streaming route in `packages/web-frontend`.
-3. Run `pnpm --filter @rednote/web-frontend lint`.
-4. Run `pnpm --filter @rednote/web-frontend build`.
-5. Start the local Next server and run a browser-based impeccable critique against the real page.
+1. Ship the Phase 1 MVP as the current baseline.
+2. Use Phase 2 for durable conversations and backend integration.
+3. Use Phase 3 to make the context dock artifact-driven: outlines, drafts, references, and publish checklist.
+4. Re-run `$impeccable critique packages/web-frontend/src/app/page.tsx` after Phase 3 artifact editing lands.
+
+## Run Notes
+
+- Target slug: `packages-web-frontend-src-app-page-tsx`.
+- Ignore list: none present.
+- Assessment independence: degraded, sub-agent permission was not available in this continuation; review was run sequentially.
+- CLI detector: passed with `[]`.
+- Browser visibility: background Browser smoke review completed against `http://localhost:3000`.
+- Overlay injection: skipped because Browser `evaluate` is documented as read-only in this surface.
+- Live-server cleanup: not needed.
+- Temp-file cleanup: not needed.
