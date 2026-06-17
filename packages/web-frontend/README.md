@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RedNote Web Frontend
 
-## Getting Started
+`@rednote/web-frontend` is the Next.js workspace for talking with
+`@rednote/agent`. The MVP is a local-first agent workspace: conversation
+history is saved in the browser, the Next.js API route runs the agent on the
+server, and model credentials never need to be exposed to client code.
 
-First, run the development server:
+## Local Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm --filter @rednote/web-frontend dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 after the dev server starts.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `packages/web-frontend/.env.local` before sending a real agent message:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+AGENT_MODEL_BASE_URL="https://your-model-provider.example/v1"
+AGENT_MODEL_API_KEY="replace-me"
+AGENT_MODEL_NAME="your-chat-model"
+AGENT_MAX_STEPS="8"
+```
 
-## Learn More
+`AGENT_MAX_STEPS` is optional and defaults to `8`. The other three values are
+required by `/api/agent/chat`; if they are missing, the UI shows the setup
+error returned by the API instead of attempting a model call.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm --filter @rednote/web-frontend dev
+pnpm --filter @rednote/web-frontend test
+pnpm --filter @rednote/web-frontend lint
+pnpm --filter @rednote/web-frontend build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Agent Boundary
 
-## Deploy on Vercel
+The browser sends the active conversation to `/api/agent/chat`. The route runs
+`@rednote/agent`, streams newline-delimited JSON back to the UI, and registers
+only a bounded `project_context` tool for product/workflow context. Filesystem
+tools are not exposed in the web route.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Credentials stay server-side in environment variables. Do not prefix them with
+`NEXT_PUBLIC_`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## MVP Persistence
+
+The first phase stores conversations in `localStorage` only. Clearing browser
+site data removes saved conversations. Backend persistence, auth, multi-device
+sync, and shareable conversation links are planned for later phases.
