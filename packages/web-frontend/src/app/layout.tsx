@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RedNote Agent",
-  description: "Talk with the RedNote agent to shape Xiaohongshu content.",
+  title: "Mira Agent",
+  description: "Talk with Mira to shape Xiaohongshu content.",
 };
 
 export default function RootLayout({

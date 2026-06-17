@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteConversation,
+  renameConversation,
+} from "./conversation-actions";
+import {
   createEmptyConversation,
   createInitialWorkspaceState,
   loadWorkspaceState,
@@ -81,10 +85,18 @@ function updateActiveConversation(
   state: WorkspaceState,
   update: (conversation: Conversation) => Conversation,
 ) {
+  return updateConversation(state, state.activeConversationId, update);
+}
+
+function updateConversation(
+  state: WorkspaceState,
+  conversationId: string,
+  update: (conversation: Conversation) => Conversation,
+) {
   return {
     ...state,
     conversations: state.conversations.map((conversation) => {
-      return conversation.id === state.activeConversationId
+      return conversation.id === conversationId
         ? update(conversation)
         : conversation;
     }),
@@ -141,6 +153,25 @@ export function useAgentConversation() {
     setSendState("idle");
   }, []);
 
+  const rename = useCallback((id: string, title: string) => {
+    setWorkspace((current) => renameConversation(current, id, title));
+  }, []);
+
+  const remove = useCallback(
+    (id: string) => {
+      if (id === workspace.activeConversationId) {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setSendState("idle");
+      }
+
+      setWorkspace((current) => {
+        return deleteConversation(current, id, createEmptyConversation);
+      });
+    },
+    [workspace.activeConversationId],
+  );
+
   const selectConversation = useCallback((id: string) => {
     setWorkspace((current) => ({
       ...current,
@@ -174,6 +205,7 @@ export function useAgentConversation() {
         status: "streaming",
         events: [],
       };
+      const requestConversationId = activeConversation.id;
 
       setWorkspace((current) => {
         return updateActiveConversation(current, (conversation) => {
@@ -198,7 +230,7 @@ export function useAgentConversation() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            conversationId: activeConversation.id,
+            conversationId: requestConversationId,
             messages: [...activeConversation.messages, userMessage].map(
               (message) => ({
                 role: message.role,
@@ -231,15 +263,19 @@ export function useAgentConversation() {
           for (const line of parsed.complete) {
             const event = parseAgentStreamEvent(line);
             setWorkspace((current) => {
-              return updateActiveConversation(current, (conversation) => ({
-                ...conversation,
-                updatedAt: now(),
-                messages: conversation.messages.map((message) => {
-                  return message.id === assistantMessage.id
-                    ? appendEvent(message, event)
-                    : message;
+              return updateConversation(
+                current,
+                requestConversationId,
+                (conversation) => ({
+                  ...conversation,
+                  updatedAt: now(),
+                  messages: conversation.messages.map((message) => {
+                    return message.id === assistantMessage.id
+                      ? appendEvent(message, event)
+                      : message;
+                  }),
                 }),
-              }));
+              );
             });
           }
         }
@@ -247,15 +283,19 @@ export function useAgentConversation() {
         if (buffer.trim()) {
           const event = parseAgentStreamEvent(buffer);
           setWorkspace((current) => {
-            return updateActiveConversation(current, (conversation) => ({
-              ...conversation,
-              updatedAt: now(),
-              messages: conversation.messages.map((message) => {
-                return message.id === assistantMessage.id
-                  ? appendEvent(message, event)
-                  : message;
+            return updateConversation(
+              current,
+              requestConversationId,
+              (conversation) => ({
+                ...conversation,
+                updatedAt: now(),
+                messages: conversation.messages.map((message) => {
+                  return message.id === assistantMessage.id
+                    ? appendEvent(message, event)
+                    : message;
+                }),
               }),
-            }));
+            );
           });
         }
       } catch (error) {
@@ -270,15 +310,19 @@ export function useAgentConversation() {
         };
 
         setWorkspace((current) => {
-          return updateActiveConversation(current, (conversation) => ({
-            ...conversation,
-            updatedAt: now(),
-            messages: conversation.messages.map((message) => {
-              return message.id === assistantMessage.id
-                ? appendEvent(message, event)
-                : message;
+          return updateConversation(
+            current,
+            requestConversationId,
+            (conversation) => ({
+              ...conversation,
+              updatedAt: now(),
+              messages: conversation.messages.map((message) => {
+                return message.id === assistantMessage.id
+                  ? appendEvent(message, event)
+                  : message;
+              }),
             }),
-          }));
+          );
         });
         setSendState("error");
         return;
@@ -303,6 +347,8 @@ export function useAgentConversation() {
   return {
     activeConversation,
     conversations: workspace.conversations,
+    deleteConversation: remove,
+    renameConversation: rename,
     selectConversation,
     sendMessage,
     sendState,

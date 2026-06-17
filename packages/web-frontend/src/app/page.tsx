@@ -10,8 +10,10 @@ export default function Home() {
     <AgentWorkspaceShell
       activeConversation={workspace.activeConversation}
       conversations={workspace.conversations}
+      onDelete={workspace.deleteConversation}
       onNew={workspace.startNewConversation}
       onPrompt={workspace.sendMessage}
+      onRename={workspace.renameConversation}
       onRetry={workspace.retryLastUserMessage}
       onSelect={workspace.selectConversation}
       onSend={workspace.sendMessage}

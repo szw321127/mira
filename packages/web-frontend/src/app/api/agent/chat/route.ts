@@ -17,7 +17,7 @@ import type {
 export const runtime = "nodejs";
 
 const PROJECT_CONTEXT = {
-  product: "RedNote 是一个面向小红书内容创作者的编辑工作台。",
+  product: "Mira 是一个面向小红书内容创作者的编辑工作台。",
   audience:
     "用户通常有一个主题或一句模糊灵感，需要快速比较表达方向、编辑大纲，并继续生成可发布草稿。",
   workflow: [
@@ -40,7 +40,7 @@ const MODEL_SETUP_MESSAGE =
 const projectContextTool = {
   name: "project_context",
   description:
-    "返回 RedNote 产品、工作流、设计原则和当前 Web MVP 边界的安全上下文。需要理解 RedNote 目标或工作台约束时使用。",
+    "返回 Mira 产品、工作流、设计原则和当前 Web MVP 边界的安全上下文。需要理解 Mira 目标或工作台约束时使用。",
   parameters: {
     type: "object",
     properties: {
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
           registry,
           messages: parsed.messages as ModelMessage[],
           system:
-            "你是 RedNote agent，帮助小红书创作者研究选题、拆解大纲、起草内容。回答要具体、可执行。需要了解 RedNote 产品、工作流或当前 Web MVP 边界时，使用 project_context 获取安全上下文；不要尝试读取文件系统。",
+            "你是 Mira agent，帮助小红书创作者研究选题、拆解大纲、起草内容。回答要具体、可执行。需要了解 Mira 产品、工作流或当前 Web MVP 边界时，使用 project_context 获取安全上下文；不要尝试读取文件系统。",
           maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 8),
         });
 

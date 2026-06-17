@@ -1,6 +1,6 @@
-# RedNote Web Frontend
+# Mira Web Frontend
 
-`@rednote/web-frontend` is the Next.js workspace for talking with
+`@mira/web-frontend` is the Next.js workspace for talking with
 `@rednote/agent`. The MVP is a local-first agent workspace: conversation
 history is saved in the browser, the Next.js API route runs the agent on the
 server, and model credentials never need to be exposed to client code.
@@ -9,7 +9,7 @@ server, and model credentials never need to be exposed to client code.
 
 ```bash
 pnpm install
-pnpm --filter @rednote/web-frontend dev
+pnpm --filter @mira/web-frontend dev
 ```
 
 Open http://localhost:3000 after the dev server starts.
@@ -30,10 +30,10 @@ error returned by the API instead of attempting a model call.
 ## Scripts
 
 ```bash
-pnpm --filter @rednote/web-frontend dev
-pnpm --filter @rednote/web-frontend test
-pnpm --filter @rednote/web-frontend lint
-pnpm --filter @rednote/web-frontend build
+pnpm --filter @mira/web-frontend dev
+pnpm --filter @mira/web-frontend test
+pnpm --filter @mira/web-frontend lint
+pnpm --filter @mira/web-frontend build
 ```
 
 ## Agent Boundary
