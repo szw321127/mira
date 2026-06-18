@@ -26,8 +26,12 @@
 - **流程**:
   1. 并行构建前端和后端镜像
   2. 推送镜像到 GitHub Container Registry
-  3. 通过 SSH 部署到服务器，启动 PostgreSQL、Redis、后端和前端
-  4. 后端容器启动时执行 `pnpm prisma:migrate:deploy`，再启动 NestJS 服务
+  3. 将 PostgreSQL 和 Redis 基础镜像同步到 GitHub Container Registry
+  4. 通过 SSH 部署到服务器，启动 PostgreSQL、Redis、后端和前端
+  5. 后端容器启动时执行 `pnpm prisma:migrate:deploy`，再启动 NestJS 服务
+
+服务器部署时会从 GHCR 拉取 `rednote_backend`、`rednote_frontend`、
+`rednote_postgres` 和 `rednote_redis`，避免服务器直接访问 Docker Hub。
 
 ## 配置步骤
 
@@ -128,6 +132,8 @@ mkdir -p /home/user/app
 
 - 后端: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_backend`
 - 前端: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_frontend`
+- PostgreSQL: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_postgres`
+- Redis: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_redis`
 
 ## 服务器上查看部署状态
 

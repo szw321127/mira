@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:16-alpine
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
     container_name: rednote-postgres
     restart: unless-stopped
     environment:
@@ -23,7 +23,7 @@ services:
 
   # Redis Cache
   redis:
-    image: redis:7-alpine
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
     container_name: rednote-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]

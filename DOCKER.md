@@ -117,7 +117,7 @@ docker-compose down -v
 
 ### PostgreSQL 服务 (rednote-postgres)
 
-- **镜像**: postgres:16-alpine
+- **镜像**: `ghcr.io/<owner>/rednote_postgres:16-alpine`（由 GitHub Actions 从 `postgres:16-alpine` 同步）
 - **数据库**: `rednote`
 - **用户**: `rednote`
 - **数据卷**: `postgres-data`
@@ -130,7 +130,7 @@ pnpm --filter @rednote/backend prisma:migrate:deploy
 
 ### Redis 服务 (rednote-redis)
 
-- **镜像**: redis:7-alpine
+- **镜像**: `ghcr.io/<owner>/rednote_redis:7-alpine`（由 GitHub Actions 从 `redis:7-alpine` 同步）
 - **用途**: 登录会话、短期缓存、后续 agent 运行热状态
 - **数据卷**: `redis-data`
 
