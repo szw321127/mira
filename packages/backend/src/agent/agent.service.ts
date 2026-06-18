@@ -55,7 +55,7 @@ export class AgentService {
       registry,
       messages: this.getHistoryBeforeMessage(request.messages, lastUserMessage),
       sessionId: request.conversationId,
-      maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 8)
+      maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 30)
     });
 
     let eventIndex = 0;
