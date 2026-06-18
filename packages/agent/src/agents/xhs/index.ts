@@ -7,11 +7,11 @@ import {
   PromptContext,
   sessionContext,
   toolGuide,
-} from '../../context';
-import { agentLoop } from '../../loop';
-import { getToolSearchTool, ToolRegistry } from '../../tools';
+} from '../../context/index.js';
+import { agentLoop } from '../../loop/index.js';
+import { getToolSearchTool, ToolRegistry } from '../../tools/index.js';
 
-export { generateOutline } from './outline';
+export { generateOutline } from './outline/index.js';
 
 export function createAgent({
   model,

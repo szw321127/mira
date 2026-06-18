@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { createServer, type Server } from 'node:http';
-import type { ToolDefinition } from './registry';
+import type { ToolDefinition } from './registry.js';
 
 export const fetchUrlTool: ToolDefinition = {
   name: 'fetch_url',

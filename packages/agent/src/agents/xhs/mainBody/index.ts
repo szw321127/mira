@@ -5,10 +5,10 @@ import {
   PromptContext,
   sessionContext,
   toolGuide,
-} from '../../../context';
-import { agentLoop } from '../../../loop';
-import { ToolRegistry } from '../../../tools';
-import { articleCoreRules } from './prompt';
+} from '../../../context/index.js';
+import { agentLoop } from '../../../loop/index.js';
+import { ToolRegistry } from '../../../tools/index.js';
+import { articleCoreRules } from './prompt.js';
 
 export function generateMainBody(
   model: LanguageModel,

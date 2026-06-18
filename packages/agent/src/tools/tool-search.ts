@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolRegistry } from './registry';
+import type { ToolDefinition, ToolRegistry } from './registry.js';
 
 export function getToolSearchTool(registry: ToolRegistry): ToolDefinition {
   return {

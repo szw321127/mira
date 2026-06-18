@@ -1,4 +1,4 @@
-import { PipeFn } from '../../../context';
+import { PipeFn } from '../../../context/index.js';
 
 export function coreRules(length: number): PipeFn {
   return () => `你是一个内容平台文章大纲生成助手，擅长生成适合种草、经验分享、清单盘点、避坑指南、测评对比等场景的文章大纲。

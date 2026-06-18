@@ -1,4 +1,4 @@
-import { PipeFn } from '../../../context';
+import { PipeFn } from '../../../context/index.js';
 
 export function articleCoreRules(): PipeFn {
   return () => `你是一个内容平台文章正文生成助手，擅长根据标题、开场钩子和文章大纲，扩写成适合发布的中文正文。

@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import type { ToolDefinition } from './registry';
+import type { ToolDefinition } from './registry.js';
 
 export const bashTool: ToolDefinition = {
   name: 'bash',

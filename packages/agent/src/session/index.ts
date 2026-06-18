@@ -1,1 +1,1 @@
-export { SessionStore, type SessionEntry } from './store';
+export { SessionStore, type SessionEntry } from './store.js';

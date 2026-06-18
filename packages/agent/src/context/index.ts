@@ -6,19 +6,19 @@ export {
   sessionContext,
   type PipeFn,
   type PromptContext,
-} from './prompt-builder';
+} from './prompt-builder.js';
 export {
   estimateTokens,
   microcompact,
   summarize,
   type CompactionResult,
-} from './compressor';
+} from './compressor.js';
 export {
   TokenTracker,
   applyDefense,
   estimateMessageTokens,
   truncateToolResults,
-} from './defense';
+} from './defense.js';
 export {
   type ContextSlice,
   type ContextSnapshot,
@@ -28,4 +28,4 @@ export {
   renderContextView,
   buildContextSnapshot,
   renderUsageView,
-} from './view';
+} from './view.js';

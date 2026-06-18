@@ -1,8 +1,8 @@
 import { LanguageModel, ModelMessage } from 'ai';
-import { PromptBuilder } from '../../../context';
-import { coreRules } from './prompt';
-import { ToolRegistry } from '../../../tools';
-import { createAgent } from '..';
+import { PromptBuilder } from '../../../context/index.js';
+import { coreRules } from './prompt.js';
+import { ToolRegistry } from '../../../tools/index.js';
+import { createAgent } from '../index.js';
 
 export function generateOutline(model: LanguageModel) {
   const registry = new ToolRegistry();

@@ -6,7 +6,7 @@ import {
   existsSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { ToolDefinition } from './registry';
+import type { ToolDefinition } from './registry.js';
 
 export const readFileTool: ToolDefinition = {
   name: 'read_file',

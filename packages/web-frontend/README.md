@@ -37,6 +37,19 @@ If the backend is not running on port `3001`, set the proxy target in
 BACKEND_AGENT_BASE_URL="http://localhost:3001"
 ```
 
+Open http://localhost:3000/admin for the admin console. Configure the initial
+administrator in the root `.env` or `packages/backend/.env`:
+
+```bash
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="replace-me"
+ADMIN_SESSION_SECRET="replace-me-with-a-long-random-string"
+```
+
+After logging in, the admin console can update the password and managed service
+keys. Password changes and key overrides are stored by the backend in its local
+admin store and are not exposed through `NEXT_PUBLIC_` variables.
+
 ## Scripts
 
 ```bash

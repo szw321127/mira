@@ -1,5 +1,5 @@
-import type { MemoryStore } from '../memory';
-import type { ToolDefinition } from './registry';
+import type { MemoryStore } from '../memory/index.js';
+import type { ToolDefinition } from './registry.js';
 
 export function createMemoryTool(memoryStore: MemoryStore): ToolDefinition {
   return {

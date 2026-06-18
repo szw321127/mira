@@ -1,4 +1,4 @@
-import { setCacheEnabled } from '../mock';
+import { setCacheEnabled } from '../mock/index.js';
 import { estimateMessageTokens, applyDefense } from '../context/defense.js';
 import type { CommandHandler } from './index.js';
 

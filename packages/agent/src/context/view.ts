@@ -5,7 +5,7 @@
  * 不同类别用不同颜色（ANSI 256 色），让"谁在吃 context"一眼看清楚。
  */
 import type { ModelMessage } from 'ai';
-import type { UsageTracker } from '../usage/tracker';
+import type { UsageTracker } from '../usage/tracker.js';
 
 export interface ContextSlice {
   name: string;
@@ -62,14 +62,12 @@ export function renderContextMatrix(snapshot: ContextSnapshot): string {
 
   // 把每个 slice 的 token 数转成"格子数"（向上取整避免 0 格丢失）
   const cells: number[] = []; // ANSI color for each cell, or -1 for free, -2 for buffer
-  let used = 0;
   for (const s of slices) {
     if (s.tokens <= 0) continue;
     const n = Math.max(1, Math.round(s.tokens / tokensPerCell));
     for (let i = 0; i < n && cells.length < TOTAL_CELLS; i++) {
       cells.push(s.color);
     }
-    used += n;
   }
   const bufferCells = Math.max(
     0,

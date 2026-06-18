@@ -36,7 +36,7 @@ describe("AgentService", () => {
         { role: "assistant", content: "回复" }
       ],
       sessionId: "conversation-1",
-      maxSteps: 8
+      maxSteps: 30
     });
     expect(runEvents).toHaveBeenCalledWith("  最新问题  ");
     expect(events).toEqual([{ type: "text-delta", text: "  最新问题  " }]);

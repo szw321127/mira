@@ -4,16 +4,16 @@ import {
   ModelMessage,
   streamText,
 } from 'ai';
-import { ToolRegistry } from '../tools/registry';
-import { calculateDelay, isRetryable, sleep } from './retry';
+import { ToolRegistry } from '../tools/registry.js';
+import { calculateDelay, isRetryable, sleep } from './retry.js';
 import {
   detect,
   recordCall,
   recordResult,
   resetHistory,
   type DetectorKind,
-} from './detection';
-import { normalizeUsage, UsageTracker } from '../usage';
+} from './detection.js';
+import { normalizeUsage, UsageTracker } from '../usage/index.js';
 
 export interface IAgentConfig {
   model: LanguageModel;
@@ -204,7 +204,9 @@ export async function* agentLoop(
     const norm = normalizeUsage(stepUsage);
     const modelRecord = model as { modelId?: unknown };
     const modelId =
-      typeof modelRecord.modelId === 'string' ? modelRecord.modelId : 'mock-model';
+      typeof modelRecord.modelId === 'string'
+        ? modelRecord.modelId
+        : 'mock-model';
     const stepRecord = tracker?.record(modelId, norm);
     totalTokens +=
       norm.inputTokens +

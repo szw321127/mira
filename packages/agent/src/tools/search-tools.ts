@@ -1,4 +1,4 @@
-import { ToolDefinition } from './registry';
+import { ToolDefinition } from './registry.js';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 

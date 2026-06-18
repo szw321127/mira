@@ -2,7 +2,7 @@ import {
   buildContextSnapshot,
   renderContextView,
   renderUsageView,
-} from '../context/view';
+} from '../context/view.js';
 import type { CommandHandler } from '.';
 
 export const contextCommands: CommandHandler[] = [

@@ -7,6 +7,6 @@ const repoEnvPath = resolve(configDir, "../../../../.env");
 const backendEnvPath = resolve(configDir, "../../.env");
 
 export function loadBackendEnv() {
-  config({ path: repoEnvPath });
-  config({ path: backendEnvPath, override: true });
+  config({ path: repoEnvPath, quiet: true });
+  config({ path: backendEnvPath, override: true, quiet: true });
 }

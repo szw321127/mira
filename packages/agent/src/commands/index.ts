@@ -1,9 +1,12 @@
 import type { ModelMessage } from 'ai';
-import type { ToolRegistry } from '../tools/registry';
-import type { PromptBuilder, PromptContext } from '../context/prompt-builder';
-import type { UsageTracker } from '../usage/tracker';
-import type { SessionStore } from '../session/store';
-import type { MemoryStore } from '../memory/store';
+import type { ToolRegistry } from '../tools/registry.js';
+import type {
+  PromptBuilder,
+  PromptContext,
+} from '../context/prompt-builder.js';
+import type { UsageTracker } from '../usage/tracker.js';
+import type { SessionStore } from '../session/store.js';
+import type { MemoryStore } from '../memory/store.js';
 
 export interface CommandContext {
   messages: ModelMessage[];
@@ -34,6 +37,6 @@ export function createDispatcher(handlers: CommandHandler[]): CommandHandler {
   };
 }
 
-export { contextCommands } from './context';
-export { memoryCommands } from './memory';
-export { debugCommands } from './debug';
+export { contextCommands } from './context.js';
+export { memoryCommands } from './memory.js';
+export { debugCommands } from './debug.js';

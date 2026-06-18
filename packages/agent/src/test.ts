@@ -1,6 +1,6 @@
 import { type LanguageModel, type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createMockModel, setCacheEnabled } from './mock';
+import { createMockModel } from './mock';
 import { createInterface } from 'node:readline';
 import { agentLoop, type AgentLoopEvent } from './loop';
 import {
@@ -23,11 +23,8 @@ import {
   PromptBuilder,
   PromptContext,
   applyDefense,
-  buildContextSnapshot,
   coreRules,
   deferredTools,
-  renderContextView,
-  renderUsageView,
   sessionContext,
   // estimateTokens,
   // microcompact,
