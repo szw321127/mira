@@ -14,6 +14,8 @@ env:
   REGISTRY: ghcr.io
   BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/rednote_backend
   FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/rednote_frontend
+  POSTGRES_IMAGE_NAME: ${{ github.repository_owner }}/rednote_postgres
+  REDIS_IMAGE_NAME: ${{ github.repository_owner }}/rednote_redis
 
 jobs:
   # --- 任务1：构建并推送后端 Docker 镜像 ---
@@ -96,9 +98,40 @@ jobs:
       - name: Frontend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
 
-  # --- 任务3：在服务器上部署 ---
+  # --- 任务3：同步基础服务镜像到 GHCR，避免服务器直接拉 Docker Hub ---
+  mirror-service-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror PostgreSQL and Redis images
+        run: |
+          set -e
+
+          docker pull postgres:16-alpine
+          docker tag postgres:16-alpine ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:16-alpine
+          docker tag postgres:16-alpine ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:16-alpine
+          docker push ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:latest
+
+          docker pull redis:7-alpine
+          docker tag redis:7-alpine ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine
+          docker tag redis:7-alpine ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine
+          docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
+
+  # --- 任务4：在服务器上部署 ---
   deploy:
-    needs: [build-and-push-backend, build-and-push-frontend]
+    needs: [build-and-push-backend, build-and-push-frontend, mirror-service-images]
     runs-on: ubuntu-latest
 
     steps:
@@ -123,7 +156,7 @@ jobs:
             services:
               # PostgreSQL Database
               postgres:
-                image: postgres:16-alpine
+                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
                 container_name: rednote-postgres
                 restart: unless-stopped
                 environment:
@@ -143,7 +176,7 @@ jobs:
 
               # Redis Cache
               redis:
-                image: redis:7-alpine
+                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
                 container_name: rednote-redis
                 restart: unless-stopped
                 command: ["redis-server", "--appendonly", "yes"]
