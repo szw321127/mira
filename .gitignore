@@ -54,3 +54,4 @@ artifacts/
 .usage/*
 .sessions/*
 .memory/*
+.gstack/
