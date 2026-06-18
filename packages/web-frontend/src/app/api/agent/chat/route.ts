@@ -1,6 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import {
-  agentLoop,
+  createGPTAgentHarness,
+  pickSearchTool,
   ToolRegistry,
   type AgentLoopEvent,
 } from "@rednote/agent";
@@ -16,53 +17,8 @@ import type {
 
 export const runtime = "nodejs";
 
-const PROJECT_CONTEXT = {
-  product: "Mira 是一个面向小红书内容创作者的编辑工作台。",
-  audience:
-    "用户通常有一个主题或一句模糊灵感，需要快速比较表达方向、编辑大纲，并继续生成可发布草稿。",
-  workflow: [
-    "先把灵感拆成 3 个有差异的内容方向。",
-    "让用户选择、编辑或换一批方向。",
-    "继续生成标题、正文结构、封面提示和标签。",
-  ],
-  designPrinciples: [
-    "界面像内容编辑工位，不像营销页或通用聊天框。",
-    "让选择、编辑权和内容判断可见。",
-    "Phase 1 保持 local-first，不接入后端持久化或鉴权。",
-  ],
-  currentWorkspace:
-    "当前 Web MVP 提供左侧对话栏、中间线程、底部输入区和右侧 agent 活动面板。浏览器保存本地对话；Next.js 路由在服务端运行 agent 并流式返回事件。",
-};
-
 const MODEL_SETUP_MESSAGE =
   "需要配置模型后才能运行 agent。请在 packages/web-frontend/.env.local 设置 AGENT_MODEL_BASE_URL、AGENT_MODEL_API_KEY 和 AGENT_MODEL_NAME；这些值只在服务端使用，不要加 NEXT_PUBLIC_。";
-
-const projectContextTool = {
-  name: "project_context",
-  description:
-    "返回 Mira 产品、工作流、设计原则和当前 Web MVP 边界的安全上下文。需要理解 Mira 目标或工作台约束时使用。",
-  parameters: {
-    type: "object",
-    properties: {
-      focus: {
-        type: "string",
-        enum: ["product", "workflow", "design", "workspace"],
-        description: "可选：指定需要关注的上下文部分。",
-      },
-    },
-    additionalProperties: false,
-  },
-  isConcurrencySafe: true,
-  isReadOnly: true,
-  maxResultChars: 1800,
-  execute: async ({ focus }: { focus?: string }) => {
-    if (focus === "product") return PROJECT_CONTEXT.product;
-    if (focus === "workflow") return PROJECT_CONTEXT.workflow;
-    if (focus === "design") return PROJECT_CONTEXT.designPrinciples;
-    if (focus === "workspace") return PROJECT_CONTEXT.currentWorkspace;
-    return PROJECT_CONTEXT;
-  },
-};
 
 function jsonError(message: string, status = 400) {
   return Response.json({ message }, { status });
@@ -103,6 +59,17 @@ function getModel() {
   }
 
   return createOpenAI({ baseURL, apiKey }).chat(modelName);
+}
+
+function getHistoryBeforeMessage(
+  messages: AgentChatRequest["messages"],
+  target: AgentChatRequest["messages"][number],
+): ModelMessage[] {
+  const index = messages.lastIndexOf(target);
+  return messages.slice(0, index).map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
 }
 
 function normalizeAgentEvent(
@@ -188,23 +155,22 @@ export async function POST(request: Request) {
 
   const encoder = new TextEncoder();
   const registry = new ToolRegistry();
-  registry.register(projectContextTool);
+  registry.register(pickSearchTool());
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let eventIndex = 0;
 
       try {
-        const loop = agentLoop({
+        const harness = createGPTAgentHarness({
           model,
           registry,
-          messages: parsed.messages as ModelMessage[],
-          system:
-            "你是 Mira agent，帮助小红书创作者研究选题、拆解大纲、起草内容。回答要具体、可执行。需要了解 Mira 产品、工作流或当前 Web MVP 边界时，使用 project_context 获取安全上下文；不要尝试读取文件系统。",
+          messages: getHistoryBeforeMessage(parsed.messages, lastUserMessage),
+          sessionId: parsed.conversationId,
           maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 8),
         });
 
-        for await (const event of loop) {
+        for await (const event of harness.runEvents(lastUserMessage.content)) {
           const normalized = normalizeAgentEvent(event, eventIndex);
           eventIndex += 1;
           controller.enqueue(encoder.encode(encodeStreamEvent(normalized)));

@@ -12,7 +12,8 @@ import {
   toolGuide,
 } from '../context';
 import { agentLoop, AgentLoopEvent, IAgentConfig } from '../loop';
-import { getToolSearchTool, ToolRegistry } from '../tools';
+import { getToolSearchTool } from '../tools/tool-search';
+import { ToolRegistry } from '../tools/registry';
 import { UsageTracker } from '../usage';
 
 type RunLoop = (

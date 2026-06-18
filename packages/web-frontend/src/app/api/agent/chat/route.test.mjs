@@ -9,12 +9,30 @@ const routeSource = readFileSync(
   "utf8",
 );
 
-test("chat route exposes only bounded project context tools", () => {
+test("chat route does not expose project context or filesystem tools", () => {
   assert.doesNotMatch(
     routeSource,
     /\b(readFileTool|listDirectoryTool|globTool|grepTool)\b/,
   );
-  assert.match(routeSource, /\bproject_context\b/);
+  assert.doesNotMatch(routeSource, /\bPROJECT_CONTEXT\b/);
+  assert.doesNotMatch(routeSource, /\bproject_context\b/);
+});
+
+test("chat route registers the web search tool", () => {
+  assert.match(routeSource, /\bpickSearchTool\b/);
+  assert.match(routeSource, /registry\.register\(pickSearchTool\(\)\)/);
+});
+
+test("chat route connects models through the GPT agent harness", () => {
+  assert.match(routeSource, /\bcreateGPTAgentHarness\b/);
+  assert.doesNotMatch(routeSource, /\bagentLoop\s*\(/);
+});
+
+test("chat route leaves prompt assembly to the GPT agent harness", () => {
+  assert.doesNotMatch(routeSource, /\bMIRA_SYSTEM_PROMPT\b/);
+  assert.doesNotMatch(routeSource, /\bPromptBuilder\b/);
+  assert.doesNotMatch(routeSource, /\bcoreRules\b/);
+  assert.doesNotMatch(routeSource, /\bpromptBuilder\s*:/);
 });
 
 test("chat route returns setup-oriented guidance when model config is missing", () => {

@@ -1,9 +1,6 @@
 import type { ToolDefinition } from './registry';
 import TurndownService from 'turndown';
 
-const TAVILY_API_KEY =
-  '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';
-
 // ── Tavily（自动挡）──────────────────────────────
 
 export const tavilySearchTool: ToolDefinition = {
@@ -27,7 +24,7 @@ export const tavilySearchTool: ToolDefinition = {
     query: string;
     max_results?: number;
   }) => {
-    const apiKey = TAVILY_API_KEY;
+    const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey) return '[web_search] 未配置 TAVILY_API_KEY，请在 .env 中设置';
 
     const res = await fetch('https://api.tavily.com/search', {
@@ -170,7 +167,7 @@ function htmlToMarkdown(html: string): string {
 // ── 根据环境变量选择搜索后端 ──────────────────────────────
 
 export function pickSearchTool(): ToolDefinition {
-  if (TAVILY_API_KEY) return tavilySearchTool;
+  if (process.env.TAVILY_API_KEY) return tavilySearchTool;
   if (process.env.SERPER_API_KEY) return serperSearchTool;
-  return webFetchTool;
+  return tavilySearchTool;
 }
