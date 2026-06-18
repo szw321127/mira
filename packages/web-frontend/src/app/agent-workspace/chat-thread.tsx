@@ -21,7 +21,7 @@ function MessageBlock({ message }: { message: ChatMessage }) {
   return (
     <article
       className={cn(
-        "rounded-[14px] px-4 py-3.5 max-md:rounded-xl max-md:px-3.5 max-md:py-[13px]",
+        "rounded-[12px] px-3.5 py-2.5 max-md:rounded-xl max-md:px-3 max-md:py-2.5",
         isUser
           ? "ml-auto max-w-[min(640px,90%)] border border-[color-mix(in_oklch,var(--accent)_20%,var(--border))] bg-[var(--accent-subtle)] max-md:max-w-[94%]"
           : "border border-[var(--border)] bg-[var(--surface)]",
@@ -44,13 +44,15 @@ function MessageBlock({ message }: { message: ChatMessage }) {
             openLinksInNewTab
           />
         ) : (
-          <p className="whitespace-pre-wrap text-sm leading-7">
+          <p className="whitespace-pre-wrap text-[13px] leading-6">
             {message.content}
           </p>
         )
       ) : null}
       {!message.content && fallback ? (
-        <p className="text-sm text-[var(--muted-strong)]">{fallback}</p>
+        <p className="text-[13px] leading-6 text-[var(--muted-strong)]">
+          {fallback}
+        </p>
       ) : null}
     </article>
   );
@@ -68,7 +70,7 @@ export function ChatThread({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[820px] flex-1 flex-col gap-3.5 p-6 max-md:gap-3 max-md:p-4">
+    <div className="mx-auto flex w-full max-w-[820px] flex-1 flex-col gap-2.5 p-5 max-md:gap-2.5 max-md:p-3.5">
       {conversation.messages.map((message) => (
         <MessageBlock key={message.id} message={message} />
       ))}

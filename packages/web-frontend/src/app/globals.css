@@ -70,8 +70,8 @@ input:focus-visible {
 
 .message-markdown {
   color: var(--ink);
-  font-size: 14px;
-  line-height: 1.75;
+  font-size: 13px;
+  line-height: 1.62;
   overflow-wrap: anywhere;
 }
 
@@ -84,7 +84,7 @@ input:focus-visible {
 }
 
 .message-markdown p {
-  margin: 7px 0;
+  margin: 5px 0;
 }
 
 .message-markdown h1,
@@ -94,39 +94,39 @@ input:focus-visible {
   color: var(--ink);
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 1.35;
-  margin: 14px 0 8px;
+  line-height: 1.32;
+  margin: 11px 0 6px;
 }
 
 .message-markdown h1 {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .message-markdown h2 {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .message-markdown h3,
 .message-markdown h4 {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .message-markdown ul,
 .message-markdown ol {
-  margin: 8px 0;
-  padding-left: 22px;
+  margin: 6px 0;
+  padding-left: 20px;
 }
 
 .message-markdown li + li {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .message-markdown pre {
   background: var(--surface-muted);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow-x: auto;
-  padding: 12px;
+  padding: 9px;
 }
 
 .message-markdown code {
@@ -137,7 +137,7 @@ input:focus-visible {
 .message-markdown :not(pre) > code {
   background: var(--surface-muted);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   padding: 1px 5px;
 }
 
@@ -150,7 +150,7 @@ input:focus-visible {
 .message-markdown th,
 .message-markdown td {
   border: 1px solid var(--border);
-  padding: 7px 9px;
+  padding: 5px 7px;
 }
 
 .message-markdown img {
