@@ -167,7 +167,7 @@ export async function POST(request: Request) {
           registry,
           messages: getHistoryBeforeMessage(parsed.messages, lastUserMessage),
           sessionId: parsed.conversationId,
-          maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 8),
+          maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 30),
         });
 
         for await (const event of harness.runEvents(lastUserMessage.content)) {
