@@ -18,6 +18,7 @@ COPY packages/agent packages/agent
 COPY packages/backend packages/backend
 RUN pnpm --filter @rednote/backend build
 RUN pnpm --filter @rednote/backend deploy --legacy --prod /prod/backend
+RUN cd /prod/backend && node node_modules/prisma/build/index.js generate
 
 FROM base AS runner
 ENV NODE_ENV=production
