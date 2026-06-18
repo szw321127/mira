@@ -152,8 +152,6 @@ jobs:
 
             echo "Creating docker-compose.yml..."
             cat > docker-compose.yml << 'EOF'
-            version: '3.8'
-
             services:
               # PostgreSQL Database
               postgres:
@@ -196,12 +194,14 @@ jobs:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
                 container_name: rednote-backend
                 restart: unless-stopped
-                command: ["sh", "-c", "pnpm prisma:migrate:deploy && pnpm start:prod"]
+                command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
                 # Port 3000 is only accessible internally via docker network, not exposed to host
                 expose:
                   - "3000"
                 environment:
                   - NODE_ENV=production
+                  - CI=true
+                  - PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
                   - PORT=3000
                   - BACKEND_PORT=3000
                   - TZ=Asia/Shanghai
@@ -211,9 +211,8 @@ jobs:
                   - DATABASE_NAME=rednote
                   - DATABASE_USER=rednote
                   - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
-                  - DATABASE_URL=postgresql://rednote:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/rednote?schema=public
                   - REDIS_URL=redis://redis:6379
-                  - SESSION_SECRET=${SESSION_SECRET:-rednote-default-secret-key-change-in-production}
+                  - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
                   - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
                 depends_on:
                   postgres:
@@ -238,6 +237,9 @@ jobs:
                   - "80:3000"
                 environment:
                   - TZ=Asia/Shanghai
+                  - CI=true
+                  - PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
+                  - BACKEND_AGENT_BASE_URL=http://backend:3000
                 depends_on:
                   - backend
                 networks:
@@ -259,12 +261,12 @@ jobs:
             EOF
 
             echo "Creating .env file with configuration..."
-            cat > .env << EOF
+            cat > .env << 'EOF'
             REGISTRY=${{ env.REGISTRY }}
             IMAGE_OWNER=${{ github.repository_owner }}
             IMAGE_TAG=${{ github.ref_name }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+            DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
+            SESSION_SECRET='${{ secrets.SESSION_SECRET }}'
             EOF
 
             echo "Logging in to GitHub Container Registry..."
