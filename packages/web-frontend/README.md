@@ -47,8 +47,8 @@ ADMIN_SESSION_SECRET="replace-me-with-a-long-random-string"
 ```
 
 After logging in, the admin console can update the password and managed service
-keys. Password changes and key overrides are stored by the backend in its local
-admin store and are not exposed through `NEXT_PUBLIC_` variables.
+keys. Password changes and key overrides are stored by the backend in PostgreSQL
+and are not exposed through `NEXT_PUBLIC_` variables.
 
 ## Scripts
 

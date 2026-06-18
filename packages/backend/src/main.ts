@@ -2,8 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 import { loadBackendEnv } from "./config/env.js";
-
-const DEFAULT_PORT = 3001;
+import { resolveServerPort } from "./config/server-port.js";
 
 loadBackendEnv();
 
@@ -16,7 +15,7 @@ async function bootstrap() {
     credentials: true
   });
 
-  const port = Number(process.env.BACKEND_PORT ?? DEFAULT_PORT);
+  const port = resolveServerPort();
   await app.listen(port);
 }
 

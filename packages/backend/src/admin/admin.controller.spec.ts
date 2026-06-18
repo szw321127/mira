@@ -1,37 +1,42 @@
+import { jest } from "@jest/globals";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import type { Server } from "node:http";
 import type { INestApplication } from "@nestjs/common";
-import { tmpdir } from "node:os";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { AdminController } from "./admin.controller.js";
 import { AdminService } from "./admin.service.js";
 import { AdminStore } from "./admin-store.js";
+import { PrismaService } from "../database/prisma.service.js";
 
 describe("AdminController", () => {
   const originalEnv = { ...process.env };
   let app: INestApplication;
   let server: Server;
-  let tempDir: string;
+  let prisma: PrismaService;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "mira-admin-"));
-      process.env = {
+    process.env = {
       ...originalEnv,
       ADMIN_USERNAME: "owner",
       ADMIN_PASSWORD: "initial-pass",
       ADMIN_SESSION_SECRET: "test-session-secret",
-      ADMIN_STORE_PATH: join(tempDir, ".admin-store.json"),
       AGENT_MODEL_BASE_URL: "https://model.example/v1",
       AGENT_MODEL_NAME: "mira-large",
       AGENT_MODEL_API_KEY: "model-secret",
       TAVILY_API_KEY: "tavily-secret"
     };
+    prisma = createPrismaStore();
 
     const moduleRef = await Test.createTestingModule({
       controllers: [AdminController],
-      providers: [AdminService, AdminStore]
+      providers: [
+        AdminService,
+        AdminStore,
+        {
+          provide: PrismaService,
+          useValue: prisma
+        }
+      ]
     }).compile();
 
     app = moduleRef.createNestApplication();
@@ -40,8 +45,7 @@ describe("AdminController", () => {
   });
 
   afterEach(async () => {
-    await app.close();
-    await rm(tempDir, { recursive: true, force: true });
+    await app?.close();
     process.env = originalEnv;
   });
 
@@ -168,3 +172,33 @@ describe("AdminController", () => {
       .expect(200);
   });
 });
+
+function createPrismaStore() {
+  let row: { key: string; value: unknown; updatedAt: Date } | null = null;
+
+  return {
+    adminStoreEntry: {
+      findUnique: jest.fn(({ where }: { where: { key: string } }) => {
+        return Promise.resolve(row && where.key === row.key ? row : null);
+      }),
+      upsert: jest.fn(
+        ({
+          where,
+          create,
+          update
+        }: {
+          where: { key: string };
+          create: { key: string; value: unknown };
+          update: { value: unknown };
+        }) => {
+          row = {
+            key: where.key,
+            value: update.value ?? create.value,
+            updatedAt: new Date()
+          };
+          return Promise.resolve(row);
+        }
+      )
+    }
+  } as unknown as PrismaService;
+}

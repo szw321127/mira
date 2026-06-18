@@ -26,7 +26,8 @@
 - **流程**:
   1. 并行构建前端和后端镜像
   2. 推送镜像到 GitHub Container Registry
-  3. 通过 SSH 部署到服务器
+  3. 通过 SSH 部署到服务器，启动 PostgreSQL、Redis、后端和前端
+  4. 后端容器启动时执行 `pnpm prisma:migrate:deploy`，再启动 NestJS 服务
 
 ## 配置步骤
 
@@ -48,6 +49,7 @@
 - `TARGET_DIR`: 服务器上的目标部署目录（例如：`/home/user/app`）
 
 #### 应用配置相关（仅 deploy.yml 需要）
+- `DB_PASSWORD`: PostgreSQL 密码（建议使用强随机字符串）
 - `GOOGLE_API_KEY`: Google Gemini API 密钥
 - `OPENAI_API_KEY`: OpenAI API 密钥
 - `SESSION_SECRET`: 会话密钥（建议使用强随机字符串）
