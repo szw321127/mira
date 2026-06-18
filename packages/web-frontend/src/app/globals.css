@@ -45,6 +45,7 @@ body {
 body {
   background: var(--background);
   color: var(--ink);
+  font-size: 13px;
   font-family: var(--font-ui-sans);
 }
 
