@@ -20,4 +20,4 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=builder /prod/web-frontend ./
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

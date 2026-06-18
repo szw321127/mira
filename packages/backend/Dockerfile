@@ -21,4 +21,4 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=builder /prod/backend ./
 EXPOSE 3000
-CMD ["pnpm", "start:prod"]
+CMD ["node", "dist/main.js"]
