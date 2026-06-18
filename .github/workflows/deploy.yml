@@ -114,7 +114,7 @@ jobs:
           script: |
             set -e
 
-            cd "$TARGET_DIR"
+            cd "${{ secrets.TARGET_DIR }}"
 
             echo "Creating docker-compose.yml..."
             cat > docker-compose.yml << 'EOF'
@@ -179,8 +179,6 @@ jobs:
                   - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
                   - DATABASE_URL=postgresql://rednote:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/rednote?schema=public
                   - REDIS_URL=redis://redis:6379
-                  - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
                   - SESSION_SECRET=${SESSION_SECRET:-rednote-default-secret-key-change-in-production}
                   - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
                 depends_on:
@@ -232,8 +230,6 @@ jobs:
             IMAGE_OWNER=${{ github.repository_owner }}
             IMAGE_TAG=latest
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             SESSION_SECRET=${{ secrets.SESSION_SECRET }}
             EOF
 

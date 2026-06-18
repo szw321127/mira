@@ -15,20 +15,17 @@ pnpm --filter @mira/web-frontend dev
 
 Open http://localhost:3000 after the dev server starts.
 
-Create a root `.env` or `packages/backend/.env` before sending a real agent
-message:
+Create a root `.env` or `packages/backend/.env` for backend infrastructure:
 
 ```bash
-AGENT_MODEL_BASE_URL="https://your-model-provider.example/v1"
-AGENT_MODEL_API_KEY="replace-me"
-AGENT_MODEL_NAME="your-chat-model"
 AGENT_MAX_STEPS="8"
-TAVILY_API_KEY="replace-me"
+SESSION_SECRET="replace-me-with-a-long-random-string"
 ```
 
-`AGENT_MAX_STEPS` is optional and defaults to `8`. The other three values are
-required by the backend `/agent/chat`; if they are missing, the UI shows the
-setup error returned by the API instead of attempting a model call.
+`AGENT_MAX_STEPS` is optional and defaults to `30`. Model and web search keys
+are stored by the backend in PostgreSQL; log in to `/admin` and configure the
+model Base URL, model name, model API key, and Tavily search key there before
+sending a real agent message.
 
 If the backend is not running on port `3001`, set the proxy target in
 `packages/web-frontend/.env.local`:
@@ -43,7 +40,7 @@ administrator in the root `.env` or `packages/backend/.env`:
 ```bash
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="replace-me"
-ADMIN_SESSION_SECRET="replace-me-with-a-long-random-string"
+SESSION_SECRET="replace-me-with-a-long-random-string"
 ```
 
 After logging in, the admin console can update the password and managed service
@@ -67,7 +64,8 @@ configuration, and the web search tool. Filesystem tools are not exposed in the
 web route.
 
 Credentials stay server-side in environment variables. Do not prefix them with
-`NEXT_PUBLIC_`.
+`NEXT_PUBLIC_`. Model and web search provider credentials are stored in
+PostgreSQL through the admin console instead of deployment env files.
 
 ## MVP Persistence
 

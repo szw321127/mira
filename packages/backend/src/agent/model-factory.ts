@@ -1,9 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
-import { loadBackendEnv } from "../config/env.js";
+import type { RuntimeModelConfig } from "../admin/runtime-secrets.service.js";
 
 export const MODEL_SETUP_MESSAGE =
-  "需要配置模型后才能运行 agent。请在 packages/backend/.env 或根目录 .env 设置 AGENT_MODEL_BASE_URL、AGENT_MODEL_API_KEY 和 AGENT_MODEL_NAME；这些值只在后端使用，不要加 NEXT_PUBLIC_。";
+  "需要配置模型后才能运行 Mira。请登录 /admin，在 Key 配置里填写模型 Base URL、模型名称和模型 API Key。";
 
 export class ModelConfigurationError extends Error {
   constructor(message = MODEL_SETUP_MESSAGE) {
@@ -12,16 +12,13 @@ export class ModelConfigurationError extends Error {
   }
 }
 
-export function createAgentModel(): LanguageModel {
-  loadBackendEnv();
-
-  const baseURL = process.env.AGENT_MODEL_BASE_URL;
-  const apiKey = process.env.AGENT_MODEL_API_KEY;
-  const modelName = process.env.AGENT_MODEL_NAME;
-
-  if (!baseURL || !apiKey || !modelName) {
+export function createAgentModel(config: RuntimeModelConfig): LanguageModel {
+  if (!config.baseURL || !config.apiKey || !config.modelName) {
     throw new ModelConfigurationError();
   }
 
-  return createOpenAI({ baseURL, apiKey }).chat(modelName);
+  return createOpenAI({
+    baseURL: config.baseURL,
+    apiKey: config.apiKey
+  }).chat(config.modelName);
 }

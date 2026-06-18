@@ -1,25 +1,19 @@
 import { pickSearchTool } from './web-search';
 
 describe('web search tool selection', () => {
-  const originalTavilyApiKey = process.env.TAVILY_API_KEY;
-  const originalSerperApiKey = process.env.SERPER_API_KEY;
-
-  afterEach(() => {
-    process.env.TAVILY_API_KEY = originalTavilyApiKey;
-    process.env.SERPER_API_KEY = originalSerperApiKey;
-  });
-
-  it('uses Tavily web_search when TAVILY_API_KEY is configured', () => {
-    process.env.TAVILY_API_KEY = 'test-tavily-key';
-    delete process.env.SERPER_API_KEY;
-
+  it('uses explicit Tavily config for web backend registration', () => {
     expect(pickSearchTool().name).toBe('web_search');
+    expect(pickSearchTool({ tavilyApiKey: 'test-tavily-key' }).name).toBe(
+      'web_search',
+    );
   });
 
   it('keeps web_search available so missing credentials produce setup guidance', () => {
-    delete process.env.TAVILY_API_KEY;
-    delete process.env.SERPER_API_KEY;
+    const tool = pickSearchTool({ tavilyApiKey: '' });
 
-    expect(pickSearchTool().name).toBe('web_search');
+    expect(tool.name).toBe('web_search');
+    return expect(tool.execute({ query: 'Mira' })).resolves.toContain(
+      'Mira 后台 Key 配置',
+    );
   });
 });

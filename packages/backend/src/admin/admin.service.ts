@@ -1,5 +1,4 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { loadBackendEnv } from "../config/env.js";
 import {
   hashPassword,
   signSession,
@@ -62,11 +61,10 @@ export class AdminService {
   }
 
   async listSecrets(): Promise<ManagedSecretView[]> {
-    loadBackendEnv();
     const store = await this.store.read();
 
     return MANAGED_SECRETS.map((definition) => {
-      const rawValue = store.secrets?.[definition.key] ?? process.env[definition.key] ?? "";
+      const rawValue = store.secrets?.[definition.key] ?? "";
       return {
         key: definition.key,
         label: definition.label,
@@ -85,7 +83,6 @@ export class AdminService {
     for (const [key, value] of Object.entries(values)) {
       if (!isManagedSecretKey(key) || typeof value !== "string") continue;
       nextSecrets[key] = value;
-      process.env[key] = value;
     }
 
     await this.store.write({
@@ -108,7 +105,11 @@ export class AdminService {
   }
 
   private get sessionSecret() {
-    return process.env.ADMIN_SESSION_SECRET ?? DEFAULT_SESSION_SECRET;
+    return (
+      process.env.SESSION_SECRET ??
+      process.env.ADMIN_SESSION_SECRET ??
+      DEFAULT_SESSION_SECRET
+    );
   }
 }
 

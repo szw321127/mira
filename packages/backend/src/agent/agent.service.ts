@@ -1,6 +1,11 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ToolRegistry } from "@rednote/agent";
+import {
+  RuntimeSecretsService,
+  type RuntimeModelConfig,
+  type RuntimeSearchConfig
+} from "../admin/runtime-secrets.service.js";
 import type { AgentChatRequest, AgentStreamEvent } from "./agent.types.js";
 import { normalizeAgentEvent } from "./agent-event-normalizer.js";
 import { createAgentModel } from "./model-factory.js";
@@ -10,13 +15,18 @@ import {
   type AgentHarnessFactory
 } from "./agent-runtime.js";
 
-type RegistryFactory = () => ToolRegistry;
-type ModelFactory = () => LanguageModel;
+type ModelFactory = (config: RuntimeModelConfig) => LanguageModel;
+type RegistryFactory = (config: RuntimeSearchConfig) => ToolRegistry;
 
 type AgentServiceDependencies = {
   createModel?: ModelFactory;
   createRegistry?: RegistryFactory;
   createHarness?: AgentHarnessFactory;
+};
+
+type RuntimeSecretsReader = {
+  getModelConfig(): Promise<RuntimeModelConfig>;
+  getSearchConfig(): Promise<RuntimeSearchConfig>;
 };
 
 export const AGENT_SERVICE_DEPS = Symbol("AGENT_SERVICE_DEPS");
@@ -30,7 +40,10 @@ export class AgentService {
   constructor(
     @Optional()
     @Inject(AGENT_SERVICE_DEPS)
-    dependencies: AgentServiceDependencies = {}
+    dependencies: AgentServiceDependencies = {},
+    @Optional()
+    @Inject(RuntimeSecretsService)
+    private readonly runtimeSecrets?: RuntimeSecretsReader
   ) {
     this.createModel = dependencies.createModel ?? createAgentModel;
     this.createRegistry = dependencies.createRegistry ?? createAgentRegistry;
@@ -48,8 +61,12 @@ export class AgentService {
       throw new Error("Message is required.");
     }
 
-    const model = this.createModel();
-    const registry = this.createRegistry();
+    const [modelConfig, searchConfig] = await Promise.all([
+      this.getModelConfig(),
+      this.getSearchConfig()
+    ]);
+    const model = this.createModel(modelConfig);
+    const registry = this.createRegistry(searchConfig);
     const harness = this.createHarness({
       model,
       registry,
@@ -76,5 +93,19 @@ export class AgentService {
       role: message.role,
       content: message.content
     }));
+  }
+
+  private async getModelConfig(): Promise<RuntimeModelConfig> {
+    return this.runtimeSecrets?.getModelConfig() ?? {
+      baseURL: "",
+      apiKey: "",
+      modelName: ""
+    };
+  }
+
+  private async getSearchConfig(): Promise<RuntimeSearchConfig> {
+    return this.runtimeSecrets?.getSearchConfig() ?? {
+      tavilyApiKey: ""
+    };
   }
 }

@@ -19,13 +19,20 @@ describe("AdminController", () => {
       ...originalEnv,
       ADMIN_USERNAME: "owner",
       ADMIN_PASSWORD: "initial-pass",
-      ADMIN_SESSION_SECRET: "test-session-secret",
-      AGENT_MODEL_BASE_URL: "https://model.example/v1",
-      AGENT_MODEL_NAME: "mira-large",
-      AGENT_MODEL_API_KEY: "model-secret",
-      TAVILY_API_KEY: "tavily-secret"
+      SESSION_SECRET: "test-session-secret",
+      AGENT_MODEL_BASE_URL: "https://env-model.example/v1",
+      AGENT_MODEL_NAME: "env-model",
+      AGENT_MODEL_API_KEY: "env-model-secret",
+      TAVILY_API_KEY: "env-tavily-secret"
     };
-    prisma = createPrismaStore();
+    prisma = createPrismaStore({
+      secrets: {
+        AGENT_MODEL_BASE_URL: "https://model.example/v1",
+        AGENT_MODEL_NAME: "mira-large",
+        AGENT_MODEL_API_KEY: "model-secret",
+        TAVILY_API_KEY: "tavily-secret"
+      }
+    });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [AdminController],
@@ -75,7 +82,7 @@ describe("AdminController", () => {
     await request(server).get("/admin/secrets").expect(401);
   });
 
-  it("returns masked manageable secrets for authenticated admins", async () => {
+  it("returns masked database-managed secrets for authenticated admins", async () => {
     const agent = request.agent(server);
     await agent
       .post("/admin/login")
@@ -114,7 +121,7 @@ describe("AdminController", () => {
     });
   });
 
-  it("updates secrets and lets changed values override env values", async () => {
+  it("updates secrets without writing them to process.env", async () => {
     const agent = request.agent(server);
     await agent
       .post("/admin/login")
@@ -133,6 +140,7 @@ describe("AdminController", () => {
 
     const response = await agent.get("/admin/secrets").expect(200);
 
+    expect(process.env.TAVILY_API_KEY).toBe("env-tavily-secret");
     expect(response.body.secrets).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -171,10 +179,61 @@ describe("AdminController", () => {
       .send({ username: "owner", password: "next-pass-123" })
       .expect(200);
   });
+
+  it("does not expose model or search keys from environment fallback", async () => {
+    await app.close();
+    prisma = createPrismaStore();
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AdminController],
+      providers: [
+        AdminService,
+        AdminStore,
+        {
+          provide: PrismaService,
+          useValue: prisma
+        }
+      ]
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+    server = app.getHttpServer() as Server;
+
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent.get("/admin/secrets").expect(200);
+
+    expect(response.body.secrets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "AGENT_MODEL_BASE_URL",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "AGENT_MODEL_API_KEY",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "TAVILY_API_KEY",
+          value: "",
+          masked: false
+        })
+      ])
+    );
+  });
 });
 
-function createPrismaStore() {
-  let row: { key: string; value: unknown; updatedAt: Date } | null = null;
+function createPrismaStore(initialValue?: unknown) {
+  let row: { key: string; value: unknown; updatedAt: Date } | null = initialValue
+    ? { key: "admin", value: initialValue, updatedAt: new Date() }
+    : null;
 
   return {
     adminStoreEntry: {

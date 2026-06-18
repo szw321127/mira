@@ -64,7 +64,7 @@ registry.register(
   bashTool,
   fetchUrlTool,
   webFetchTool,
-  pickSearchTool(),
+  pickSearchTool({ tavilyApiKey: process.env.TAVILY_API_KEY }),
   getToolSearchTool(registry),
 );
 

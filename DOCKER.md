@@ -26,7 +26,7 @@ rednote/
 
 ### 1. 配置环境变量
 
-复制 `.env.example` 到 `.env` 并填入你的 API 密钥：
+复制 `.env.example` 到 `.env` 并填入部署基础配置：
 
 ```bash
 cp .env.example .env
@@ -42,15 +42,12 @@ DATABASE_URL=postgresql://rednote:your_strong_database_password@localhost:5432/r
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# Google Gemini API Key
-GOOGLE_API_KEY=your_actual_google_api_key
-
-# OpenAI API Key
-OPENAI_API_KEY=your_actual_openai_api_key
-
 # Session Secret (在生产环境中修改这个值)
 SESSION_SECRET=your_production_secret_key
 ```
+
+模型 Base URL、模型名称、模型 API Key 和 Tavily 搜索 Key 不再写入 `.env`。
+服务启动后登录 `/admin`，在 Key 配置里填写；后端会保存到 PostgreSQL。
 
 ### 2. 构建并启动服务
 
@@ -115,8 +112,6 @@ docker-compose down -v
   - `PORT=3000`
   - `DATABASE_URL`: PostgreSQL 连接串
   - `REDIS_URL`: Redis 连接串
-  - `GOOGLE_API_KEY`: Google Gemini API 密钥
-  - `OPENAI_API_KEY`: OpenAI API 密钥
   - `SESSION_SECRET`: 会话密钥
   - `CORS_ORIGINS`: 跨域配置
 

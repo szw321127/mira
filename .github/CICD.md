@@ -50,9 +50,11 @@
 
 #### 应用配置相关（仅 deploy.yml 需要）
 - `DB_PASSWORD`: PostgreSQL 密码（建议使用强随机字符串）
-- `GOOGLE_API_KEY`: Google Gemini API 密钥
-- `OPENAI_API_KEY`: OpenAI API 密钥
 - `SESSION_SECRET`: 会话密钥（建议使用强随机字符串）
+
+模型 API Key、模型 Base URL、模型名称和 Tavily 搜索 Key 不再放在 GitHub
+Secrets 或 `.env` 中。部署完成后登录 `/admin`，在 Key 配置里填写；这些值由
+后端保存到 PostgreSQL。
 
 ### 3. 生成 SSH 密钥（用于部署）
 
