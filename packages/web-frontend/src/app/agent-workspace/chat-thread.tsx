@@ -2,7 +2,6 @@
 
 import { XMarkdown } from "@ant-design/x-markdown";
 import "@ant-design/x-markdown/themes/light.css";
-import { AgentEventRow } from "./agent-event-row";
 import { cn } from "./classnames";
 import { EmptyState } from "./empty-state";
 import { formatTime } from "./format";
@@ -52,13 +51,6 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       ) : null}
       {!message.content && fallback ? (
         <p className="text-sm text-[var(--muted-strong)]">{fallback}</p>
-      ) : null}
-      {message.events.length > 0 ? (
-        <div className="mt-3 space-y-2">
-          {message.events.map((event) => (
-            <AgentEventRow event={event} key={event.eventId} />
-          ))}
-        </div>
       ) : null}
     </article>
   );
