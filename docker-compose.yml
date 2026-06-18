@@ -21,15 +21,32 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: rednote-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - rednote-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Backend Service
   backend:
     # build:
-    #   context: ./rednote-backend
-    #   dockerfile: Dockerfile
+    #   context: .
+    #   dockerfile: packages/backend/Dockerfile
     # 或者使用预构建镜像（取消下面一行的注释，并注释掉上面的 build 部分）
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
     container_name: rednote-backend
     restart: unless-stopped
+    command: ["sh", "-c", "pnpm prisma:migrate:deploy && pnpm start:prod"]
     # Port 3000 is only accessible internally via docker network, not exposed to host
     expose:
       - "3000"
@@ -43,20 +60,20 @@ services:
       - DATABASE_NAME=rednote
       - DATABASE_USER=rednote
       - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required and must be strong}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required and must be strong}
+      - DATABASE_URL=postgresql://rednote:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/rednote?schema=public
+      - REDIS_URL=redis://redis:6379
       - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
       - AI_BASE_URL_ALLOWLIST=${AI_BASE_URL_ALLOWLIST:-}
       - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - rednote-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,14 +82,14 @@ services:
   # Frontend Service
   frontend:
     # build:
-    #   context: ./rednote-ai-studio
-    #   dockerfile: Dockerfile
+    #   context: .
+    #   dockerfile: packages/web-frontend/Dockerfile
     # 或者使用预构建镜像（取消下面一行的注释，并注释掉上面的 build 部分）
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
     container_name: rednote-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "80:3000"
     environment:
       - TZ=Asia/Shanghai
     depends_on:
@@ -80,7 +97,7 @@ services:
     networks:
       - rednote-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)})"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -92,3 +109,4 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:

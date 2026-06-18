@@ -1,25 +1,40 @@
 {
   "name": "rednote-workspace",
-  "version": "1.0.0",
-  "description": "RedNote AI Studio - Full Stack Workspace",
+  "version": "0.0.0",
+  "description": "RedNote TypeScript monorepo",
   "private": true,
+  "packageManager": "pnpm@10.7.0",
+  "engines": {
+    "node": ">=22.14.0",
+    "pnpm": ">=10.7.0"
+  },
   "scripts": {
-    "dev": "concurrently -n \"backend,frontend\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "cd rednote-backend && npm run start:dev",
-    "dev:frontend": "cd rednote-ai-studio && npm run dev",
-    "install:all": "npm install && cd rednote-backend && npm install && cd ../rednote-ai-studio && npm install",
-    "build:backend": "cd rednote-backend && npm run build",
-    "build:frontend": "cd rednote-ai-studio && npm run build",
-    "build:all": "npm run build:backend && npm run build:frontend",
-    "start:backend": "cd rednote-backend && npm run start:prod",
-    "start:frontend": "cd rednote-ai-studio && npm run preview"
+    "dev": "concurrently -n \"connector,backend,web,admin\" -c \"bgBlue.bold,bgMagenta.bold\" \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "dev:agent": "pnpm --filter @rednote/agent dev",
+    "dev:backend": "pnpm --filter @rednote/backend start:dev",
+    "dev:frontend": "pnpm --filter @mira/web-frontend dev",
+    "dev:web": "pnpm --filter @mira/web-frontend dev",
+    "dev:admin": "pnpm --filter @rednote/admin-frontend dev",
+    "test": "pnpm -r --if-present test",
+    "test:agent": "pnpm --filter @rednote/agent test",
+    "test:backend": "pnpm --filter @rednote/backend test",
+    "test:frontend": "pnpm --filter @mira/web-frontend test",
+    "test:web": "pnpm --filter @mira/web-frontend test",
+    "test:admin": "pnpm --filter @rednote/admin-frontend test",
+    "build": "pnpm -r --if-present build",
+    "build:agent": "pnpm --filter @rednote/agent build",
+    "build:backend": "pnpm --filter @rednote/backend build",
+    "build:frontend": "pnpm --filter @mira/web-frontend build",
+    "build:web": "pnpm --filter @mira/web-frontend build",
+    "build:admin": "pnpm --filter @rednote/admin-frontend build"
   },
   "keywords": [
     "rednote",
     "ai",
     "nestjs",
     "react",
-    "langchain"
+    "typescript",
+    "monorepo"
   ],
   "author": "",
   "license": "MIT",

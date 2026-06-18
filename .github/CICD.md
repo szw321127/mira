@@ -7,14 +7,14 @@
 ### 1. build-backend.yml
 - **功能**: 构建并推送后端 Docker 镜像
 - **触发条件**:
-  - `rednote-backend/` 目录有变化时
+  - `packages/backend/` 目录有变化时
   - 可手动触发
 - **镜像名称**: `ghcr.io/你的用户名/rednote_backend`
 
 ### 2. build-frontend.yml
 - **功能**: 构建并推送前端 Docker 镜像
 - **触发条件**:
-  - `rednote-ai-studio/` 目录有变化时
+  - `packages/web-frontend/` 目录有变化时
   - 可手动触发
 - **镜像名称**: `ghcr.io/你的用户名/rednote_frontend`
 
@@ -26,7 +26,8 @@
 - **流程**:
   1. 并行构建前端和后端镜像
   2. 推送镜像到 GitHub Container Registry
-  3. 通过 SSH 部署到服务器
+  3. 通过 SSH 部署到服务器，启动 PostgreSQL、Redis、后端和前端
+  4. 后端容器启动时执行 `pnpm prisma:migrate:deploy`，再启动 NestJS 服务
 
 ## 配置步骤
 
@@ -48,9 +49,12 @@
 - `TARGET_DIR`: 服务器上的目标部署目录（例如：`/home/user/app`）
 
 #### 应用配置相关（仅 deploy.yml 需要）
-- `GOOGLE_API_KEY`: Google Gemini API 密钥
-- `OPENAI_API_KEY`: OpenAI API 密钥
+- `DB_PASSWORD`: PostgreSQL 密码（建议使用强随机字符串）
 - `SESSION_SECRET`: 会话密钥（建议使用强随机字符串）
+
+模型 API Key、模型 Base URL、模型名称和 Tavily 搜索 Key 不再放在 GitHub
+Secrets 或 `.env` 中。部署完成后登录 `/admin`，在 Key 配置里填写；这些值由
+后端保存到 PostgreSQL。
 
 ### 3. 生成 SSH 密钥（用于部署）
 
@@ -96,8 +100,8 @@ mkdir -p /home/user/app
 ### 自动触发
 
 1. **只构建镜像**：修改对应目录的代码并推送
-   - 修改 `rednote-backend/` → 触发 `build-backend.yml`
-   - 修改 `rednote-ai-studio/` → 触发 `build-frontend.yml`
+   - 修改 `packages/backend/` → 触发 `build-backend.yml`
+   - 修改 `packages/web-frontend/` → 触发 `build-frontend.yml`
 
 2. **构建并部署**：推送到 main/master 分支
    - 触发 `deploy.yml`
@@ -176,10 +180,10 @@ sudo usermod -aG docker $USER
 
 ```bash
 # 测试后端构建
-docker build -t test-backend ./rednote-backend
+docker build -f packages/backend/Dockerfile -t test-backend .
 
 # 测试前端构建
-docker build -t test-frontend ./rednote-ai-studio
+docker build -f packages/web-frontend/Dockerfile -t test-frontend .
 
 # 测试 docker-compose
 docker-compose up

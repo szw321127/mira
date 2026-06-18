@@ -1,0 +1,133 @@
+import { jest } from "@jest/globals";
+import { AgentService } from "./agent.service.js";
+import type {
+  RuntimeModelConfig,
+  RuntimeSearchConfig
+} from "../admin/runtime-secrets.service.js";
+
+describe("AgentService", () => {
+  it("uses the last non-empty user message and keeps previous messages as history", async () => {
+    const runEvents = jest.fn(async function* (content: string) {
+      await Promise.resolve();
+      yield { type: "text-delta", text: content };
+    });
+    const createHarness = jest.fn(() => ({ runEvents }));
+    const createModel = jest.fn(() => "model");
+    const createRegistry = jest.fn(() => "registry");
+    const service = new AgentService(
+      {
+        createModel,
+        createRegistry,
+        createHarness
+      },
+      createRuntimeSecrets({
+        model: {
+          baseURL: "https://db-model.example/v1",
+          apiKey: "db-model-secret",
+          modelName: "mira-db"
+        },
+        search: { tavilyApiKey: "db-tavily-secret" }
+      })
+    );
+
+    const events = [];
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [
+        { role: "user", content: "第一条" },
+        { role: "assistant", content: "回复" },
+        { role: "user", content: "  最新问题  " }
+      ]
+    })) {
+      events.push(event);
+    }
+
+    expect(createHarness).toHaveBeenCalledWith({
+      model: "model",
+      registry: "registry",
+      messages: [
+        { role: "user", content: "第一条" },
+        { role: "assistant", content: "回复" }
+      ],
+      sessionId: "conversation-1",
+      maxSteps: 30
+    });
+    expect(createModel).toHaveBeenCalledWith({
+      baseURL: "https://db-model.example/v1",
+      apiKey: "db-model-secret",
+      modelName: "mira-db"
+    });
+    expect(createRegistry).toHaveBeenCalledWith({
+      tavilyApiKey: "db-tavily-secret"
+    });
+    expect(runEvents).toHaveBeenCalledWith("  最新问题  ");
+    expect(events).toEqual([{ type: "text-delta", text: "  最新问题  " }]);
+  });
+
+  it("does not read model or search keys from process.env", async () => {
+    const originalEnv = { ...process.env };
+    process.env = {
+      ...originalEnv,
+      AGENT_MODEL_BASE_URL: "https://env-model.example/v1",
+      AGENT_MODEL_API_KEY: "env-model-secret",
+      AGENT_MODEL_NAME: "env-model",
+      TAVILY_API_KEY: "env-tavily-secret"
+    };
+
+    try {
+      const runEvents = jest.fn(async function* () {
+        await Promise.resolve();
+        yield { type: "stop", reason: "complete" };
+      });
+      const createHarness = jest.fn(() => ({ runEvents }));
+      const createModel = jest.fn(() => "model");
+      const createRegistry = jest.fn(() => "registry");
+      const service = new AgentService(
+        {
+          createModel,
+          createRegistry,
+          createHarness
+        },
+        createRuntimeSecrets()
+      );
+
+      for await (const event of service.streamChat({
+        conversationId: "conversation-1",
+        messages: [{ role: "user", content: "你好" }]
+      })) {
+        expect(event).toBeDefined();
+      }
+
+      expect(createModel).toHaveBeenCalledWith({
+        baseURL: "",
+        apiKey: "",
+        modelName: ""
+      });
+      expect(createRegistry).toHaveBeenCalledWith({ tavilyApiKey: "" });
+    } finally {
+      process.env = originalEnv;
+    }
+  });
+});
+
+function createRuntimeSecrets(
+  data: {
+    model?: RuntimeModelConfig;
+    search?: RuntimeSearchConfig;
+  } = {}
+) {
+  return {
+    getModelConfig: jest.fn(() =>
+      Promise.resolve(
+        data.model ?? {
+          baseURL: "",
+          apiKey: "",
+          modelName: ""
+        }
+      )
+    ),
+    getSearchConfig: jest.fn(() =>
+      Promise.resolve(data.search ?? { tavilyApiKey: "" })
+    )
+  };
+}

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.venv/
 
 # Logs
 logs
@@ -21,6 +22,9 @@ lerna-debug.log*
 dist/
 dist-ssr/
 build/
+.next/
+out/
+*.tsbuildinfo
 
 # Testing
 coverage/
@@ -45,3 +49,8 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+artifacts/
+
+.usage/*
+.sessions/*
+.memory/*

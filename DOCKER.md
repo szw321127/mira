@@ -8,13 +8,13 @@
 rednote/
 ├── docker-compose.yml           # Docker Compose 配置文件
 ├── .env.example                 # 环境变量示例文件
-├── rednote-ai-studio/          # 前端项目
-│   ├── Dockerfile              # 前端 Docker 镜像
-│   ├── nginx.conf              # Nginx 配置
-│   └── .dockerignore           # Docker 忽略文件
-└── rednote-backend/            # 后端项目
-    ├── Dockerfile              # 后端 Docker 镜像
-    └── .dockerignore           # Docker 忽略文件
+├── packages/
+│   ├── web-frontend/            # 前端项目
+│   │   └── Dockerfile           # 前端 Docker 镜像
+│   └── backend/                 # 后端项目
+│       └── Dockerfile           # 后端 Docker 镜像
+├── packages/agent/              # Agent 库包
+└── .dockerignore                # Docker 忽略文件
 ```
 
 ## 前置要求
@@ -26,7 +26,7 @@ rednote/
 
 ### 1. 配置环境变量
 
-复制 `.env.example` 到 `.env` 并填入你的 API 密钥：
+复制 `.env.example` 到 `.env` 并填入部署基础配置：
 
 ```bash
 cp .env.example .env
@@ -35,15 +35,19 @@ cp .env.example .env
 编辑 `.env` 文件：
 
 ```env
-# Google Gemini API Key
-GOOGLE_API_KEY=your_actual_google_api_key
+# PostgreSQL
+DB_PASSWORD=your_strong_database_password
+DATABASE_URL=postgresql://rednote:your_strong_database_password@localhost:5432/rednote?schema=public
 
-# OpenAI API Key
-OPENAI_API_KEY=your_actual_openai_api_key
+# Redis
+REDIS_URL=redis://localhost:6379
 
 # Session Secret (在生产环境中修改这个值)
 SESSION_SECRET=your_production_secret_key
 ```
+
+模型 Base URL、模型名称、模型 API Key 和 Tavily 搜索 Key 不再写入 `.env`。
+服务启动后登录 `/admin`，在 Key 配置里填写；后端会保存到 PostgreSQL。
 
 ### 2. 构建并启动服务
 
@@ -60,7 +64,7 @@ docker-compose up -d
 
 - **前端**: http://localhost
 - **后端 API**: http://localhost:3000
-- **健康检查**: http://localhost:3000/api/health
+- **健康检查**: http://localhost:3000/health
 
 ### 4. 查看日志
 
@@ -90,14 +94,13 @@ docker-compose down -v
 
 ### 前端服务 (rednote-frontend)
 
-- **基础镜像**: node:22-slim (构建阶段) + nginx:alpine (运行阶段)
-- **端口**: 80
-- **构建方式**: 多阶段构建，先构建 React 应用，再用 Nginx 提供静态文件服务
+- **基础镜像**: node:22-slim
+- **端口**: 3000（由 Compose 映射到宿主机 80）
+- **构建方式**: 多阶段构建，先构建 Next.js 应用，再用 `next start` 提供页面和 `/api/*` 路由
 - **特性**:
-  - Gzip 压缩
-  - SPA 路由支持
-  - 静态资源缓存
-  - 安全头设置
+  - Next.js App Router
+  - 服务端 `/api/*` 代理路由
+  - 静态页面和动态路由统一托管
 
 ### 后端服务 (rednote-backend)
 
@@ -107,17 +110,36 @@ docker-compose down -v
 - **环境变量**:
   - `NODE_ENV=production`
   - `PORT=3000`
-  - `GOOGLE_API_KEY`: Google Gemini API 密钥
-  - `OPENAI_API_KEY`: OpenAI API 密钥
+  - `DATABASE_URL`: PostgreSQL 连接串
+  - `REDIS_URL`: Redis 连接串
   - `SESSION_SECRET`: 会话密钥
   - `CORS_ORIGINS`: 跨域配置
+
+### PostgreSQL 服务 (rednote-postgres)
+
+- **镜像**: postgres:16-alpine
+- **数据库**: `rednote`
+- **用户**: `rednote`
+- **数据卷**: `postgres-data`
+
+后端使用 Prisma 访问 PostgreSQL。部署时需要在启动 NestJS 服务前执行：
+
+```bash
+pnpm --filter @rednote/backend prisma:migrate:deploy
+```
+
+### Redis 服务 (rednote-redis)
+
+- **镜像**: redis:7-alpine
+- **用途**: 登录会话、短期缓存、后续 agent 运行热状态
+- **数据卷**: `redis-data`
 
 ## 健康检查
 
 两个服务都配置了健康检查：
 
 - **前端**: 每 30 秒检查一次 HTTP 响应
-- **后端**: 每 30 秒检查一次 `/api/health` 端点
+- **后端**: 每 30 秒检查一次 `/health` 端点，返回数据库和 Redis 状态
 
 查看健康状态：
 
@@ -146,7 +168,7 @@ docker-compose ps
 
 ```yaml
 ports:
-  - "8080:80"  # 前端改为 8080
+  - "8080:3000"  # 前端改为 8080
   - "3001:3000"  # 后端改为 3001
 ```
 
@@ -176,21 +198,23 @@ version: '3.8'
 services:
   backend:
     build:
-      context: ./rednote-backend
+      context: .
+      dockerfile: packages/backend/Dockerfile
       target: builder
     command: npm run start:dev
     volumes:
-      - ./rednote-backend/src:/app/src
+      - ./packages/backend/src:/app/src
     ports:
       - "3000:3000"
 
   frontend:
     build:
-      context: ./rednote-ai-studio
+      context: .
+      dockerfile: packages/web-frontend/Dockerfile
       target: builder
     command: npm run dev
     volumes:
-      - ./rednote-ai-studio/src:/app/src
+      - ./packages/web-frontend/src:/app/src
     ports:
       - "5173:5173"
 ```

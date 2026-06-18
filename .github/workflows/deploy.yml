@@ -47,8 +47,8 @@ jobs:
       - name: Build and push Backend Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./rednote-backend
-          file: ./rednote-backend/Dockerfile
+          context: .
+          file: ./packages/backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -87,8 +87,8 @@ jobs:
       - name: Build and push Frontend Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./rednote-ai-studio
-          file: ./rednote-ai-studio/Dockerfile
+          context: .
+          file: ./packages/web-frontend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -114,33 +114,82 @@ jobs:
           script: |
             set -e
 
-            cd "$TARGET_DIR"
+            cd "${{ secrets.TARGET_DIR }}"
 
             echo "Creating docker-compose.yml..."
             cat > docker-compose.yml << 'EOF'
             version: '3.8'
 
             services:
+              # PostgreSQL Database
+              postgres:
+                image: postgres:16-alpine
+                container_name: rednote-postgres
+                restart: unless-stopped
+                environment:
+                  - POSTGRES_DB=rednote
+                  - POSTGRES_USER=rednote
+                  - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+                  - TZ=Asia/Shanghai
+                volumes:
+                  - postgres-data:/var/lib/postgresql/data
+                networks:
+                  - rednote-network
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U rednote"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+
+              # Redis Cache
+              redis:
+                image: redis:7-alpine
+                container_name: rednote-redis
+                restart: unless-stopped
+                command: ["redis-server", "--appendonly", "yes"]
+                volumes:
+                  - redis-data:/data
+                networks:
+                  - rednote-network
+                healthcheck:
+                  test: ["CMD", "redis-cli", "ping"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+
               # Backend Service
               backend:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
                 container_name: rednote-backend
                 restart: unless-stopped
+                command: ["sh", "-c", "pnpm prisma:migrate:deploy && pnpm start:prod"]
                 # Port 3000 is only accessible internally via docker network, not exposed to host
                 expose:
                   - "3000"
                 environment:
                   - NODE_ENV=production
                   - PORT=3000
+                  - BACKEND_PORT=3000
                   - TZ=Asia/Shanghai
-                  - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-                  - OPENAI_API_KEY=${OPENAI_API_KEY}
+                  - DATABASE_TYPE=postgres
+                  - DATABASE_HOST=postgres
+                  - DATABASE_PORT=5432
+                  - DATABASE_NAME=rednote
+                  - DATABASE_USER=rednote
+                  - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+                  - DATABASE_URL=postgresql://rednote:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/rednote?schema=public
+                  - REDIS_URL=redis://redis:6379
                   - SESSION_SECRET=${SESSION_SECRET:-rednote-default-secret-key-change-in-production}
                   - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                  redis:
+                    condition: service_healthy
                 networks:
                   - rednote-network
                 healthcheck:
-                  test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+                  test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
                   interval: 30s
                   timeout: 10s
                   retries: 3
@@ -152,7 +201,7 @@ jobs:
                 container_name: rednote-frontend
                 restart: unless-stopped
                 ports:
-                  - "80:80"
+                  - "80:3000"
                 environment:
                   - TZ=Asia/Shanghai
                 depends_on:
@@ -160,7 +209,7 @@ jobs:
                 networks:
                   - rednote-network
                 healthcheck:
-                  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+                  test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', (r) => {process.exit(r.statusCode < 500 ? 0 : 1)})"]
                   interval: 30s
                   timeout: 10s
                   retries: 3
@@ -169,6 +218,10 @@ jobs:
             networks:
               rednote-network:
                 driver: bridge
+
+            volumes:
+              postgres-data:
+              redis-data:
             EOF
 
             echo "Creating .env file with configuration..."
@@ -176,8 +229,7 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             IMAGE_OWNER=${{ github.repository_owner }}
             IMAGE_TAG=latest
-            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             SESSION_SECRET=${{ secrets.SESSION_SECRET }}
             EOF
 
