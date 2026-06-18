@@ -18,13 +18,16 @@ test("chat route does not expose project context or filesystem tools", () => {
   assert.doesNotMatch(routeSource, /\bproject_context\b/);
 });
 
-test("chat route registers the web search tool", () => {
-  assert.match(routeSource, /\bpickSearchTool\b/);
-  assert.match(routeSource, /registry\.register\(pickSearchTool\(\)\)/);
+test("chat route proxies agent requests to the backend", () => {
+  assert.match(routeSource, /BACKEND_AGENT_BASE_URL/);
+  assert.match(routeSource, /fetch\(/);
+  assert.match(routeSource, /\/agent\/chat/);
 });
 
-test("chat route connects models through the GPT agent harness", () => {
-  assert.match(routeSource, /\bcreateGPTAgentHarness\b/);
+test("chat route leaves models and tools in the backend service", () => {
+  assert.doesNotMatch(routeSource, /\bcreateGPTAgentHarness\b/);
+  assert.doesNotMatch(routeSource, /\bpickSearchTool\b/);
+  assert.doesNotMatch(routeSource, /\bToolRegistry\b/);
   assert.doesNotMatch(routeSource, /\bagentLoop\s*\(/);
 });
 
@@ -36,10 +39,7 @@ test("chat route leaves prompt assembly to the GPT agent harness", () => {
 });
 
 test("chat route returns setup-oriented guidance when model config is missing", () => {
-  assert.match(routeSource, /需要配置模型后才能运行 agent/);
-  assert.match(routeSource, /packages\/web-frontend\/\.env\.local/);
-  assert.match(routeSource, /AGENT_MODEL_BASE_URL/);
-  assert.match(routeSource, /AGENT_MODEL_API_KEY/);
-  assert.match(routeSource, /AGENT_MODEL_NAME/);
+  assert.match(routeSource, /无法连接 Mira 后端服务/);
+  assert.match(routeSource, /BACKEND_AGENT_BASE_URL/);
   assert.match(routeSource, /NEXT_PUBLIC_/);
 });
