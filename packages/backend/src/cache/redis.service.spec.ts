@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import { Test } from "@nestjs/testing";
 import { RedisService } from "./redis.service.js";
 
 class FakeRedisClient {
@@ -22,6 +23,17 @@ class FakeRedisClient {
 }
 
 describe("RedisService", () => {
+  it("can be constructed by Nest without custom providers", async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [RedisService]
+    }).compile();
+
+    const service = moduleRef.get(RedisService);
+
+    await expect(service.checkHealth()).resolves.toBe("disabled");
+    await moduleRef.close();
+  });
+
   it("stores JSON values with a TTL", async () => {
     const client = new FakeRedisClient();
     const service = new RedisService(() => client, "redis://redis:6379");
