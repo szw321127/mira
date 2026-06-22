@@ -1,9 +1,9 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { Resend } from "resend";
 import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 
 const UNCONFIGURED_MESSAGE = "邮件服务未配置，请联系管理员";
 const SEND_FAILED_MESSAGE = "验证码邮件发送失败，请稍后再试";
-const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 
 @Injectable()
 export class MailerService {
@@ -30,21 +30,14 @@ export class MailerService {
       return;
     }
 
-    let response: Response;
+    const resend = new Resend(config.apiKey);
+    let result: Awaited<ReturnType<typeof resend.emails.send>>;
     try {
-      response = await fetch(RESEND_EMAILS_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/json",
-          "User-Agent": "Mira/1.0"
-        },
-        body: JSON.stringify({
-          from: config.from,
-          to: [email],
-          subject: "Mira 登录验证码",
-          text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
-        })
+      result = await resend.emails.send({
+        from: config.from,
+        to: [email],
+        subject: "Mira 登录验证码",
+        text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
       });
     } catch (error) {
       this.logger.warn(
@@ -53,9 +46,9 @@ export class MailerService {
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
 
-    if (!response.ok) {
+    if (result.error) {
       this.logger.warn(
-        `Resend verification email failed: ${response.status} ${await readResponseBody(response)}`
+        `Resend verification email failed: ${formatResendError(result.error)}`
       );
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
@@ -69,14 +62,19 @@ function isResendConfigComplete(config: {
   return Boolean(config.apiKey && config.from);
 }
 
-async function readResponseBody(response: Response): Promise<string> {
-  const body = await response.text().catch(() => "");
-  return body.slice(0, 500);
-}
-
 function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
   return String(error);
+}
+
+function formatResendError(error: {
+  message?: string;
+  name?: string;
+  statusCode?: number | null;
+}): string {
+  return [error.statusCode, error.name, error.message]
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .join(" ");
 }

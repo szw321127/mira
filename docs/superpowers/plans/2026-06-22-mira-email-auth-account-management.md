@@ -300,7 +300,7 @@ git commit -m "feat: add user auth database schema"
 
 - [ ] **Step 1: Use Resend email delivery**
 
-Use the Resend REST API through Node's built-in `fetch`; no mailer SDK dependency is required.
+Use the official Resend Node.js SDK for verification email delivery, with `RESEND_API_KEY` and `RESEND_FROM` still read from managed secrets.
 
 - [ ] **Step 2: Extend managed secrets**
 
@@ -808,11 +808,11 @@ Create `packages/backend/src/auth/mailer.service.ts`:
 
 ```ts
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { Resend } from "resend";
 import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 
 const UNCONFIGURED_MESSAGE = "邮件服务未配置，请联系管理员";
 const SEND_FAILED_MESSAGE = "验证码邮件发送失败，请稍后再试";
-const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 
 @Injectable()
 export class MailerService {
@@ -830,29 +830,22 @@ export class MailerService {
       throw new ServiceUnavailableException(UNCONFIGURED_MESSAGE);
     }
 
-    let response: Response;
+    const resend = new Resend(config.apiKey);
+    let result: Awaited<ReturnType<typeof resend.emails.send>>;
     try {
-      response = await fetch(RESEND_EMAILS_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/json",
-          "User-Agent": "Mira/1.0"
-        },
-        body: JSON.stringify({
-          from: config.from,
-          to: [email],
-          subject: "Mira 登录验证码",
-          text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
-        })
+      result = await resend.emails.send({
+        from: config.from,
+        to: [email],
+        subject: "Mira 登录验证码",
+        text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
       });
     } catch (error) {
       this.logger.warn(`Resend verification email request failed: ${String(error)}`);
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
 
-    if (!response.ok) {
-      this.logger.warn(`Resend verification email failed: ${response.status}`);
+    if (result.error) {
+      this.logger.warn(`Resend verification email failed: ${result.error.message}`);
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }
   }

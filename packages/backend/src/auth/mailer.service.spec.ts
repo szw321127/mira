@@ -2,7 +2,40 @@ import { jest } from "@jest/globals";
 import { Logger, ServiceUnavailableException } from "@nestjs/common";
 import type { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 
-const fetchMock = jest.fn<typeof fetch>();
+type ResendEmailPayload = {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+};
+
+type ResendSendResult =
+  | {
+      data: { id: string };
+      error: null;
+      headers: null;
+    }
+  | {
+      data: null;
+      error: {
+        message: string;
+        name: string;
+        statusCode: number | null;
+      };
+      headers: null;
+    };
+
+const sendMock =
+  jest.fn<(payload: ResendEmailPayload) => Promise<ResendSendResult>>();
+const ResendMock = jest.fn(() => ({
+  emails: {
+    send: sendMock
+  }
+}));
+
+jest.unstable_mockModule("resend", () => ({
+  Resend: ResendMock
+}));
 
 const { MailerService } = await import("./mailer.service.js");
 
@@ -29,26 +62,23 @@ function completeConfig(): ResendConfig {
 }
 
 describe("MailerService", () => {
-  const originalFetch = globalThis.fetch;
   const originalNodeEnv = process.env.NODE_ENV;
   let loggerSpy: jest.SpiedFunction<typeof Logger.prototype.log>;
   let warnSpy: jest.SpiedFunction<typeof Logger.prototype.warn>;
 
   beforeEach(() => {
-    globalThis.fetch = fetchMock;
-    fetchMock.mockReset();
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ id: "email_123" }), {
-        headers: { "Content-Type": "application/json" },
-        status: 200
-      })
-    );
+    ResendMock.mockClear();
+    sendMock.mockReset();
+    sendMock.mockResolvedValue({
+      data: { id: "email_123" },
+      error: null,
+      headers: null
+    });
     loggerSpy = jest.spyOn(Logger.prototype, "log").mockImplementation(() => {});
     warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
     process.env.NODE_ENV = originalNodeEnv;
     loggerSpy.mockRestore();
     warnSpy.mockRestore();
@@ -65,7 +95,8 @@ describe("MailerService", () => {
     expect(loggerSpy).toHaveBeenCalledWith(
       "[Mira] Verification code for user@example.com: 123456"
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ResendMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("rejects production sends when Resend is incomplete", async () => {
@@ -80,7 +111,8 @@ describe("MailerService", () => {
     await expect(service.ensureCanSendVerificationCode()).rejects.toThrow(
       new ServiceUnavailableException("邮件服务未配置，请联系管理员")
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ResendMock).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("sends verification emails with configured Resend", async () => {
@@ -91,29 +123,26 @@ describe("MailerService", () => {
       service.sendVerificationCode("user@example.com", "123456")
     ).resolves.toBeUndefined();
 
-    expect(fetchMock).toHaveBeenCalledWith("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer re_test_123",
-        "Content-Type": "application/json",
-        "User-Agent": "Mira/1.0"
-      },
-      body: JSON.stringify({
-        from: "Mira <noreply@example.com>",
-        to: ["user@example.com"],
-        subject: "Mira 登录验证码",
-        text: "你的 Mira 登录验证码是 123456，10 分钟内有效。"
-      })
+    expect(ResendMock).toHaveBeenCalledWith("re_test_123");
+    expect(sendMock).toHaveBeenCalledWith({
+      from: "Mira <noreply@example.com>",
+      to: ["user@example.com"],
+      subject: "Mira 登录验证码",
+      text: "你的 Mira 登录验证码是 123456，10 分钟内有效。"
     });
   });
 
-  it("treats non-2xx Resend responses as send failures", async () => {
+  it("treats Resend SDK errors as send failures", async () => {
     process.env.NODE_ENV = "production";
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ message: "domain is not verified" }), {
-        status: 422
-      })
-    );
+    sendMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: "domain is not verified",
+        name: "validation_error",
+        statusCode: 422
+      },
+      headers: null
+    });
     const service = new MailerService(createRuntimeSecrets(completeConfig()));
 
     await expect(
@@ -123,7 +152,7 @@ describe("MailerService", () => {
 
   it("wraps Resend request errors as send failures", async () => {
     process.env.NODE_ENV = "production";
-    fetchMock.mockRejectedValueOnce(new Error("network down"));
+    sendMock.mockRejectedValueOnce(new Error("network down"));
     const service = new MailerService(createRuntimeSecrets(completeConfig()));
 
     await expect(
