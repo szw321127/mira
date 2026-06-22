@@ -8,6 +8,7 @@ import { AuthService } from "./auth.service.js";
 import { UserSessionService } from "./user-session.service.js";
 
 describe("AuthController", () => {
+  const originalTrustProxyHeaders = process.env.TRUST_PROXY_HEADERS;
   let app: INestApplication;
   let server: Server;
   const requestCode = jest.fn();
@@ -16,6 +17,7 @@ describe("AuthController", () => {
   const revokeToken = jest.fn();
 
   beforeEach(async () => {
+    delete process.env.TRUST_PROXY_HEADERS;
     requestCode.mockReset();
     login.mockReset();
     requireUser.mockReset();
@@ -60,9 +62,29 @@ describe("AuthController", () => {
 
   afterEach(async () => {
     await app.close();
+    if (originalTrustProxyHeaders === undefined) {
+      delete process.env.TRUST_PROXY_HEADERS;
+    } else {
+      process.env.TRUST_PROXY_HEADERS = originalTrustProxyHeaders;
+    }
   });
 
-  it("normalizes valid code requests and forwards the request IP", async () => {
+  it("normalizes valid code requests and uses the direct request IP by default", async () => {
+    await request(server)
+      .post("/auth/code")
+      .set("x-forwarded-for", "203.0.113.10, 198.51.100.20")
+      .send({ email: " User@Example.COM " })
+      .expect(200, { ok: true });
+
+    expect(requestCode).toHaveBeenCalledWith(
+      "user@example.com",
+      expect.not.stringMatching(/^203\.0\.113\.10$/)
+    );
+  });
+
+  it("trusts forwarded request IP only when proxy headers are enabled", async () => {
+    process.env.TRUST_PROXY_HEADERS = "true";
+
     await request(server)
       .post("/auth/code")
       .set("x-forwarded-for", "203.0.113.10, 198.51.100.20")
@@ -139,5 +161,19 @@ describe("AuthController", () => {
     await request(server).post("/auth/logout").expect(200, { ok: true });
 
     expect(revokeToken).not.toHaveBeenCalled();
+  });
+
+  it("clears the cookie even when session revocation fails", async () => {
+    revokeToken.mockRejectedValueOnce(new Error("database unavailable"));
+
+    const response = await request(server)
+      .post("/auth/logout")
+      .set("Cookie", "mira_user_session=session-token")
+      .expect(500);
+
+    expect(response.headers["set-cookie"]?.[0]).toContain("mira_user_session=");
+    expect(response.headers["set-cookie"]?.[0]).toContain(
+      "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    );
   });
 });

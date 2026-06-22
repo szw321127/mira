@@ -54,11 +54,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logout(@Req() request: Request, @Res() response: Response) {
     const token = readUserSessionToken(request.headers.cookie);
-    if (token) {
-      await this.sessions.revokeToken(token);
+    try {
+      if (token) {
+        await this.sessions.revokeToken(token);
+      }
+    } finally {
+      clearUserSessionCookie(response);
     }
-
-    clearUserSessionCookie(response);
     return response.json({ ok: true });
   }
 
@@ -72,9 +74,11 @@ export class AuthController {
 }
 
 export function readRequestIp(request: Request): string | null {
-  const forwardedFor = request.headers["x-forwarded-for"];
-  if (typeof forwardedFor === "string") {
-    return forwardedFor.split(",")[0]?.trim() || null;
+  if (process.env.TRUST_PROXY_HEADERS === "true") {
+    const forwardedFor = request.headers["x-forwarded-for"];
+    if (typeof forwardedFor === "string") {
+      return forwardedFor.split(",")[0]?.trim() || null;
+    }
   }
 
   return request.ip ?? null;
