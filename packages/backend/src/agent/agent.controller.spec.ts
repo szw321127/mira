@@ -1,4 +1,5 @@
 import { Test } from "@nestjs/testing";
+import { UnauthorizedException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import request from "supertest";
 import type { Server } from "node:http";
@@ -6,14 +7,22 @@ import type { INestApplication } from "@nestjs/common";
 import { AgentController } from "./agent.controller.js";
 import { AgentService } from "./agent.service.js";
 import { ModelConfigurationError } from "./model-factory.js";
+import { UserSessionService } from "../auth/user-session.service.js";
 
 describe("AgentController", () => {
   let app: INestApplication;
   let server: Server;
   const streamChat = jest.fn();
+  const requireUser = jest.fn();
 
   beforeEach(async () => {
     streamChat.mockReset();
+    requireUser.mockReset();
+    requireUser.mockResolvedValue({
+      id: "user-1",
+      email: "user@example.com",
+      status: "enabled"
+    });
 
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentController],
@@ -22,6 +31,12 @@ describe("AgentController", () => {
           provide: AgentService,
           useValue: {
             streamChat
+          }
+        },
+        {
+          provide: UserSessionService,
+          useValue: {
+            requireUser
           }
         }
       ]
@@ -39,10 +54,29 @@ describe("AgentController", () => {
   it("rejects invalid chat requests", async () => {
     const response = await request(server)
       .post("/agent/chat")
+      .set("Cookie", "mira_user_session=session-token")
       .send({ conversationId: "c1", messages: [{ role: "system", content: "x" }] })
       .expect(400);
 
     expect(response.body).toEqual({ message: "Invalid agent chat request." });
+    expect(requireUser).toHaveBeenCalledWith("session-token");
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing sessions before starting a stream", async () => {
+    requireUser.mockRejectedValueOnce(
+      new UnauthorizedException("User session required.")
+    );
+
+    await request(server)
+      .post("/agent/chat")
+      .send({
+        conversationId: "c1",
+        messages: [{ role: "user", content: "你好" }]
+      })
+      .expect(401);
+
+    expect(requireUser).toHaveBeenCalledWith(undefined);
     expect(streamChat).not.toHaveBeenCalled();
   });
 
@@ -55,6 +89,7 @@ describe("AgentController", () => {
 
     const response = await request(server)
       .post("/agent/chat")
+      .set("Cookie", "mira_user_session=session-token")
       .send({
         conversationId: "c1",
         messages: [{ role: "user", content: "你好" }]
@@ -73,6 +108,7 @@ describe("AgentController", () => {
 
     const response = await request(server)
       .post("/agent/chat")
+      .set("Cookie", "mira_user_session=session-token")
       .send({
         conversationId: "c1",
         messages: [{ role: "user", content: "你好" }]
@@ -83,5 +119,6 @@ describe("AgentController", () => {
     expect(response.text).toBe(
       '{"type":"text-delta","text":"你好"}\n{"type":"stop","reason":"complete"}\n'
     );
+    expect(requireUser).toHaveBeenCalledWith("session-token");
   });
 });

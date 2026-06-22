@@ -1,5 +1,7 @@
-import { Body, Controller, HttpStatus, Post, Res } from "@nestjs/common";
-import type { Response } from "express";
+import { Body, Controller, HttpStatus, Post, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
+import { readUserSessionToken } from "../auth/auth-session.js";
+import { UserSessionService } from "../auth/user-session.service.js";
 import { encodeStreamEvent } from "./agent-event-normalizer.js";
 import { AgentService } from "./agent.service.js";
 import { parseAgentChatRequest } from "./agent.types.js";
@@ -7,10 +9,19 @@ import { ModelConfigurationError } from "./model-factory.js";
 
 @Controller("agent")
 export class AgentController {
-  constructor(private readonly agentService: AgentService) {}
+  constructor(
+    private readonly agentService: AgentService,
+    private readonly sessions: UserSessionService
+  ) {}
 
   @Post("chat")
-  async chat(@Body() body: unknown, @Res() response: Response) {
+  async chat(
+    @Req() request: Request,
+    @Body() body: unknown,
+    @Res() response: Response
+  ) {
+    await this.sessions.requireUser(readUserSessionToken(request.headers.cookie));
+
     const parsed = parseAgentChatRequest(body);
 
     if (!parsed) {
