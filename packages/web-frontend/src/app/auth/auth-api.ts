@@ -63,7 +63,12 @@ export async function loginWithEmailCode(
 }
 
 export async function logoutAuthSession(): Promise<void> {
-  await fetch("/api/auth/logout", {
+  const response = await fetch("/api/auth/logout", {
     method: "POST",
   });
+
+  if (!response.ok) {
+    const data = await readJson<BackendMessage>(response);
+    throw new Error(readBackendMessage(data, "退出登录失败"));
+  }
 }

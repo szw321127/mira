@@ -21,6 +21,11 @@ test("auth api uses same-origin email code endpoints with backend fallback messa
   assert.match(apiSource, /fetch\("\/api\/auth\/logout"/);
   assert.match(apiSource, /验证码发送失败/);
   assert.match(apiSource, /登录失败/);
+  assert.match(apiSource, /退出登录失败/);
+  assert.match(
+    apiSource,
+    /logoutAuthSession[\s\S]*if \(!response\.ok\)[\s\S]*readBackendMessage/,
+  );
   assert.match(apiSource, /response\.json\(\)\.catch/);
 });
 
