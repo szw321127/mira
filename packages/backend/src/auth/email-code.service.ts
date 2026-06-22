@@ -2,9 +2,10 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
-  Injectable
+  Injectable,
+  ServiceUnavailableException
 } from "@nestjs/common";
-import { createHash, randomInt } from "node:crypto";
+import { createHash, createHmac, randomInt } from "node:crypto";
 import { PrismaService } from "../database/prisma.service.js";
 import { normalizeEmail } from "./auth.types.js";
 
@@ -15,6 +16,47 @@ const MAX_EMAIL_PER_HOUR = 5;
 const MAX_IP_PER_HOUR = 20;
 const MAX_VERIFY_ATTEMPTS = 5;
 const INVALID_CODE_MESSAGE = "验证码不正确或已过期";
+const LOCAL_EMAIL_CODE_SECRET = "mira-local-email-code-secret-change-me";
+
+type EmailVerificationCodeDelegate = {
+  count(args: {
+    where: {
+      email?: string;
+      requestIp?: string;
+      createdAt?: { gte: Date };
+    };
+  }): Promise<number>;
+  create(args: {
+    data: {
+      email: string;
+      codeHash: string;
+      expiresAt: Date;
+      requestIp: string | null;
+    };
+  }): Promise<unknown>;
+  updateMany(args: {
+    where: {
+      id?: string;
+      email?: string;
+      usedAt?: null;
+      attempts?: { lt: number };
+      expiresAt?: { gt: Date };
+      codeHash?: string;
+    };
+    data: {
+      usedAt?: Date;
+      attempts?: { increment: number };
+    };
+  }): Promise<{ count: number }>;
+};
+
+type EmailCodeTransaction = {
+  emailVerificationCode: EmailVerificationCodeDelegate;
+  $executeRaw(
+    strings: TemplateStringsArray,
+    ...values: Array<string | number>
+  ): Promise<unknown>;
+};
 
 @Injectable()
 export class EmailCodeService {
@@ -23,18 +65,32 @@ export class EmailCodeService {
   async createCode(emailValue: string, requestIp?: string): Promise<string> {
     const email = normalizeEmail(emailValue);
     const now = new Date();
-
-    await this.enforceRateLimits(email, requestIp, now);
-
+    const secret = getEmailCodeSecret();
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
-    await this.prisma.emailVerificationCode.create({
-      data: {
-        email,
-        codeHash: hashCode(email, code),
-        expiresAt: new Date(now.getTime() + CODE_TTL_MS),
-        requestIp: requestIp ?? null
-      }
+
+    await this.prisma.$transaction(async (tx) => {
+      const transaction = toEmailCodeTransaction(tx);
+      await this.acquireRateLimitLocks(transaction, email, requestIp);
+      await this.enforceRateLimits(transaction, email, requestIp, now);
+      await transaction.emailVerificationCode.updateMany({
+        where: {
+          email,
+          usedAt: null
+        },
+        data: {
+          usedAt: now
+        }
+      });
+      await transaction.emailVerificationCode.create({
+        data: {
+          email,
+          codeHash: hashCode(email, code, secret),
+          expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+          requestIp: requestIp ?? null
+        }
+      });
     });
+
 
     return code;
   }
@@ -56,7 +112,7 @@ export class EmailCodeService {
       throw new BadRequestException(INVALID_CODE_MESSAGE);
     }
 
-    const codeHash = hashCode(email, code);
+    const codeHash = hashCode(email, code, getEmailCodeSecret());
     if (row.codeHash !== codeHash) {
       await this.prisma.emailVerificationCode.updateMany({
         where: {
@@ -98,6 +154,7 @@ export class EmailCodeService {
   }
 
   private async enforceRateLimits(
+    client: Pick<EmailCodeTransaction, "emailVerificationCode">,
     email: string,
     requestIp: string | undefined,
     now: Date
@@ -105,7 +162,7 @@ export class EmailCodeService {
     const minuteAgo = new Date(now.getTime() - EMAIL_MIN_INTERVAL_MS);
     const hourAgo = new Date(now.getTime() - HOURLY_WINDOW_MS);
 
-    const recentEmailCount = await this.prisma.emailVerificationCode.count({
+    const recentEmailCount = await client.emailVerificationCode.count({
       where: {
         email,
         createdAt: {
@@ -115,7 +172,7 @@ export class EmailCodeService {
     });
     if (recentEmailCount >= 1) throw rateLimitException();
 
-    const hourlyEmailCount = await this.prisma.emailVerificationCode.count({
+    const hourlyEmailCount = await client.emailVerificationCode.count({
       where: {
         email,
         createdAt: {
@@ -127,7 +184,7 @@ export class EmailCodeService {
 
     if (!requestIp) return;
 
-    const hourlyIpCount = await this.prisma.emailVerificationCode.count({
+    const hourlyIpCount = await client.emailVerificationCode.count({
       where: {
         requestIp,
         createdAt: {
@@ -137,12 +194,46 @@ export class EmailCodeService {
     });
     if (hourlyIpCount >= MAX_IP_PER_HOUR) throw rateLimitException();
   }
+
+  private async acquireRateLimitLocks(
+    tx: Pick<EmailCodeTransaction, "$executeRaw">,
+    email: string,
+    requestIp: string | undefined
+  ): Promise<void> {
+    const keys = [`email-code:email:${email}`];
+    if (requestIp) keys.push(`email-code:ip:${requestIp}`);
+    keys.sort();
+
+    for (const key of keys) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${advisoryLockId(key)})`;
+    }
+  }
 }
 
-function hashCode(email: string, code: string): string {
-  return createHash("sha256").update(`${email}:${code}`).digest("hex");
+function hashCode(email: string, code: string, secret: string): string {
+  return createHmac("sha256", secret).update(`${email}:${code}`).digest("hex");
 }
 
 function rateLimitException(): HttpException {
   return new HttpException("Too many requests.", HttpStatus.TOO_MANY_REQUESTS);
+}
+
+function getEmailCodeSecret(): string {
+  const secret =
+    process.env.EMAIL_CODE_SECRET ??
+    process.env.SESSION_SECRET ??
+    process.env.ADMIN_SESSION_SECRET;
+
+  if (secret) return secret;
+  if (process.env.NODE_ENV !== "production") return LOCAL_EMAIL_CODE_SECRET;
+  throw new ServiceUnavailableException("Email code secret is not configured.");
+}
+
+function advisoryLockId(value: string): number {
+  const digest = createHash("sha256").update(value).digest();
+  return digest.readInt32BE(0);
+}
+
+function toEmailCodeTransaction(value: unknown): EmailCodeTransaction {
+  return value as EmailCodeTransaction;
 }
