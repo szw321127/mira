@@ -126,6 +126,7 @@ function parseImportConversations(
     if (raw.title === undefined && raw.messages === undefined) return null;
     if (raw.title !== undefined && !title) return null;
     if (raw.messages !== undefined && !messages) return null;
+    if (!title && (!messages || messages.length === 0)) return null;
 
     parsed.push({
       ...(title ? { title } : {}),
