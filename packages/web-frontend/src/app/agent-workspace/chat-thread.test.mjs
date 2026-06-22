@@ -17,6 +17,12 @@ test("chat thread does not render agent tool events inline", () => {
   assert.doesNotMatch(chatThreadSource, /message\.events\.map/);
 });
 
+test("chat thread shows assistant error details in the failed message", () => {
+  assert.doesNotMatch(chatThreadSource, /请查看下方错误/);
+  assert.match(chatThreadSource, /latestErrorDetail/);
+  assert.match(chatThreadSource, /text-\[var\(--danger\)\]/);
+});
+
 test("context dock remains responsible for agent event rows", () => {
   assert.match(contextDockSource, /\bAgentEventRow\b/);
   assert.match(contextDockSource, /event\.type !== "text-delta"/);

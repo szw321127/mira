@@ -1,5 +1,6 @@
 import {
   createGPTAgentHarness,
+  fetchUrlTool,
   pickSearchTool,
   ToolRegistry,
   type CreateGPTHarnessOptions
@@ -12,7 +13,10 @@ export type AgentHarnessFactory = (
 
 export function createAgentRegistry(config: RuntimeSearchConfig) {
   const registry = new ToolRegistry();
-  registry.register(pickSearchTool({ tavilyApiKey: config.tavilyApiKey }));
+  registry.register(
+    pickSearchTool({ tavilyApiKey: config.tavilyApiKey }),
+    fetchUrlTool
+  );
   return registry;
 }
 
