@@ -8,14 +8,23 @@ import { formatTime } from "./format";
 import { shouldRenderMarkdown } from "./message-rendering";
 import type { ChatMessage, Conversation } from "./types";
 
+function getLatestErrorDetail(message: ChatMessage) {
+  const errorEvent = [...message.events].reverse().find((event) => {
+    return event.type === "error";
+  });
+
+  return errorEvent?.message.trim() ?? "";
+}
+
 function MessageBlock({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   const renderMarkdown = shouldRenderMarkdown(message.role);
+  const latestErrorDetail = getLatestErrorDetail(message);
   const fallback =
     message.status === "streaming"
       ? "正在组织回答..."
       : message.status === "error"
-        ? "运行失败，请查看下方错误。"
+        ? "运行失败"
         : "";
 
   return (
@@ -52,6 +61,11 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       {!message.content && fallback ? (
         <p className="text-[13px] leading-6 text-[var(--muted-strong)]">
           {fallback}
+        </p>
+      ) : null}
+      {message.status === "error" && latestErrorDetail ? (
+        <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-6 text-[var(--danger)]">
+          {latestErrorDetail}
         </p>
       ) : null}
     </article>
