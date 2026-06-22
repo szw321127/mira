@@ -126,6 +126,32 @@ describe("AdminController", () => {
     );
   });
 
+  it("treats unsafe page values as page one", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent
+      .get("/admin/users")
+      .query({ page: "100000000000000000000" })
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        page: 1,
+        pageSize: 20
+      })
+    );
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 0,
+        take: 20
+      })
+    );
+  });
+
   it("disables users and revokes their sessions", async () => {
     const agent = request.agent(server);
     await agent
@@ -167,10 +193,28 @@ describe("AdminController", () => {
     const response = await agent
       .patch("/admin/users/user-1/status")
       .send({ status: "archived" })
-      .expect(200);
+      .expect(400);
 
     expect(response.body).toEqual({ message: "Invalid user status." });
     expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when updating a missing user", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent
+      .patch("/admin/users/missing-user/status")
+      .send({ status: "disabled" })
+      .expect(404);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({ message: "User not found." })
+    );
     expect(prisma.userSession.updateMany).not.toHaveBeenCalled();
   });
 
@@ -383,7 +427,12 @@ function createPrismaStore(initialValue?: unknown): MockPrismaService {
           where: { id: string };
           data: { status: "enabled" | "disabled" };
         }) => {
-          const user = users.find((item) => item.id === where.id) ?? users[0];
+          const user = users.find((item) => item.id === where.id);
+          if (!user) {
+            const error = new Error("User not found") as Error & { code: string };
+            error.code = "P2025";
+            return Promise.reject(error);
+          }
           const updated = { ...user, status: data.status };
           return Promise.resolve(updated);
         }

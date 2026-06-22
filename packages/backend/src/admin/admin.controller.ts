@@ -87,15 +87,18 @@ export class AdminController {
   async updateUserStatus(
     @Req() request: Request,
     @Param("id") id: string,
-    @Body() body: unknown
+    @Body() body: unknown,
+    @Res() response: Response
   ) {
     this.requireSession(request);
     const status = parseUserStatus(body);
     if (!status) {
-      return { message: "Invalid user status." };
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: "Invalid user status." });
     }
 
-    return this.adminService.updateUserStatus(id, status);
+    return response.json(await this.adminService.updateUserStatus(id, status));
   }
 
   @Post("password")

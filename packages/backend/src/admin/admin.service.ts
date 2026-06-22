@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException
+} from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service.js";
 import {
   hashPassword,
@@ -16,6 +20,7 @@ import {
 
 const DEFAULT_SESSION_SECRET = "mira-local-admin-session-secret-change-me";
 const ADMIN_USERS_PAGE_SIZE = 20;
+const ADMIN_USERS_MAX_PAGE = 1000;
 type UserStatus = "enabled" | "disabled";
 
 @Injectable()
@@ -104,10 +109,13 @@ export class AdminService {
     status?: UserStatus;
     page?: number;
   }) {
-    const page =
+    const requestedPage =
       typeof options.page === "number" && Number.isFinite(options.page)
-        ? Math.max(1, Math.floor(options.page))
+        ? Math.floor(options.page)
         : 1;
+    const page = Number.isSafeInteger(requestedPage)
+      ? Math.min(ADMIN_USERS_MAX_PAGE, Math.max(1, requestedPage))
+      : 1;
     const query = options.query?.trim().toLowerCase();
     const where = {
       ...(query
@@ -143,10 +151,7 @@ export class AdminService {
   }
 
   async updateUserStatus(userId: string, status: UserStatus) {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { status }
-    });
+    const user = await this.updateUserStatusRow(userId, status);
 
     if (status === "disabled") {
       await this.prisma.userSession.updateMany({
@@ -164,6 +169,20 @@ export class AdminService {
         lastLoginAt: user.lastLoginAt?.toISOString() ?? null
       }
     };
+  }
+
+  private async updateUserStatusRow(userId: string, status: UserStatus) {
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: { status }
+      });
+    } catch (error) {
+      if (isPrismaNotFoundError(error)) {
+        throw new NotFoundException("User not found.");
+      }
+      throw error;
+    }
   }
 
   private async checkPassword(password: string) {
@@ -184,6 +203,14 @@ export class AdminService {
       DEFAULT_SESSION_SECRET
     );
   }
+}
+
+function isPrismaNotFoundError(error: unknown) {
+  return (
+    Boolean(error) &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "P2025"
+  );
 }
 
 export function maskSecret(value: string) {
