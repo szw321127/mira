@@ -14,4 +14,5 @@ export {
 } from './context/index.js';
 export { ToolRegistry, type ToolDefinition } from './tools/registry.js';
 export { pickSearchTool } from './tools/web-search.js';
+export { fetchUrlTool } from './tools/fetch-tools.js';
 export { SessionStore, type SessionEntry } from './session/index.js';

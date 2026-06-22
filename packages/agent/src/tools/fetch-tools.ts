@@ -3,6 +3,83 @@ import { join, resolve, extname } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { ToolDefinition } from './registry.js';
 
+const PRIVATE_IPV4_RANGES = [
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^172\.(1[6-9]|2\d|3[0-1])\./,
+  /^192\.168\./,
+  /^0\./,
+];
+const MAX_REDIRECTS = 3;
+
+function validatePublicHttpUrl(rawUrl: string): string | null {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return 'URL 格式无效，请提供完整的 http:// 或 https:// 地址';
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return '只支持 http:// 或 https:// URL';
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname === 'metadata.google.internal' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '[::1]' ||
+    hostname === '::1' ||
+    hostname.startsWith('127.') ||
+    PRIVATE_IPV4_RANGES.some((range) => range.test(hostname)) ||
+    hostname.startsWith('[fc') ||
+    hostname.startsWith('[fd') ||
+    hostname.startsWith('[fe80:') ||
+    hostname.startsWith('fc') ||
+    hostname.startsWith('fd') ||
+    hostname.startsWith('fe80:')
+  ) {
+    return '不允许访问内网或本机地址';
+  }
+
+  return null;
+}
+
+function resolveRedirectUrl(currentUrl: string, location: string | null) {
+  if (!location) return null;
+  return new URL(location, currentUrl).toString();
+}
+
+async function fetchPublicUrl(url: string): Promise<Response | string> {
+  let currentUrl = url;
+
+  for (let attempt = 0; attempt <= MAX_REDIRECTS; attempt += 1) {
+    const validationError = validatePublicHttpUrl(currentUrl);
+    if (validationError) return validationError;
+
+    const res = await fetch(currentUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 SuperAgent' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (![301, 302, 303, 307, 308].includes(res.status)) return res;
+
+    const redirectUrl = resolveRedirectUrl(
+      currentUrl,
+      res.headers.get('location'),
+    );
+    if (!redirectUrl) return `请求失败：HTTP ${res.status}`;
+
+    currentUrl = redirectUrl;
+  }
+
+  return '抓取失败：重定向次数过多';
+}
+
 export const fetchUrlTool: ToolDefinition = {
   name: 'fetch_url',
   description:
@@ -23,10 +100,8 @@ export const fetchUrlTool: ToolDefinition = {
   maxResultChars: 1500,
   execute: async ({ url }: { url: string }) => {
     try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 SuperAgent' },
-        signal: AbortSignal.timeout(10000),
-      });
+      const res = await fetchPublicUrl(url);
+      if (typeof res === 'string') return res;
       if (!res.ok) return `请求失败：HTTP ${res.status}`;
       const html = await res.text();
       return (
