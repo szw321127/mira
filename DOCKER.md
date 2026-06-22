@@ -59,7 +59,7 @@ APP_IP=47.115.149.71
 记录指向服务器公网 IP，并在云服务器安全组放开 `80/tcp` 和 `443/tcp`。
 `APP_IP` 提供临时的 `http://<服务器 IP>` 和 `https://<服务器 IP>` 访问入口。
 IP HTTPS 使用 Let’s Encrypt 短期 IP 证书，证书生命周期约 6 天并由 Caddy 自动续期；
-正式访问仍建议使用域名 HTTPS。
+同时 Caddy 会把未携带 SNI 的 TLS 客户端默认匹配到 `APP_IP`。正式访问仍建议使用域名 HTTPS。
 
 ### 2. 构建并启动服务
 
