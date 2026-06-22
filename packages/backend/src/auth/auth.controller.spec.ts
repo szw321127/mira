@@ -67,7 +67,7 @@ describe("AuthController", () => {
       .post("/auth/code")
       .set("x-forwarded-for", "203.0.113.10, 198.51.100.20")
       .send({ email: " User@Example.COM " })
-      .expect(201, { ok: true });
+      .expect(200, { ok: true });
 
     expect(requestCode).toHaveBeenCalledWith("user@example.com", "203.0.113.10");
   });
@@ -88,7 +88,7 @@ describe("AuthController", () => {
     const response = await request(server)
       .post("/auth/login")
       .send({ email: " User@Example.COM ", code: "123456" })
-      .expect(201);
+      .expect(200);
 
     expect(response.body).toEqual({
       user: { id: "user-1", email: "user@example.com", status: "enabled" }
@@ -126,7 +126,7 @@ describe("AuthController", () => {
     const response = await request(server)
       .post("/auth/logout")
       .set("Cookie", "mira_user_session=session-token")
-      .expect(201, { ok: true });
+      .expect(200, { ok: true });
 
     expect(revokeToken).toHaveBeenCalledWith("session-token");
     expect(response.headers["set-cookie"]?.[0]).toContain("mira_user_session=");
@@ -136,7 +136,7 @@ describe("AuthController", () => {
   });
 
   it("does not revoke a session when logout has no token", async () => {
-    await request(server).post("/auth/logout").expect(201, { ok: true });
+    await request(server).post("/auth/logout").expect(200, { ok: true });
 
     expect(revokeToken).not.toHaveBeenCalled();
   });

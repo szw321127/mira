@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Post,
   Req,
   Res
@@ -25,6 +27,7 @@ export class AuthController {
   ) {}
 
   @Post("code")
+  @HttpCode(HttpStatus.OK)
   requestCode(@Req() request: Request, @Body() body: unknown) {
     const parsed = parseCodeRequest(body);
     if (!parsed) {
@@ -35,6 +38,7 @@ export class AuthController {
   }
 
   @Post("login")
+  @HttpCode(HttpStatus.OK)
   async login(@Body() body: unknown, @Res() response: Response) {
     const parsed = parseLoginRequest(body);
     if (!parsed) {
@@ -47,6 +51,7 @@ export class AuthController {
   }
 
   @Post("logout")
+  @HttpCode(HttpStatus.OK)
   async logout(@Req() request: Request, @Res() response: Response) {
     const token = readUserSessionToken(request.headers.cookie);
     if (token) {
