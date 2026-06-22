@@ -27,19 +27,21 @@ export function isValidEmail(value: unknown): boolean {
   return email.length > 0 && email.length <= 254 && EMAIL_PATTERN.test(email);
 }
 
-export function parseCodeRequest(value: unknown): { email: string } {
+export function parseCodeRequest(value: unknown): { email: string } | null {
   const email = normalizeEmail(readEmail(value));
   if (!isValidEmail(email)) {
-    throw new Error("Invalid email.");
+    return null;
   }
   return { email };
 }
 
-export function parseLoginRequest(value: unknown): { email: string; code: string } {
+export function parseLoginRequest(
+  value: unknown
+): { email: string; code: string } | null {
   const email = normalizeEmail(readEmail(value));
   const code = readCode(value).trim();
   if (!isValidEmail(email) || !CODE_PATTERN.test(code)) {
-    throw new Error("Invalid login request.");
+    return null;
   }
   return { email, code };
 }

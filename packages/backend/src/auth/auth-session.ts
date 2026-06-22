@@ -9,7 +9,11 @@ export function readCookie(cookieHeader: string | undefined, name: string): stri
   for (const cookie of cookieHeader.split(";")) {
     const [rawName, ...rawValue] = cookie.trim().split("=");
     if (rawName !== name) continue;
-    return decodeURIComponent(rawValue.join("="));
+    try {
+      return decodeURIComponent(rawValue.join("="));
+    } catch {
+      return undefined;
+    }
   }
 
   return undefined;

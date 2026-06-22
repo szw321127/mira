@@ -27,37 +27,41 @@ type MockUserSessionService = Pick<
 
 function createPrisma(initialUsers: UserRow[] = []) {
   const users = [...initialUsers];
+  const upsert = jest.fn(
+    ({
+      where,
+      create,
+      update
+    }: {
+      where: { email: string };
+      create: Pick<UserRow, "email" | "lastLoginAt">;
+      update: Pick<UserRow, "lastLoginAt">;
+    }) => {
+      let user = users.find((item) => item.email === where.email);
+      if (!user) {
+        user = {
+          id: `user-${users.length + 1}`,
+          email: create.email,
+          status: "enabled",
+          lastLoginAt: create.lastLoginAt
+        };
+        users.push(user);
+      } else {
+        user.lastLoginAt = update.lastLoginAt;
+      }
+      return Promise.resolve(user);
+    }
+  );
   const prisma = {
     user: {
-      upsert: jest.fn(
-        ({
-          where,
-          create,
-          update
-        }: {
-          where: { email: string };
-          create: Pick<UserRow, "email" | "lastLoginAt">;
-          update: Pick<UserRow, "lastLoginAt">;
-        }) => {
-          let user = users.find((item) => item.email === where.email);
-          if (!user) {
-            user = {
-              id: `user-${users.length + 1}`,
-              email: create.email,
-              status: "enabled",
-              lastLoginAt: create.lastLoginAt
-            };
-            users.push(user);
-          } else {
-            user.lastLoginAt = update.lastLoginAt;
-          }
-          return Promise.resolve(user);
-        }
-      )
+      findUnique: jest.fn(({ where }: { where: { email: string } }) => {
+        return Promise.resolve(users.find((item) => item.email === where.email) ?? null);
+      }),
+      upsert
     }
   };
 
-  return { prisma: prisma as unknown as PrismaService, users };
+  return { prisma: prisma as unknown as PrismaService, users, upsert };
 }
 
 function createService(prisma: PrismaService) {
@@ -106,20 +110,23 @@ describe("AuthService", () => {
     expect(users[0]?.lastLoginAt).toBeInstanceOf(Date);
   });
 
-  it("rejects disabled users", async () => {
-    const { prisma } = createPrisma([
+  it("rejects disabled users without consuming a code or creating a session", async () => {
+    const lastLoginAt = new Date("2026-06-01T00:00:00.000Z");
+    const { prisma, upsert } = createPrisma([
       {
         id: "user-1",
         email: "user@example.com",
         status: "disabled",
-        lastLoginAt: null
+        lastLoginAt
       }
     ]);
-    const { service, sessions } = createService(prisma);
+    const { service, codeService, sessions } = createService(prisma);
 
     await expect(service.login("user@example.com", "123456")).rejects.toThrow(
       new ForbiddenException("账号已被禁用，请联系管理员")
     );
+    expect(codeService.verifyCode).not.toHaveBeenCalled();
     expect(sessions.createSession).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@ type SessionRow = {
   };
 };
 
-function createPrisma() {
+function createPrisma(status: "enabled" | "disabled" = "enabled") {
   const rows: SessionRow[] = [];
   const users = new Map([
     [
@@ -25,7 +25,7 @@ function createPrisma() {
       {
         id: "user-1",
         email: "user@example.com",
-        status: "enabled" as const
+        status
       }
     ]
   ]);
@@ -97,6 +97,41 @@ describe("UserSessionService", () => {
     const service = new UserSessionService(prisma);
 
     await expect(service.requireUser(undefined)).rejects.toThrow(
+      new UnauthorizedException("User session required.")
+    );
+  });
+
+  it("rejects revoked sessions", async () => {
+    const { prisma, rows } = createPrisma();
+    const service = new UserSessionService(prisma);
+
+    const token = await service.createSession("user-1");
+    rows[0].revokedAt = new Date();
+
+    await expect(service.requireUser(token)).rejects.toThrow(
+      new UnauthorizedException("User session required.")
+    );
+  });
+
+  it("rejects expired sessions", async () => {
+    const { prisma, rows } = createPrisma();
+    const service = new UserSessionService(prisma);
+
+    const token = await service.createSession("user-1");
+    rows[0].expiresAt = new Date(Date.now() - 1);
+
+    await expect(service.requireUser(token)).rejects.toThrow(
+      new UnauthorizedException("User session required.")
+    );
+  });
+
+  it("rejects sessions for disabled users", async () => {
+    const { prisma } = createPrisma("disabled");
+    const service = new UserSessionService(prisma);
+
+    const token = await service.createSession("user-1");
+
+    await expect(service.requireUser(token)).rejects.toThrow(
       new UnauthorizedException("User session required.")
     );
   });

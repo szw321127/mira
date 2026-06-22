@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service.js";
-import { normalizeEmail, PublicUser, toPublicUser } from "./auth.types.js";
+import { normalizeEmail, toPublicUser, type PublicUser } from "./auth.types.js";
 import { EmailCodeService } from "./email-code.service.js";
 import { MailerService } from "./mailer.service.js";
 import { UserSessionService } from "./user-session.service.js";
@@ -25,6 +25,14 @@ export class AuthService {
 
   async login(emailValue: string, code: string): Promise<{ user: PublicUser; token: string }> {
     const email = normalizeEmail(emailValue);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser?.status === "disabled") {
+      throw new ForbiddenException(DISABLED_MESSAGE);
+    }
+
     await this.codes.verifyCode(email, code);
     const lastLoginAt = new Date();
 

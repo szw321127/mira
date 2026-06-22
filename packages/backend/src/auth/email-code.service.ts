@@ -41,6 +41,7 @@ export class EmailCodeService {
 
   async verifyCode(emailValue: string, code: string): Promise<void> {
     const email = normalizeEmail(emailValue);
+    const now = new Date();
     const row = await this.prisma.emailVerificationCode.findFirst({
       where: {
         email,
@@ -51,13 +52,23 @@ export class EmailCodeService {
       }
     });
 
-    if (!row || row.expiresAt <= new Date() || row.attempts >= MAX_VERIFY_ATTEMPTS) {
+    if (!row || row.expiresAt <= now || row.attempts >= MAX_VERIFY_ATTEMPTS) {
       throw new BadRequestException(INVALID_CODE_MESSAGE);
     }
 
-    if (row.codeHash !== hashCode(email, code)) {
-      await this.prisma.emailVerificationCode.update({
-        where: { id: row.id },
+    const codeHash = hashCode(email, code);
+    if (row.codeHash !== codeHash) {
+      await this.prisma.emailVerificationCode.updateMany({
+        where: {
+          id: row.id,
+          usedAt: null,
+          attempts: {
+            lt: MAX_VERIFY_ATTEMPTS
+          },
+          expiresAt: {
+            gt: now
+          }
+        },
         data: {
           attempts: {
             increment: 1
@@ -67,12 +78,23 @@ export class EmailCodeService {
       throw new BadRequestException(INVALID_CODE_MESSAGE);
     }
 
-    await this.prisma.emailVerificationCode.update({
-      where: { id: row.id },
+    const result = await this.prisma.emailVerificationCode.updateMany({
+      where: {
+        id: row.id,
+        usedAt: null,
+        attempts: {
+          lt: MAX_VERIFY_ATTEMPTS
+        },
+        expiresAt: {
+          gt: now
+        },
+        codeHash
+      },
       data: {
-        usedAt: new Date()
+        usedAt: now
       }
     });
+    if (result.count !== 1) throw new BadRequestException(INVALID_CODE_MESSAGE);
   }
 
   private async enforceRateLimits(
