@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import { changeAdminPassword } from "./admin-api";
 
 const inputClass =
-  "mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]";
+  "mt-2 h-11 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] md:h-10";
 
 export function AdminPasswordPanel({
   onMessage,
@@ -60,7 +60,7 @@ export function AdminPasswordPanel({
         value={newPassword}
       />
       <button
-        className="mt-3 inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+        className="mt-3 inline-flex h-11 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55 md:h-9"
         disabled={submitting}
         type="submit"
       >

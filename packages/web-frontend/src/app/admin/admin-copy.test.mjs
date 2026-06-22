@@ -15,7 +15,7 @@ function readAdminFile(fileName) {
 const adminSource = readAdminFile("admin-shell.tsx");
 
 test("admin page includes login, password change, and key management flows", () => {
-  assert.match(adminSource, /账号信息/);
+  assert.match(readAdminFile("admin-overview-panel.tsx"), /当前管理员/);
   assert.match(readAdminFile("admin-login-panel.tsx"), /管理员登录/);
   assert.match(readAdminFile("admin-password-panel.tsx"), /修改密码/);
   assert.match(readAdminFile("admin-secrets-panel.tsx"), /Key 管理/);
@@ -38,9 +38,33 @@ test("admin page talks only to same-origin admin api", () => {
 
 test("admin shell is split into focused panels", () => {
   assert.match(adminSource, /AdminLoginPanel/);
-  assert.match(adminSource, /AdminPasswordPanel/);
+  assert.match(adminSource, /AdminNavigation/);
+  assert.match(adminSource, /AdminOverviewPanel/);
+  assert.match(adminSource, /AdminSecurityPanel/);
   assert.match(adminSource, /AdminSecretsPanel/);
   assert.match(adminSource, /AdminUsersPanel/);
+  assert.match(readAdminFile("admin-security-panel.tsx"), /AdminPasswordPanel/);
+});
+
+test("admin shell separates modules behind sidebar navigation", () => {
+  const navigationSource = readAdminFile("admin-navigation.tsx");
+  const overviewSource = readAdminFile("admin-overview-panel.tsx");
+  const frameSource = readAdminFile("admin-section-frame.tsx");
+  const securitySource = readAdminFile("admin-security-panel.tsx");
+
+  assert.match(adminSource, /AdminNavigation/);
+  assert.match(adminSource, /activeSection/);
+  assert.match(adminSource, /renderActiveSection/);
+  assert.match(navigationSource, /总览/);
+  assert.match(navigationSource, /账号管理/);
+  assert.match(navigationSource, /Key 管理/);
+  assert.match(navigationSource, /安全设置/);
+  assert.match(navigationSource, /aria-current/);
+  assert.match(navigationSource, /lg:hidden/);
+  assert.match(navigationSource, /lg:flex/);
+  assert.match(overviewSource, /onSelectSection/);
+  assert.match(frameSource, /AdminSectionFrame/);
+  assert.match(securitySource, /AdminPasswordPanel/);
 });
 
 test("admin users panel manages account search filters and status actions", () => {
@@ -79,9 +103,38 @@ test("admin inputs avoid outline styling and keep placeholders readable", () => 
   );
 });
 
+test("admin module controls keep mobile touch targets", () => {
+  const navigationSource = readAdminFile("admin-navigation.tsx");
+  const loginPanelSource = readAdminFile("admin-login-panel.tsx");
+  const passwordPanelSource = readAdminFile("admin-password-panel.tsx");
+  const secretsPanelSource = readAdminFile("admin-secrets-panel.tsx");
+  const usersPanelSource = readAdminFile("admin-users-panel.tsx");
+
+  assert.match(navigationSource, /inline-flex h-11 w-11/);
+  assert.match(loginPanelSource, /h-11/);
+  assert.match(loginPanelSource, /md:h-10/);
+  assert.match(passwordPanelSource, /h-11/);
+  assert.match(passwordPanelSource, /md:h-9/);
+  assert.match(secretsPanelSource, /h-11/);
+  assert.match(secretsPanelSource, /md:h-9/);
+  assert.match(usersPanelSource, /h-11/);
+  assert.match(usersPanelSource, /md:h-9/);
+});
+
+test("admin sidebar navigation constrains long labels inside the rail", () => {
+  const navigationSource = readAdminFile("admin-navigation.tsx");
+
+  assert.match(navigationSource, /grid-cols-\[minmax\(0,1fr\)\]/);
+  assert.match(navigationSource, /min-h-11 min-w-0 w-full/);
+});
+
 test("admin UI avoids border plus large soft shadow ghost cards", () => {
   const uiSources = [
     adminSource,
+    readAdminFile("admin-navigation.tsx"),
+    readAdminFile("admin-overview-panel.tsx"),
+    readAdminFile("admin-section-frame.tsx"),
+    readAdminFile("admin-security-panel.tsx"),
     readAdminFile("admin-login-panel.tsx"),
     readAdminFile("admin-password-panel.tsx"),
     readAdminFile("admin-secrets-panel.tsx"),

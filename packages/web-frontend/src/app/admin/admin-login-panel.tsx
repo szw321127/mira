@@ -6,7 +6,7 @@ import { loginAdmin } from "./admin-api";
 import type { AdminSession } from "./admin-types";
 
 const inputClass =
-  "mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]";
+  "mt-2 h-11 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] md:h-10";
 
 export function AdminLoginPanel({
   message,
@@ -72,7 +72,7 @@ export function AdminLoginPanel({
           />
         </label>
         <button
-          className="mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[9px] bg-[var(--accent)] px-3 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+          className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[9px] bg-[var(--accent)] px-3 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55 md:h-10"
           disabled={submitting}
           type="submit"
         >

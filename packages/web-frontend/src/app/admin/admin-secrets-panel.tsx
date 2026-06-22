@@ -6,16 +6,18 @@ import { loadAdminSecrets, saveAdminSecrets } from "./admin-api";
 import type { ManagedSecret } from "./admin-types";
 
 const inputClass =
-  "h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]";
+  "h-11 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] md:h-10";
 
 export function AdminSecretsPanel({
   secrets,
   onMessage,
   onSecrets,
+  showHeader = true,
 }: {
   secrets: ManagedSecret[];
   onMessage: (message: string) => void;
   onSecrets: (secrets: ManagedSecret[]) => void;
+  showHeader?: boolean;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -60,18 +62,24 @@ export function AdminSecretsPanel({
 
   return (
     <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-[700]">
-            <KeyRound aria-hidden="true" size={17} />
-            Key 管理
+      <div
+        className={`flex flex-wrap items-center gap-3 ${
+          showHeader ? "justify-between" : "justify-end"
+        }`}
+      >
+        {showHeader ? (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-[700]">
+              <KeyRound aria-hidden="true" size={17} />
+              Key 管理
+            </div>
+            <p className="mt-1 text-xs text-[var(--muted-strong)]">
+              管理模型、搜索等后端服务配置。敏感值保存后只展示掩码。
+            </p>
           </div>
-          <p className="mt-1 text-xs text-[var(--muted-strong)]">
-            管理模型、搜索等后端服务配置。敏感值保存后只展示掩码。
-          </p>
-        </div>
+        ) : null}
         <button
-          className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55 md:h-9"
           disabled={refreshing}
           onClick={() => void refresh()}
           type="button"
@@ -115,7 +123,7 @@ export function AdminSecretsPanel({
           ))}
         </div>
         <button
-          className="mt-4 inline-flex h-10 items-center gap-2 rounded-[9px] bg-[var(--accent)] px-4 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+          className="mt-4 inline-flex h-11 items-center gap-2 rounded-[9px] bg-[var(--accent)] px-4 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55 md:h-10"
           disabled={submitting}
           type="submit"
         >

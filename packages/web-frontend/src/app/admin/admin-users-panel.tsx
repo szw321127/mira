@@ -17,7 +17,7 @@ import type {
 } from "./admin-types";
 
 const inputClass =
-  "h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] pr-3 pl-9 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]";
+  "h-11 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] pr-3 pl-9 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] md:h-10";
 
 type StatusFilter = "all" | AdminUserStatus;
 
@@ -29,8 +29,10 @@ const statusTabs: Array<{ label: string; value: StatusFilter }> = [
 
 export function AdminUsersPanel({
   onMessage,
+  showHeader = true,
 }: {
   onMessage: (message: string) => void;
+  showHeader?: boolean;
 }) {
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
@@ -124,16 +126,22 @@ export function AdminUsersPanel({
 
   return (
     <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-[700]">
-            <UsersRound aria-hidden="true" size={17} />
-            账号管理
+      <div
+        className={`flex flex-wrap items-start gap-3 ${
+          showHeader ? "justify-between" : "justify-end"
+        }`}
+      >
+        {showHeader ? (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-[700]">
+              <UsersRound aria-hidden="true" size={17} />
+              账号管理
+            </div>
+            <p className="mt-1 text-xs text-[var(--muted-strong)]">
+              查看邮箱登录账号，按状态筛选，并控制账号是否可继续使用 Mira。
+            </p>
           </div>
-          <p className="mt-1 text-xs text-[var(--muted-strong)]">
-            查看邮箱登录账号，按状态筛选，并控制账号是否可继续使用 Mira。
-          </p>
-        </div>
+        ) : null}
         <div className="rounded-[8px] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted-strong)]">
           共 {data.total} 个账号
         </div>
@@ -156,7 +164,7 @@ export function AdminUsersPanel({
         <div className="inline-flex overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)]">
           {statusTabs.map((tab) => (
             <button
-              className={`h-9 border-r border-[var(--border)] px-3 text-sm last:border-r-0 ${
+              className={`h-11 border-r border-[var(--border)] px-3 text-sm last:border-r-0 md:h-9 ${
                 status === tab.value
                   ? "bg-[var(--accent-subtle)] font-[700] text-[var(--accent-strong)]"
                   : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
@@ -256,7 +264,7 @@ export function AdminUsersPanel({
         </span>
         <div className="inline-flex items-center gap-2">
           <button
-            className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 md:h-9"
             disabled={loading || page <= 1}
             onClick={() => {
               setLoading(true);
@@ -268,7 +276,7 @@ export function AdminUsersPanel({
             上一页
           </button>
           <button
-            className="inline-flex h-9 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50 md:h-9"
             disabled={loading || page >= pageCount}
             onClick={() => {
               setLoading(true);
@@ -298,7 +306,7 @@ function StatusActionButton({
 
   return (
     <button
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border px-3 text-sm font-[650] transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+      className={`inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border px-3 text-sm font-[650] transition-colors disabled:cursor-not-allowed disabled:opacity-55 md:h-9 ${
         enabling
           ? "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--success)] hover:bg-[var(--success-soft)]"
           : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--danger)] hover:bg-[var(--danger-soft)]"
