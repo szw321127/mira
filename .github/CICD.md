@@ -32,9 +32,8 @@
 
 服务器部署时会从阿里云 ACR 拉取 `rednote_backend`、`rednote_frontend`、
 `rednote_postgres`、`rednote_redis` 和 `rednote_caddy`，避免服务器直接访问 Docker Hub。
-日常部署只更新业务镜像；如果需要重新同步 PostgreSQL、Redis、Caddy 基础镜像，
-手动运行 `deploy.yml` 时勾选 `mirror_service_images`。
-首次切换到 ACR 时也需要手动运行一次并勾选 `mirror_service_images`，把基础镜像先同步过去。
+日常部署只更新业务镜像；部署前会检查 PostgreSQL、Redis、Caddy 基础镜像是否已在 ACR，
+缺失时自动同步。手动运行 `deploy.yml` 时勾选 `mirror_service_images` 可以强制重新同步。
 
 ## 配置步骤
 
@@ -130,7 +129,7 @@ mkdir -p /home/user/app
 2. 选择要运行的 workflow
 3. 点击 `Run workflow` 按钮
 4. 选择分支并点击 `Run workflow`
-5. 首次切换 ACR 或需要刷新 PostgreSQL、Redis、Caddy 基础镜像时，勾选 `mirror_service_images`
+5. 需要强制刷新 PostgreSQL、Redis、Caddy 基础镜像时，勾选 `mirror_service_images`
 
 ## 镜像标签说明
 

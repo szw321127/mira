@@ -10,7 +10,7 @@ on:
   workflow_dispatch:  # 允许手动触发
     inputs:
       mirror_service_images:
-        description: "同步 PostgreSQL、Redis、Caddy 基础镜像到 ACR"
+        description: "强制重新同步 PostgreSQL、Redis、Caddy 基础镜像到 ACR"
         required: false
         default: false
         type: boolean
@@ -136,7 +136,6 @@ jobs:
 
   # --- 任务3：同步基础服务镜像到 ACR，避免服务器直接拉 Docker Hub ---
   mirror-service-images:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mirror_service_images == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,27 +155,36 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Mirror PostgreSQL, Redis and Caddy images
+      - name: Mirror missing PostgreSQL, Redis and Caddy images
         run: |
           set -e
 
-          docker pull postgres:16-alpine
-          docker tag postgres:16-alpine ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:16-alpine
-          docker tag postgres:16-alpine ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:16-alpine
-          docker push ${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:latest
+          force_mirror="${{ github.event_name == 'workflow_dispatch' && inputs.mirror_service_images == true }}"
 
-          docker pull redis:7-alpine
-          docker tag redis:7-alpine ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine
-          docker tag redis:7-alpine ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine
-          docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
+          mirror_image() {
+            source_image="$1"
+            versioned_image="$2"
+            latest_image="$3"
 
-          docker pull caddy:2-alpine
-          docker tag caddy:2-alpine ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:2-alpine
-          docker tag caddy:2-alpine ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:latest
-          docker push ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:2-alpine
-          docker push ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:latest
+            if [ "$force_mirror" != "true" ] && docker manifest inspect "$versioned_image" >/dev/null 2>&1; then
+              echo "Image already exists: $versioned_image"
+              return 0
+            fi
+
+            echo "Mirroring $source_image to $versioned_image"
+            docker pull "$source_image"
+            docker tag "$source_image" "$versioned_image"
+            docker push "$versioned_image"
+
+            if [ -n "$latest_image" ]; then
+              docker tag "$source_image" "$latest_image"
+              docker push "$latest_image"
+            fi
+          }
+
+          mirror_image "postgres:16-alpine" "${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:16-alpine" "${{ env.REGISTRY }}/${{ env.POSTGRES_IMAGE_NAME }}:latest"
+          mirror_image "redis:7-alpine" "${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine" "${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest"
+          mirror_image "caddy:2-alpine" "${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:2-alpine" "${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:latest"
 
   # --- 任务4：在服务器上部署 ---
   deploy:
