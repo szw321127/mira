@@ -160,9 +160,21 @@ export class EmailCodeService {
 
   async invalidateLatestUnused(emailValue: string): Promise<void> {
     const email = normalizeEmail(emailValue);
-    await this.prisma.emailVerificationCode.updateMany({
+    const row = await this.prisma.emailVerificationCode.findFirst({
       where: {
         email,
+        usedAt: null
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    if (!row) return;
+
+    await this.prisma.emailVerificationCode.updateMany({
+      where: {
+        id: row.id,
         usedAt: null
       },
       data: {

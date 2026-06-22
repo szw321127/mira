@@ -289,15 +289,20 @@ describe("EmailCodeService", () => {
     await expectInvalidCode(service.verifyCode("user@example.com", olderCode));
   });
 
-  it("invalidates latest unused codes for an email", async () => {
+  it("invalidates only the latest unused code for an email", async () => {
     const { prisma, rows } = createPrisma();
     const service = new EmailCodeService(prisma);
 
     await service.createCode("User@Example.COM", "203.0.113.10");
+    rows[0].createdAt = new Date(Date.now() - 61_000);
+    rows[0].usedAt = null;
+    await service.createCode("User@Example.COM", "203.0.113.10");
+    rows[0].usedAt = null;
 
     await service.invalidateLatestUnused("USER@example.com");
 
-    expect(rows[0].usedAt).toBeInstanceOf(Date);
+    expect(rows[0].usedAt).toBeNull();
+    expect(rows[1].usedAt).toBeInstanceOf(Date);
   });
 
   it("allows exactly one atomic consume of a verification code", async () => {
