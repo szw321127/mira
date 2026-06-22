@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PrismaService } from "../database/prisma.service.js";
 import {
   hashPassword,
   signSession,
@@ -14,10 +15,15 @@ import {
 } from "./admin.types.js";
 
 const DEFAULT_SESSION_SECRET = "mira-local-admin-session-secret-change-me";
+const ADMIN_USERS_PAGE_SIZE = 20;
+type UserStatus = "enabled" | "disabled";
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly store: AdminStore) {}
+  constructor(
+    private readonly store: AdminStore,
+    private readonly prisma: PrismaService
+  ) {}
 
   get username() {
     return process.env.ADMIN_USERNAME ?? "admin";
@@ -91,6 +97,73 @@ export class AdminService {
     });
 
     return { secrets: await this.listSecrets() };
+  }
+
+  async listUsers(options: {
+    query?: string;
+    status?: UserStatus;
+    page?: number;
+  }) {
+    const page =
+      typeof options.page === "number" && Number.isFinite(options.page)
+        ? Math.max(1, Math.floor(options.page))
+        : 1;
+    const query = options.query?.trim().toLowerCase();
+    const where = {
+      ...(query
+        ? { email: { contains: query, mode: "insensitive" as const } }
+        : {}),
+      ...(options.status ? { status: options.status } : {})
+    };
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * ADMIN_USERS_PAGE_SIZE,
+        take: ADMIN_USERS_PAGE_SIZE,
+        include: { _count: { select: { conversations: true } } }
+      }),
+      this.prisma.user.count({ where })
+    ]);
+
+    return {
+      users: users.map((user) => ({
+        id: user.id,
+        email: user.email,
+        status: user.status,
+        createdAt: user.createdAt.toISOString(),
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+        conversationCount: user._count.conversations
+      })),
+      total,
+      page,
+      pageSize: ADMIN_USERS_PAGE_SIZE
+    };
+  }
+
+  async updateUserStatus(userId: string, status: UserStatus) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { status }
+    });
+
+    if (status === "disabled") {
+      await this.prisma.userSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+    }
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        status: user.status,
+        createdAt: user.createdAt.toISOString(),
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null
+      }
+    };
   }
 
   private async checkPassword(password: string) {

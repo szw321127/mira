@@ -4,8 +4,11 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
   Post,
   Put,
+  Query,
   Req,
   Res,
   UnauthorizedException
@@ -14,6 +17,7 @@ import type { Request, Response } from "express";
 import { AdminService } from "./admin.service.js";
 
 const SESSION_COOKIE = "mira_admin_session";
+type UserStatus = "enabled" | "disabled";
 
 @Controller("admin")
 export class AdminController {
@@ -73,6 +77,27 @@ export class AdminController {
     return this.adminService.updateSecrets(parsed);
   }
 
+  @Get("users")
+  async users(@Req() request: Request, @Query() query: Record<string, unknown>) {
+    this.requireSession(request);
+    return this.adminService.listUsers(parseUserListQuery(query));
+  }
+
+  @Patch("users/:id/status")
+  async updateUserStatus(
+    @Req() request: Request,
+    @Param("id") id: string,
+    @Body() body: unknown
+  ) {
+    this.requireSession(request);
+    const status = parseUserStatus(body);
+    if (!status) {
+      return { message: "Invalid user status." };
+    }
+
+    return this.adminService.updateUserStatus(id, status);
+  }
+
   @Post("password")
   @HttpCode(HttpStatus.OK)
   async password(@Req() request: Request, @Body() body: unknown) {
@@ -127,6 +152,25 @@ function parseSecretUpdate(value: unknown) {
   const body = value as Record<string, unknown>;
   if (!body.secrets || typeof body.secrets !== "object") return null;
   return body.secrets as Record<string, unknown>;
+}
+
+function parseUserListQuery(query: Record<string, unknown>) {
+  const status = typeof query.status === "string" ? query.status : undefined;
+  return {
+    query: typeof query.query === "string" ? query.query : undefined,
+    status: parseStatusValue(status) ?? undefined,
+    page: typeof query.page === "string" ? Number(query.page) : undefined
+  };
+}
+
+function parseUserStatus(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const status = (value as Record<string, unknown>).status;
+  return parseStatusValue(status);
+}
+
+function parseStatusValue(value: unknown): UserStatus | null {
+  return value === "enabled" || value === "disabled" ? value : null;
 }
 
 function readCookie(header: string | undefined, name: string) {

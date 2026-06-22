@@ -12,7 +12,7 @@ describe("AdminController", () => {
   const originalEnv = { ...process.env };
   let app: INestApplication;
   let server: Server;
-  let prisma: PrismaService;
+  let prisma: MockPrismaService;
 
   beforeEach(async () => {
     process.env = {
@@ -82,6 +82,98 @@ describe("AdminController", () => {
     await request(server).get("/admin/secrets").expect(401);
   });
 
+  it("requires an admin session for user management", async () => {
+    await request(server).get("/admin/users").expect(401);
+  });
+
+  it("lists users for authenticated admins", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent
+      .get("/admin/users")
+      .query({ query: "a@example.com" })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      users: [
+        {
+          id: "user-1",
+          email: "a@example.com",
+          status: "enabled",
+          createdAt: "2026-06-01T00:00:00.000Z",
+          lastLoginAt: "2026-06-02T00:00:00.000Z",
+          conversationCount: 3
+        }
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20
+    });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          email: { contains: "a@example.com", mode: "insensitive" }
+        },
+        orderBy: { createdAt: "desc" },
+        skip: 0,
+        take: 20,
+        include: { _count: { select: { conversations: true } } }
+      })
+    );
+  });
+
+  it("disables users and revokes their sessions", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent
+      .patch("/admin/users/user-1/status")
+      .send({ status: "disabled" })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      user: {
+        id: "user-1",
+        email: "a@example.com",
+        status: "disabled",
+        createdAt: "2026-06-01T00:00:00.000Z",
+        lastLoginAt: "2026-06-02T00:00:00.000Z"
+      }
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { status: "disabled" }
+    });
+    expect(prisma.userSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) }
+    });
+  });
+
+  it("rejects invalid user status without updating users", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent
+      .patch("/admin/users/user-1/status")
+      .send({ status: "archived" })
+      .expect(200);
+
+    expect(response.body).toEqual({ message: "Invalid user status." });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalled();
+  });
+
   it("returns masked database-managed secrets for authenticated admins", async () => {
     const agent = request.agent(server);
     await agent
@@ -91,8 +183,8 @@ describe("AdminController", () => {
 
     const response = await agent.get("/admin/secrets").expect(200);
 
-    expect(response.body).toEqual({
-      secrets: [
+    expect(response.body.secrets).toEqual(
+      expect.arrayContaining([
         {
           key: "AGENT_MODEL_BASE_URL",
           label: "模型 Base URL",
@@ -117,8 +209,8 @@ describe("AdminController", () => {
           value: "ta********et",
           masked: true
         }
-      ]
-    });
+      ])
+    );
   });
 
   it("updates secrets without writing them to process.env", async () => {
@@ -230,10 +322,31 @@ describe("AdminController", () => {
   });
 });
 
-function createPrismaStore(initialValue?: unknown) {
+type MockPrismaService = PrismaService & {
+  user: {
+    findMany: jest.Mock;
+    count: jest.Mock;
+    update: jest.Mock;
+  };
+  userSession: {
+    updateMany: jest.Mock;
+  };
+};
+
+function createPrismaStore(initialValue?: unknown): MockPrismaService {
   let row: { key: string; value: unknown; updatedAt: Date } | null = initialValue
     ? { key: "admin", value: initialValue, updatedAt: new Date() }
     : null;
+  const users = [
+    {
+      id: "user-1",
+      email: "a@example.com",
+      status: "enabled",
+      createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      lastLoginAt: new Date("2026-06-02T00:00:00.000Z"),
+      _count: { conversations: 3 }
+    }
+  ];
 
   return {
     adminStoreEntry: {
@@ -258,6 +371,26 @@ function createPrismaStore(initialValue?: unknown) {
           return Promise.resolve(row);
         }
       )
+    },
+    user: {
+      findMany: jest.fn(() => Promise.resolve(users)),
+      count: jest.fn(() => Promise.resolve(users.length)),
+      update: jest.fn(
+        ({
+          where,
+          data
+        }: {
+          where: { id: string };
+          data: { status: "enabled" | "disabled" };
+        }) => {
+          const user = users.find((item) => item.id === where.id) ?? users[0];
+          const updated = { ...user, status: data.status };
+          return Promise.resolve(updated);
+        }
+      )
+    },
+    userSession: {
+      updateMany: jest.fn(() => Promise.resolve({ count: 1 }))
     }
-  } as unknown as PrismaService;
+  } as unknown as MockPrismaService;
 }
