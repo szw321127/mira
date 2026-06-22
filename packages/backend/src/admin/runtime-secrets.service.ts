@@ -12,11 +12,8 @@ export type RuntimeSearchConfig = {
   tavilyApiKey: string;
 };
 
-export type RuntimeSmtpConfig = {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
+export type RuntimeResendConfig = {
+  apiKey: string;
   from: string;
 };
 
@@ -40,14 +37,11 @@ export class RuntimeSecretsService {
     };
   }
 
-  async getSmtpConfig(): Promise<RuntimeSmtpConfig> {
+  async getResendConfig(): Promise<RuntimeResendConfig> {
     const secrets = await this.readSecrets();
     return {
-      host: secrets.SMTP_HOST ?? "",
-      port: Number(secrets.SMTP_PORT ?? 0),
-      user: secrets.SMTP_USER ?? "",
-      password: secrets.SMTP_PASSWORD ?? "",
-      from: secrets.SMTP_FROM ?? ""
+      apiKey: secrets.RESEND_API_KEY ?? "",
+      from: secrets.RESEND_FROM ?? ""
     };
   }
 

@@ -6,7 +6,7 @@
 
 **Architecture:** Backend owns auth, session validation, conversation persistence, and admin user controls through new NestJS modules backed by Prisma models. The Next frontend proxies auth/conversation/admin requests, gates the chat workspace on a user session, and keeps optimistic chat state while syncing to PostgreSQL. The login UI follows the existing Mira product register and must pass a frontend-design pass plus an impeccable review before shipping.
 
-**Tech Stack:** NestJS, Prisma 7, PostgreSQL, Redis, Next 16, React 19, Tailwind 4, lucide-react, nodemailer for SMTP.
+**Tech Stack:** NestJS, Prisma 7, PostgreSQL, Redis, Next 16, React 19, Tailwind 4, lucide-react, Resend for verification email delivery.
 
 ---
 
@@ -21,7 +21,7 @@ Backend:
 - Create `packages/backend/src/auth/auth.service.ts`: email-code login orchestration.
 - Create `packages/backend/src/auth/auth-session.ts`: session cookie name plus cookie parsing helpers.
 - Create `packages/backend/src/auth/email-code.service.ts`: code generation, hashing, expiry, attempt tracking, rate-limit checks.
-- Create `packages/backend/src/auth/mailer.service.ts`: SMTP/development verification code delivery.
+- Create `packages/backend/src/auth/mailer.service.ts`: Resend/development verification code delivery.
 - Create `packages/backend/src/auth/user-session.service.ts`: token creation, hashing, validation, revocation.
 - Create `packages/backend/src/auth/auth.types.ts`: shared backend auth types and parsers.
 - Create `packages/backend/src/auth/*.spec.ts`: unit/controller tests.
@@ -34,10 +34,9 @@ Backend:
 - Modify `packages/backend/src/agent/agent.module.ts`: import `AuthModule`.
 - Modify `packages/backend/src/admin/admin.controller.ts`: add `/admin/users` endpoints.
 - Modify `packages/backend/src/admin/admin.service.ts`: list/search users, enable/disable users, revoke sessions.
-- Modify `packages/backend/src/admin/admin.types.ts`: add SMTP managed secrets.
-- Modify `packages/backend/src/admin/runtime-secrets.service.ts`: expose SMTP config.
+- Modify `packages/backend/src/admin/admin.types.ts`: add Resend managed secrets.
+- Modify `packages/backend/src/admin/runtime-secrets.service.ts`: expose Resend config.
 - Modify `packages/backend/src/app.module.ts`: import new modules.
-- Modify `packages/backend/package.json`: add `nodemailer` and `@types/nodemailer`.
 
 Frontend:
 
@@ -299,20 +298,13 @@ git commit -m "feat: add user auth database schema"
 - Test: `packages/backend/src/auth/user-session.service.spec.ts`
 - Test: `packages/backend/src/auth/auth.service.spec.ts`
 
-- [ ] **Step 1: Add SMTP dependency**
+- [ ] **Step 1: Use Resend email delivery**
 
-Run:
-
-```bash
-pnpm --filter @rednote/backend add nodemailer
-pnpm --filter @rednote/backend add -D @types/nodemailer
-```
-
-Expected: `packages/backend/package.json` and the root lockfile include nodemailer.
+Use the Resend REST API through Node's built-in `fetch`; no mailer SDK dependency is required.
 
 - [ ] **Step 2: Extend managed secrets**
 
-Update `packages/backend/src/admin/admin.types.ts` so `ManagedSecretKey` includes SMTP keys:
+Update `packages/backend/src/admin/admin.types.ts` so `ManagedSecretKey` includes Resend keys:
 
 ```ts
 export type ManagedSecretKey =
@@ -320,53 +312,32 @@ export type ManagedSecretKey =
   | "AGENT_MODEL_NAME"
   | "AGENT_MODEL_API_KEY"
   | "TAVILY_API_KEY"
-  | "SMTP_HOST"
-  | "SMTP_PORT"
-  | "SMTP_USER"
-  | "SMTP_PASSWORD"
-  | "SMTP_FROM";
+  | "RESEND_API_KEY"
+  | "RESEND_FROM";
 ```
 
 Append these definitions to `MANAGED_SECRETS`:
 
 ```ts
   {
-    key: "SMTP_HOST",
-    label: "SMTP Host",
-    sensitive: false
-  },
-  {
-    key: "SMTP_PORT",
-    label: "SMTP Port",
-    sensitive: false
-  },
-  {
-    key: "SMTP_USER",
-    label: "SMTP User",
-    sensitive: false
-  },
-  {
-    key: "SMTP_PASSWORD",
-    label: "SMTP Password",
+    key: "RESEND_API_KEY",
+    label: "Resend API Key",
     sensitive: true
   },
   {
-    key: "SMTP_FROM",
-    label: "SMTP From",
+    key: "RESEND_FROM",
+    label: "Resend From",
     sensitive: false
   }
 ```
 
-- [ ] **Step 3: Expose SMTP runtime config**
+- [ ] **Step 3: Expose Resend runtime config**
 
 In `packages/backend/src/admin/runtime-secrets.service.ts`, add:
 
 ```ts
-export type RuntimeSmtpConfig = {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
+export type RuntimeResendConfig = {
+  apiKey: string;
   from: string;
 };
 ```
@@ -374,14 +345,11 @@ export type RuntimeSmtpConfig = {
 Add this method:
 
 ```ts
-  async getSmtpConfig(): Promise<RuntimeSmtpConfig> {
+  async getResendConfig(): Promise<RuntimeResendConfig> {
     const secrets = await this.readSecrets();
     return {
-      host: secrets.SMTP_HOST ?? "",
-      port: Number(secrets.SMTP_PORT ?? 0),
-      user: secrets.SMTP_USER ?? "",
-      password: secrets.SMTP_PASSWORD ?? "",
-      from: secrets.SMTP_FROM ?? ""
+      apiKey: secrets.RESEND_API_KEY ?? "",
+      from: secrets.RESEND_FROM ?? ""
     };
   }
 ```
@@ -839,55 +807,59 @@ function hashToken(token: string) {
 Create `packages/backend/src/auth/mailer.service.ts`:
 
 ```ts
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import nodemailer from "nodemailer";
-import {
-  RuntimeSecretsService,
-  type RuntimeSmtpConfig
-} from "../admin/runtime-secrets.service.js";
+import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
+
+const UNCONFIGURED_MESSAGE = "邮件服务未配置，请联系管理员";
+const SEND_FAILED_MESSAGE = "验证码邮件发送失败，请稍后再试";
+const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 
 @Injectable()
 export class MailerService {
+  private readonly logger = new Logger(MailerService.name);
+
   constructor(private readonly runtimeSecrets: RuntimeSecretsService) {}
 
   async sendVerificationCode(email: string, code: string) {
-    const config = await this.runtimeSecrets.getSmtpConfig();
-    if (!isSmtpConfigured(config)) {
+    const config = await this.runtimeSecrets.getResendConfig();
+    if (!isResendConfigured(config)) {
       if (process.env.NODE_ENV !== "production") {
         console.info(`[Mira] Verification code for ${email}: ${code}`);
         return;
       }
-      throw new ServiceUnavailableException("邮件服务未配置，请联系管理员");
+      throw new ServiceUnavailableException(UNCONFIGURED_MESSAGE);
     }
 
-    const transport = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.port === 465,
-      auth: {
-        user: config.user,
-        pass: config.password
-      }
-    });
+    let response: Response;
+    try {
+      response = await fetch(RESEND_EMAILS_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+          "User-Agent": "Mira/1.0"
+        },
+        body: JSON.stringify({
+          from: config.from,
+          to: [email],
+          subject: "Mira 登录验证码",
+          text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
+        })
+      });
+    } catch (error) {
+      this.logger.warn(`Resend verification email request failed: ${String(error)}`);
+      throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
+    }
 
-    await transport.sendMail({
-      from: config.from,
-      to: email,
-      subject: "Mira 登录验证码",
-      text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
-    });
+    if (!response.ok) {
+      this.logger.warn(`Resend verification email failed: ${response.status}`);
+      throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
+    }
   }
 }
 
-function isSmtpConfigured(config: RuntimeSmtpConfig) {
-  return Boolean(
-    config.host &&
-      Number.isFinite(config.port) &&
-      config.port > 0 &&
-      config.user &&
-      config.password &&
-      config.from
-  );
+function isResendConfigured(config: { apiKey: string; from: string }) {
+  return Boolean(config.apiKey && config.from);
 }
 ```
 
@@ -3184,7 +3156,7 @@ Expected: migration applies successfully or reports no pending migrations on an 
 
 Verify in browser:
 
-- Request email code in development and read the code from backend logs if SMTP is not configured.
+- Request email code in development and read the code from backend logs if Resend is not configured.
 - Submit code and land in chat.
 - Refresh and stay logged in.
 - Create, rename, delete, and reload a conversation.
@@ -3205,7 +3177,7 @@ When Steps 1-7 produce no source changes, skip this commit.
 
 ## Self-Review
 
-- Spec coverage: Tasks cover database models, email code auth, user sessions, SMTP managed secrets, admin user management, conversation persistence, frontend auth gate, localStorage migration, agent gating, UI design, impeccable review, and verification.
+- Spec coverage: Tasks cover database models, email code auth, user sessions, Resend managed secrets, admin user management, conversation persistence, frontend auth gate, localStorage migration, agent gating, UI design, impeccable review, and verification.
 - UI skill coverage: Task 7 explicitly applies `frontend-design`; Task 10 explicitly runs `impeccable` context and product-register review before polish.
 - Scope: This remains one coherent implementation because user auth, user-owned conversations, and admin user management depend on the same user/session model. Hard delete, social login, passwords, organizations, billing, and quotas stay out of scope.
 - Type consistency: Public user fields are `id`, `email`, and `status`; conversation DTOs match the existing frontend `Conversation` and `ChatMessage` shape.

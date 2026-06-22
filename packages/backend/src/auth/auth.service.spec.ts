@@ -153,7 +153,7 @@ describe("AuthService", () => {
   it("invalidates the latest unused code when sending fails", async () => {
     const { prisma } = createPrisma();
     const { service, codeService, mailer } = createService(prisma);
-    const sendError = new Error("smtp send failed");
+    const sendError = new Error("resend send failed");
     codeService.createCode.mockResolvedValueOnce("123456");
     mailer.sendVerificationCode.mockRejectedValueOnce(sendError);
 

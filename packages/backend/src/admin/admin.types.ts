@@ -3,11 +3,8 @@ export type ManagedSecretKey =
   | "AGENT_MODEL_NAME"
   | "AGENT_MODEL_API_KEY"
   | "TAVILY_API_KEY"
-  | "SMTP_HOST"
-  | "SMTP_PORT"
-  | "SMTP_USER"
-  | "SMTP_PASSWORD"
-  | "SMTP_FROM";
+  | "RESEND_API_KEY"
+  | "RESEND_FROM";
 
 export type ManagedSecretDefinition = {
   key: ManagedSecretKey;
@@ -49,28 +46,13 @@ export const MANAGED_SECRETS: ManagedSecretDefinition[] = [
     sensitive: true
   },
   {
-    key: "SMTP_HOST",
-    label: "SMTP Host",
-    sensitive: false
-  },
-  {
-    key: "SMTP_PORT",
-    label: "SMTP Port",
-    sensitive: false
-  },
-  {
-    key: "SMTP_USER",
-    label: "SMTP User",
-    sensitive: false
-  },
-  {
-    key: "SMTP_PASSWORD",
-    label: "SMTP Password",
+    key: "RESEND_API_KEY",
+    label: "Resend API Key",
     sensitive: true
   },
   {
-    key: "SMTP_FROM",
-    label: "SMTP From",
+    key: "RESEND_FROM",
+    label: "Resend From",
     sensitive: false
   }
 ];

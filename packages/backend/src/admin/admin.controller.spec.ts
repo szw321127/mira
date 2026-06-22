@@ -30,7 +30,9 @@ describe("AdminController", () => {
         AGENT_MODEL_BASE_URL: "https://model.example/v1",
         AGENT_MODEL_NAME: "mira-large",
         AGENT_MODEL_API_KEY: "model-secret",
-        TAVILY_API_KEY: "tavily-secret"
+        TAVILY_API_KEY: "tavily-secret",
+        RESEND_API_KEY: "resend-secret",
+        RESEND_FROM: "Mira <noreply@example.com>"
       }
     });
 
@@ -252,6 +254,18 @@ describe("AdminController", () => {
           label: "Tavily 搜索 Key",
           value: "ta********et",
           masked: true
+        },
+        {
+          key: "RESEND_API_KEY",
+          label: "Resend API Key",
+          value: "re********et",
+          masked: true
+        },
+        {
+          key: "RESEND_FROM",
+          label: "Resend From",
+          value: "Mira <noreply@example.com>",
+          masked: false
         }
       ])
     );
@@ -358,6 +372,16 @@ describe("AdminController", () => {
         }),
         expect.objectContaining({
           key: "TAVILY_API_KEY",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "RESEND_API_KEY",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "RESEND_FROM",
           value: "",
           masked: false
         })

@@ -21,7 +21,7 @@ Create an `AuthModule` in `packages/backend/src/auth` with:
 - `AuthController` for `/auth/code`, `/auth/login`, `/auth/session`, and `/auth/logout`.
 - `AuthService` for email normalization, code generation, code verification, user creation, session creation, and logout.
 - `EmailCodeService` for storing and validating one-time verification codes.
-- `MailerService` for sending verification codes through SMTP settings read from the admin store.
+- `MailerService` for sending verification codes through Resend settings read from the admin store.
 - `UserSessionService` for issuing and validating httpOnly user sessions.
 
 Add a `ConversationsModule` in `packages/backend/src/conversations` with:
@@ -49,7 +49,7 @@ Use soft deletion for conversations and disabled status for users. Do not hard d
 2. Frontend calls `/api/auth/session`.
 3. If there is no valid session, show the email login panel.
 4. User submits an email to `/api/auth/code`.
-5. Backend normalizes the email, rate-limits recent requests, stores a hashed six-digit code with a short expiry, and sends the code by SMTP.
+5. Backend normalizes the email, rate-limits recent requests, stores a hashed six-digit code with a short expiry, and sends the code through Resend.
 6. User submits email plus code to `/api/auth/login`.
 7. Backend validates the latest unused code, creates the user if needed, rejects disabled users, creates a session, sets `mira_user_session`, and returns the user profile.
 8. Frontend loads conversations from `/api/conversations`.
@@ -84,17 +84,14 @@ The admin UI adds an "账号管理" panel separate from Key 管理:
 
 Disabling a user prevents new logins and invalidates current user sessions by revoking matching `UserSession` rows.
 
-### SMTP Configuration
+### Resend Configuration
 
 Extend managed secrets with:
 
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER`
-- `SMTP_PASSWORD`
-- `SMTP_FROM`
+- `RESEND_API_KEY`
+- `RESEND_FROM`
 
-Sensitive values are masked in admin UI like existing API keys. In development, if SMTP is not configured, the backend logs the verification code and returns success. In production, missing SMTP configuration returns a clear user-facing error before creating a usable code.
+Sensitive values are masked in admin UI like existing API keys. In development, if Resend is not configured, the backend logs the verification code and returns success. In production, missing Resend configuration returns a clear user-facing error before creating a usable code.
 
 ### Frontend Structure
 
@@ -112,7 +109,7 @@ Use Tailwind utility classes and existing CSS variables. Avoid custom CSS files 
 
 - Invalid or expired verification code: show "验证码不正确或已过期".
 - Disabled user: show "账号已被禁用，请联系管理员".
-- SMTP not configured: show "邮件服务未配置，请联系管理员".
+- Resend not configured: show "邮件服务未配置，请联系管理员".
 - Backend unavailable: keep the existing backend unavailable message style.
 - Conversation save failure: show a compact warning but keep the current in-memory conversation visible until retry or refresh.
 
@@ -121,7 +118,7 @@ Use Tailwind utility classes and existing CSS variables. Avoid custom CSS files 
 - Store verification codes and session tokens as hashes, never plaintext.
 - Use httpOnly, SameSite=Lax cookies. Use `secure` cookies in production.
 - Normalize emails before storage and enforce a unique email index.
-- Do not expose SMTP password or code values through admin or public APIs.
+- Do not expose Resend API keys or code values through admin or public APIs.
 - Rate-limit verification code sends per email and per IP using Redis when available, with database timestamps as a fallback.
 
 ## Testing
