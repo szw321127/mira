@@ -16,6 +16,7 @@ env:
   FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/rednote_frontend
   POSTGRES_IMAGE_NAME: ${{ github.repository_owner }}/rednote_postgres
   REDIS_IMAGE_NAME: ${{ github.repository_owner }}/rednote_redis
+  CADDY_IMAGE_NAME: ${{ github.repository_owner }}/rednote_caddy
 
 jobs:
   # --- 任务1：构建并推送后端 Docker 镜像 ---
@@ -113,7 +114,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Mirror PostgreSQL and Redis images
+      - name: Mirror PostgreSQL, Redis and Caddy images
         run: |
           set -e
 
@@ -128,6 +129,12 @@ jobs:
           docker tag redis:7-alpine ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
           docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:7-alpine
           docker push ${{ env.REGISTRY }}/${{ env.REDIS_IMAGE_NAME }}:latest
+
+          docker pull caddy:2-alpine
+          docker tag caddy:2-alpine ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:2-alpine
+          docker tag caddy:2-alpine ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:2-alpine
+          docker push ${{ env.REGISTRY }}/${{ env.CADDY_IMAGE_NAME }}:latest
 
   # --- 任务4：在服务器上部署 ---
   deploy:
@@ -149,6 +156,11 @@ jobs:
             set -e
 
             cd "${{ secrets.TARGET_DIR }}"
+
+            if [ -z "${{ secrets.APP_DOMAIN }}" ]; then
+              echo "APP_DOMAIN secret is required for HTTPS deployment."
+              exit 1
+            fi
 
             echo "Creating docker-compose.yml..."
             cat > docker-compose.yml << 'EOF'
@@ -213,7 +225,8 @@ jobs:
                   - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
                   - REDIS_URL=redis://redis:6379
                   - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
-                  - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
+                  - FRONTEND_ORIGIN=https://${APP_DOMAIN:?APP_DOMAIN is required}
+                  - CORS_ORIGINS=https://${APP_DOMAIN},http://frontend
                 depends_on:
                   postgres:
                     condition: service_healthy
@@ -233,8 +246,8 @@ jobs:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
                 container_name: rednote-frontend
                 restart: unless-stopped
-                ports:
-                  - "80:3000"
+                expose:
+                  - "3000"
                 environment:
                   - TZ=Asia/Shanghai
                   - CI=true
@@ -251,6 +264,25 @@ jobs:
                   retries: 3
                   start_period: 5s
 
+              # HTTPS Reverse Proxy
+              caddy:
+                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
+                container_name: rednote-caddy
+                restart: unless-stopped
+                ports:
+                  - "80:80"
+                  - "443:443"
+                environment:
+                  - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN is required}
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                  - caddy-data:/data
+                  - caddy-config:/config
+                depends_on:
+                  - frontend
+                networks:
+                  - rednote-network
+
             networks:
               rednote-network:
                 driver: bridge
@@ -258,6 +290,16 @@ jobs:
             volumes:
               postgres-data:
               redis-data:
+              caddy-data:
+              caddy-config:
+            EOF
+
+            echo "Creating Caddyfile..."
+            cat > Caddyfile << 'EOF'
+            {$APP_DOMAIN} {
+              encode gzip zstd
+              reverse_proxy frontend:3000
+            }
             EOF
 
             echo "Creating .env file with configuration..."
@@ -265,6 +307,7 @@ jobs:
             REGISTRY=${{ env.REGISTRY }}
             IMAGE_OWNER=${{ github.repository_owner }}
             IMAGE_TAG=${{ github.ref_name }}
+            APP_DOMAIN='${{ secrets.APP_DOMAIN }}'
             DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
             SESSION_SECRET='${{ secrets.SESSION_SECRET }}'
             EOF
@@ -291,6 +334,7 @@ jobs:
             pull_service redis
             pull_service backend
             pull_service frontend
+            pull_service caddy
 
             echo "Starting services with docker compose..."
             docker compose up -d --remove-orphans

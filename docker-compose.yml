@@ -62,8 +62,9 @@ services:
       - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - REDIS_URL=redis://redis:6379
       - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
+      - FRONTEND_ORIGIN=https://${APP_DOMAIN:?APP_DOMAIN is required}
       - AI_BASE_URL_ALLOWLIST=${AI_BASE_URL_ALLOWLIST:-}
-      - CORS_ORIGINS=http://localhost,http://localhost:80,http://frontend
+      - CORS_ORIGINS=https://${APP_DOMAIN},http://frontend
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,8 +88,8 @@ services:
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
     container_name: rednote-frontend
     restart: unless-stopped
-    ports:
-      - "80:3000"
+    expose:
+      - "3000"
     environment:
       - TZ=Asia/Shanghai
       - CI=true
@@ -105,6 +106,25 @@ services:
       retries: 3
       start_period: 5s
 
+  # HTTPS Reverse Proxy
+  caddy:
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
+    container_name: rednote-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    networks:
+      - rednote-network
+
 networks:
   rednote-network:
     driver: bridge
@@ -112,3 +132,5 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  caddy-data:
+  caddy-config:
