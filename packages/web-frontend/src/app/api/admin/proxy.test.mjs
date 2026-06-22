@@ -4,19 +4,26 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+const apiDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const routeSource = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "proxy.ts"),
+  join(apiDir, "admin", "proxy.ts"),
+  "utf8",
+);
+const sharedProxySource = readFileSync(
+  join(apiDir, "shared", "backend-proxy.ts"),
   "utf8",
 );
 
 test("admin proxy targets backend admin routes", () => {
-  assert.match(routeSource, /BACKEND_AGENT_BASE_URL/);
-  assert.match(routeSource, /\/admin\//);
+  assert.match(routeSource, /proxyBackendRequest/);
+  assert.match(routeSource, /`admin\/\$\{adminPath\}`/);
 });
 
-test("admin proxy forwards cookies and preserves set-cookie", () => {
-  assert.match(routeSource, /request\.headers\.get\("cookie"\)/);
-  assert.match(routeSource, /set-cookie/);
+test("shared backend proxy forwards cookies and preserves backend response headers", () => {
+  assert.match(sharedProxySource, /request\.headers\.get\("cookie"\)/);
+  assert.match(sharedProxySource, /set-cookie/);
+  assert.match(sharedProxySource, /cache-control/);
+  assert.match(sharedProxySource, /content-type/);
 });
 
 test("admin proxy does not import backend admin code into the frontend", () => {

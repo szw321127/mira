@@ -24,6 +24,15 @@ test("chat route proxies agent requests to the backend", () => {
   assert.match(routeSource, /\/agent\/chat/);
 });
 
+test("chat route uses the shared backend base URL and forwards cookies", () => {
+  assert.match(
+    routeSource,
+    /import\s*\{\s*BACKEND_AGENT_BASE_URL\s*\}\s*from\s*"[^"]*shared\/backend-proxy"/,
+  );
+  assert.match(routeSource, /request\.headers\.get\("cookie"\)/);
+  assert.match(routeSource, /headers\.set\("Cookie", cookie\)/);
+});
+
 test("chat route leaves models and tools in the backend service", () => {
   assert.doesNotMatch(routeSource, /\bcreateGPTAgentHarness\b/);
   assert.doesNotMatch(routeSource, /\bpickSearchTool\b/);
