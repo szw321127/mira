@@ -210,4 +210,15 @@ describe("ConversationsController", () => {
     expect(response.body).toEqual({ message: "Invalid conversations." });
     expect(importConversations).not.toHaveBeenCalled();
   });
+
+  it("rejects imported conversations without title or messages", async () => {
+    const response = await request(server)
+      .post("/conversations/import")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({ conversations: [{}] })
+      .expect(400);
+
+    expect(response.body).toEqual({ message: "Invalid conversations." });
+    expect(importConversations).not.toHaveBeenCalled();
+  });
 });

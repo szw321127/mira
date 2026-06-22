@@ -123,6 +123,7 @@ function parseImportConversations(
     const title = parseTitle(conversation);
     const messages = parseMessages(conversation);
 
+    if (raw.title === undefined && raw.messages === undefined) return null;
     if (raw.title !== undefined && !title) return null;
     if (raw.messages !== undefined && !messages) return null;
 
