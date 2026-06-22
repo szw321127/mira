@@ -297,6 +297,10 @@ jobs:
 
             echo "Creating Caddyfile..."
             cat > Caddyfile << 'EOF'
+            {
+              default_sni {$APP_IP}
+            }
+
             {$APP_DOMAIN} {
               encode gzip zstd
               reverse_proxy frontend:3000
