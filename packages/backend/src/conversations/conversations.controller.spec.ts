@@ -162,4 +162,52 @@ describe("ConversationsController", () => {
     expect(response.body).toEqual({ message: "Invalid messages." });
     expect(replaceMessages).not.toHaveBeenCalled();
   });
+
+  it("rejects messages with invalid createdAt values", async () => {
+    const response = await request(server)
+      .post("/conversations/conversation-1/messages")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({
+        messages: [
+          {
+            role: "user",
+            content: "hello",
+            createdAt: "not-a-date"
+          }
+        ]
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({ message: "Invalid messages." });
+    expect(replaceMessages).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed import payloads", async () => {
+    const response = await request(server)
+      .post("/conversations/import")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({ conversations: "bad" })
+      .expect(400);
+
+    expect(response.body).toEqual({ message: "Invalid conversations." });
+    expect(importConversations).not.toHaveBeenCalled();
+  });
+
+  it("rejects imported conversations with invalid messages", async () => {
+    const response = await request(server)
+      .post("/conversations/import")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({
+        conversations: [
+          {
+            title: "Imported",
+            messages: [{ role: "system", content: "nope" }]
+          }
+        ]
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({ message: "Invalid conversations." });
+    expect(importConversations).not.toHaveBeenCalled();
+  });
 });

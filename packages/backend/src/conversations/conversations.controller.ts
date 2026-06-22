@@ -40,11 +40,21 @@ export class ConversationsController {
   }
 
   @Post("import")
-  async import(@Req() request: Request, @Body() body: unknown) {
+  async import(
+    @Req() request: Request,
+    @Body() body: unknown,
+    @Res() response: Response
+  ) {
     const user = await this.requireUser(request);
-    return this.conversations.importConversations(
-      user.id,
-      parseImportConversations(body)
+    const conversations = parseImportConversations(body);
+    if (!conversations) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ message: "Invalid conversations." });
+    }
+
+    return response.json(
+      await this.conversations.importConversations(user.id, conversations)
     );
   }
 
@@ -99,19 +109,28 @@ export class ConversationsController {
 
 function parseImportConversations(
   body: unknown
-): Array<{ title?: string; messages?: PersistedChatMessage[] }> {
-  if (!body || typeof body !== "object") return [];
+): Array<{ title?: string; messages?: PersistedChatMessage[] }> | null {
+  if (!body || typeof body !== "object") return null;
 
   const conversations = (body as { conversations?: unknown }).conversations;
-  if (!Array.isArray(conversations)) return [];
+  if (!Array.isArray(conversations)) return null;
 
-  return conversations.map((conversation) => {
-    if (!conversation || typeof conversation !== "object") return {};
+  const parsed: Array<{ title?: string; messages?: PersistedChatMessage[] }> = [];
+
+  for (const conversation of conversations) {
+    if (!conversation || typeof conversation !== "object") return null;
+    const raw = conversation as Record<string, unknown>;
     const title = parseTitle(conversation);
+    const messages = parseMessages(conversation);
 
-    return {
+    if (raw.title !== undefined && !title) return null;
+    if (raw.messages !== undefined && !messages) return null;
+
+    parsed.push({
       ...(title ? { title } : {}),
-      messages: parseMessages(conversation) ?? []
-    };
-  });
+      messages: messages ?? []
+    });
+  }
+
+  return parsed;
 }

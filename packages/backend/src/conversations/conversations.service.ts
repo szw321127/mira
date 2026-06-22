@@ -106,17 +106,22 @@ export class ConversationsService {
     id: string,
     messages: PersistedChatMessage[]
   ) {
-    const conversation = await this.prisma.conversation.findFirst({
-      where: {
-        id,
-        userId,
-        deletedAt: null
-      }
-    });
-
-    if (!conversation) throw new NotFoundException("Conversation not found.");
-
     await this.prisma.$transaction(async (tx) => {
+      const conversation = await tx.conversation.updateMany({
+        where: {
+          id,
+          userId,
+          deletedAt: null
+        },
+        data: {
+          updatedAt: new Date()
+        }
+      });
+
+      if (conversation.count === 0) {
+        throw new NotFoundException("Conversation not found.");
+      }
+
       await tx.message.deleteMany({
         where: {
           conversationId: id
@@ -139,14 +144,6 @@ export class ConversationsService {
         });
       }
 
-      await tx.conversation.update({
-        where: {
-          id
-        },
-        data: {
-          updatedAt: new Date()
-        }
-      });
     });
 
     return { ok: true };

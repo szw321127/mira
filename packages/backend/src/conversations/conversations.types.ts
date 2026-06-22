@@ -46,7 +46,10 @@ export function parseMessages(body: unknown): PersistedChatMessage[] | null {
       return null;
     }
 
-    if (raw.createdAt !== undefined && typeof raw.createdAt !== "string") {
+    if (
+      raw.createdAt !== undefined &&
+      (typeof raw.createdAt !== "string" || !isValidDateString(raw.createdAt))
+    ) {
       return null;
     }
 
@@ -74,4 +77,8 @@ function isMessageStatus(value: unknown): value is ChatMessageStatus {
     value === "stopped" ||
     value === "error"
   );
+}
+
+function isValidDateString(value: string) {
+  return !Number.isNaN(new Date(value).getTime());
 }

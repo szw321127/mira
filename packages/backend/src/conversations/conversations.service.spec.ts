@@ -25,6 +25,22 @@ type MessageRow = {
 };
 
 function createPrisma(conversations: ConversationRow[]) {
+  const conversationUpdateMany = jest.fn(({ where, data }: Record<string, unknown>) => {
+    const typedWhere = where as { id: string; userId: string; deletedAt: null };
+    let count = 0;
+    for (const conversation of conversations) {
+      if (
+        conversation.id === typedWhere.id &&
+        conversation.userId === typedWhere.userId &&
+        conversation.deletedAt === typedWhere.deletedAt
+      ) {
+        Object.assign(conversation, data);
+        count += 1;
+      }
+    }
+    return Promise.resolve({ count });
+  });
+
   const prisma = {
     conversation: {
       findMany: jest.fn(({ where, orderBy, include }: Record<string, unknown>) => {
@@ -63,21 +79,7 @@ function createPrisma(conversations: ConversationRow[]) {
           }) ?? null
         );
       }),
-      updateMany: jest.fn(({ where, data }: Record<string, unknown>) => {
-        const typedWhere = where as { id: string; userId: string; deletedAt: null };
-        let count = 0;
-        for (const conversation of conversations) {
-          if (
-            conversation.id === typedWhere.id &&
-            conversation.userId === typedWhere.userId &&
-            conversation.deletedAt === typedWhere.deletedAt
-          ) {
-            Object.assign(conversation, data);
-            count += 1;
-          }
-        }
-        return Promise.resolve({ count });
-      }),
+      updateMany: conversationUpdateMany,
       update: jest.fn(({ where, data }: Record<string, unknown>) => {
         const typedWhere = where as { id: string };
         const conversation = conversations.find((row) => row.id === typedWhere.id);
@@ -122,7 +124,11 @@ function createPrisma(conversations: ConversationRow[]) {
     })
   };
 
-  return prisma as unknown as PrismaService;
+  return Object.assign(prisma as unknown as PrismaService, {
+    mocks: {
+      conversationUpdateMany
+    }
+  });
 }
 
 describe("ConversationsService", () => {
@@ -230,6 +236,17 @@ describe("ConversationsService", () => {
           messages: replacement
         }
       ]
+    });
+
+    expect(prisma.mocks.conversationUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "c-owned",
+        userId: "user-1",
+        deletedAt: null
+      },
+      data: expect.objectContaining({
+        updatedAt: expect.any(Date)
+      })
     });
   });
 });
