@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Bot,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -9,6 +8,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import { KeyboardEvent, useRef, useState } from "react";
 import { cn } from "./classnames";
 import { formatTime } from "./format";
@@ -90,8 +90,15 @@ export function ConversationRail({
           aria-label="Mira Agent"
           className="flex min-w-0 flex-1 items-center gap-2.5"
         >
-          <span className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface)] text-[var(--accent)]">
-            <Bot aria-hidden="true" size={18} />
+          <span className="inline-flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_10px_22px_oklch(0.24_0.02_260/0.06)]">
+            <Image
+              alt=""
+              aria-hidden="true"
+              className="h-[26px] w-[29px]"
+              height={26}
+              src="/brand/mira-mark.svg"
+              width={29}
+            />
           </span>
           <span className="min-w-0">
             <span className="block overflow-hidden text-sm leading-[1.25] font-bold text-ellipsis whitespace-nowrap text-[var(--ink)]">
