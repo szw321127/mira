@@ -2,6 +2,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
+    pull_policy: missing
     container_name: rednote-postgres
     restart: unless-stopped
     environment:
@@ -22,6 +23,7 @@ services:
   # Redis Cache
   redis:
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
+    pull_policy: missing
     container_name: rednote-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -109,6 +111,7 @@ services:
   # HTTPS Reverse Proxy
   caddy:
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
+    pull_policy: missing
     container_name: rednote-caddy
     restart: unless-stopped
     ports:

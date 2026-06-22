@@ -26,12 +26,14 @@
 - **流程**:
   1. 并行构建前端和后端镜像
   2. 推送镜像到 GitHub Container Registry
-  3. 将 PostgreSQL 和 Redis 基础镜像同步到 GitHub Container Registry
-  4. 通过 SSH 部署到服务器，启动 PostgreSQL、Redis、后端和前端
-  5. 后端容器启动时执行 `pnpm prisma:migrate:deploy`，再启动 NestJS 服务
+  3. 通过 SSH 部署到服务器，只拉取更新后的前后端镜像
+  4. 启动后端、前端和 Caddy，PostgreSQL、Redis 作为依赖保持运行
+  5. 后端容器启动时执行 `prisma migrate deploy`，再启动 NestJS 服务
 
 服务器部署时会从 GHCR 拉取 `rednote_backend`、`rednote_frontend`、
-`rednote_postgres` 和 `rednote_redis`，避免服务器直接访问 Docker Hub。
+`rednote_postgres`、`rednote_redis` 和 `rednote_caddy`，避免服务器直接访问 Docker Hub。
+日常部署只更新业务镜像；如果需要重新同步 PostgreSQL、Redis、Caddy 基础镜像，
+手动运行 `deploy.yml` 时勾选 `mirror_service_images`。
 
 ## 配置步骤
 
@@ -117,6 +119,7 @@ mkdir -p /home/user/app
 2. 选择要运行的 workflow
 3. 点击 `Run workflow` 按钮
 4. 选择分支并点击 `Run workflow`
+5. 只有需要刷新 PostgreSQL、Redis、Caddy 基础镜像时，才勾选 `mirror_service_images`
 
 ## 镜像标签说明
 

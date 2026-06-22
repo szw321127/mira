@@ -8,6 +8,16 @@ on:
     branches:
       - master
   workflow_dispatch:  # 允许手动触发
+    inputs:
+      mirror_service_images:
+        description: "同步 PostgreSQL、Redis、Caddy 基础镜像到 GHCR"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 # 设置环境变量
 env:
@@ -25,10 +35,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to the GitHub Container Registry
         uses: docker/login-action@v3
@@ -55,6 +69,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Backend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
@@ -65,10 +81,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to the GitHub Container Registry
         uses: docker/login-action@v3
@@ -95,12 +115,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Frontend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
 
   # --- 任务3：同步基础服务镜像到 GHCR，避免服务器直接拉 Docker Hub ---
   mirror-service-images:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mirror_service_images == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -139,6 +162,7 @@ jobs:
   # --- 任务4：在服务器上部署 ---
   deploy:
     needs: [build-and-push-backend, build-and-push-frontend, mirror-service-images]
+    if: ${{ always() && needs.build-and-push-backend.result == 'success' && needs.build-and-push-frontend.result == 'success' && (needs.mirror-service-images.result == 'success' || needs.mirror-service-images.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -168,6 +192,7 @@ jobs:
               # PostgreSQL Database
               postgres:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
+                pull_policy: missing
                 container_name: rednote-postgres
                 restart: unless-stopped
                 environment:
@@ -188,6 +213,7 @@ jobs:
               # Redis Cache
               redis:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
+                pull_policy: missing
                 container_name: rednote-redis
                 restart: unless-stopped
                 command: ["redis-server", "--appendonly", "yes"]
@@ -267,6 +293,7 @@ jobs:
               # HTTPS Reverse Proxy
               caddy:
                 image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
+                pull_policy: missing
                 container_name: rednote-caddy
                 restart: unless-stopped
                 ports:
@@ -336,12 +363,11 @@ jobs:
             echo "Logging in to GitHub Container Registry..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-            pull_service() {
-              service="$1"
+            pull_app_images() {
               attempt=1
               while [ "$attempt" -le 3 ]; do
-                echo "Pulling ${service} image (attempt ${attempt}/3)..."
-                if docker compose pull "$service"; then
+                echo "Pulling application images (attempt ${attempt}/3)..."
+                if docker compose pull backend frontend; then
                   return 0
                 fi
                 attempt=$((attempt + 1))
@@ -350,21 +376,17 @@ jobs:
               return 1
             }
 
-            echo "Pulling service images one by one..."
-            pull_service postgres
-            pull_service redis
-            pull_service backend
-            pull_service frontend
-            pull_service caddy
+            echo "Pulling updated application images..."
+            pull_app_images
 
-            echo "Starting services with docker compose..."
-            docker compose up -d --remove-orphans
+            echo "Starting application services with docker compose..."
+            docker compose up -d --remove-orphans backend frontend caddy
 
             echo "Reloading Caddy configuration..."
             docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
-            echo "Cleaning up old images..."
-            docker image prune -af
+            echo "Cleaning up dangling images..."
+            docker image prune -f
 
             echo "Deployment successful!"
             docker compose ps
