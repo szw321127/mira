@@ -2,29 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  clearWorkspaceState,
   createEmptyConversation,
   createInitialWorkspaceState,
+  hasMigratedLegacyConversations,
   loadWorkspaceState,
+  markLegacyConversationsMigrated,
   saveWorkspaceState,
-  clearWorkspaceState,
   STORAGE_KEY,
 } from "./storage.mjs";
 
 function installLocalStorage() {
   const store = new Map();
-  global.window = {
-    localStorage: {
-      getItem(key) {
-        return store.has(key) ? store.get(key) : null;
-      },
-      setItem(key, value) {
-        store.set(key, String(value));
-      },
-      removeItem(key) {
-        store.delete(key);
-      },
+  const localStorage = {
+    getItem(key) {
+      return store.has(key) ? store.get(key) : null;
+    },
+    setItem(key, value) {
+      store.set(key, String(value));
+    },
+    removeItem(key) {
+      store.delete(key);
+    },
+    clear() {
+      store.clear();
     },
   };
+  global.localStorage = localStorage;
+  global.window = { localStorage };
   return store;
 }
 
@@ -68,4 +73,14 @@ test("createEmptyConversation timestamps and ids are strings", () => {
   assert.equal(typeof conversation.id, "string");
   assert.equal(typeof conversation.createdAt, "string");
   assert.equal(typeof conversation.updatedAt, "string");
+});
+
+test("tracks legacy migration per user", () => {
+  installLocalStorage();
+
+  localStorage.clear();
+  assert.equal(hasMigratedLegacyConversations("user-1"), false);
+  markLegacyConversationsMigrated("user-1");
+  assert.equal(hasMigratedLegacyConversations("user-1"), true);
+  assert.equal(hasMigratedLegacyConversations("user-2"), false);
 });

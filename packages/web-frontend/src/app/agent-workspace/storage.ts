@@ -1,6 +1,7 @@
 import type { Conversation, WorkspaceState } from "./types";
 
 export const STORAGE_KEY = "rednote.agent-workspace.v1";
+const MIGRATION_PREFIX = "mira.agent-workspace.migrated.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -71,4 +72,16 @@ export function clearWorkspaceState() {
   if (typeof window === "undefined") return;
 
   window.localStorage.removeItem(STORAGE_KEY);
+}
+
+export function hasMigratedLegacyConversations(userId: string) {
+  if (typeof window === "undefined") return true;
+
+  return window.localStorage.getItem(`${MIGRATION_PREFIX}${userId}`) === "1";
+}
+
+export function markLegacyConversationsMigrated(userId: string) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(`${MIGRATION_PREFIX}${userId}`, "1");
 }

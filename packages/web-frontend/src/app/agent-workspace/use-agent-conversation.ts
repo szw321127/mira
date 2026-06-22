@@ -1,15 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AuthUser } from "../auth/auth-types";
 import {
   deleteConversation,
   renameConversation,
 } from "./conversation-actions";
 import {
+  createRemoteConversation,
+  deleteRemoteConversation,
+  importRemoteConversations,
+  loadRemoteConversations,
+  renameRemoteConversation,
+  saveRemoteMessages,
+} from "./conversation-api";
+import {
   createEmptyConversation,
   createInitialWorkspaceState,
+  hasMigratedLegacyConversations,
   loadWorkspaceState,
-  saveWorkspaceState,
+  markLegacyConversationsMigrated,
   STORAGE_KEY,
 } from "./storage";
 import { createId, parseAgentStreamEvent, parseStreamLines } from "./streaming";
@@ -42,6 +52,15 @@ function now() {
 function titleFromMessage(message: string) {
   const trimmed = message.trim().replace(/\s+/g, " ");
   return trimmed.length > 22 ? `${trimmed.slice(0, 22)}...` : trimmed || "新对话";
+}
+
+function workspaceFromConversations(conversations: Conversation[]): WorkspaceState {
+  const fallback = conversations.length > 0 ? conversations : createInitialWorkspaceState().conversations;
+
+  return {
+    activeConversationId: fallback[0].id,
+    conversations: fallback,
+  };
 }
 
 function appendEvent(message: ChatMessage, event: AgentStreamEvent): ChatMessage {
@@ -103,38 +122,131 @@ function updateConversation(
   };
 }
 
-export function useAgentConversation() {
+function replaceConversation(
+  state: WorkspaceState,
+  localId: string,
+  remoteConversation: Conversation,
+) {
+  return {
+    activeConversationId:
+      state.activeConversationId === localId
+        ? remoteConversation.id
+        : state.activeConversationId,
+    conversations: state.conversations.map((conversation) => {
+      if (conversation.id !== localId) return conversation;
+
+      return {
+        ...remoteConversation,
+        title: conversation.title,
+        updatedAt: conversation.updatedAt,
+        messages: conversation.messages,
+      };
+    }),
+  };
+}
+
+export function useAgentConversation(user: AuthUser | null) {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => {
     return SSR_WORKSPACE_STATE;
   });
   const [sendState, setSendState] = useState<SendState>("idle");
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const storageLoadedRef = useRef(false);
+  const workspaceRef = useRef(workspace);
+  const optimisticConversationIdsRef = useRef(new Set<string>());
+  const idAliasesRef = useRef(new Map<string, string>());
+  const pendingMessageSaveIdsRef = useRef(new Set<string>());
+  const pendingConversationCreatesRef = useRef(new Map<string, Promise<string>>());
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const loaded = loadWorkspaceState();
-
-      if (loaded) {
-        setWorkspace(loaded);
-      } else {
-        if (window.localStorage.getItem(STORAGE_KEY)) {
-          setStorageWarning("本地对话数据损坏，已开启一个新对话。");
-        }
-        setWorkspace(createInitialWorkspaceState());
-      }
-
-      storageLoadedRef.current = true;
-    });
-
-    return () => window.cancelAnimationFrame(frame);
+  const resolveConversationId = useCallback((id: string) => {
+    return idAliasesRef.current.get(id) ?? id;
   }, []);
 
+  const reportSyncError = useCallback((error: unknown, fallback: string) => {
+    setStorageWarning(error instanceof Error ? error.message : fallback);
+  }, []);
+
+  const queueMessageSave = useCallback((id: string) => {
+    if (!user) return;
+
+    pendingMessageSaveIdsRef.current.add(id);
+  }, [user]);
+
   useEffect(() => {
-    if (!storageLoadedRef.current) return;
-    saveWorkspaceState(workspace);
+    workspaceRef.current = workspace;
   }, [workspace]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const currentUser = user;
+
+    async function loadConversations() {
+      setStorageWarning(null);
+
+      try {
+        let conversations = (await loadRemoteConversations()).conversations;
+
+        if (
+          conversations.length === 0 &&
+          !hasMigratedLegacyConversations(currentUser.id)
+        ) {
+          const legacy = loadWorkspaceState();
+
+          if (legacy && legacy.conversations.length > 0) {
+            conversations = (await importRemoteConversations(legacy.conversations))
+              .conversations;
+            markLegacyConversationsMigrated(currentUser.id);
+          } else {
+            if (window.localStorage.getItem(STORAGE_KEY)) {
+              setStorageWarning("本地对话数据损坏，已开启一个新对话。");
+            }
+            markLegacyConversationsMigrated(currentUser.id);
+          }
+        }
+
+        if (conversations.length === 0) {
+          conversations = [(await createRemoteConversation()).conversation];
+        }
+
+        if (!active) return;
+        setWorkspace(workspaceFromConversations(conversations));
+      } catch (error) {
+        if (!active) return;
+        reportSyncError(error, "对话记录加载失败");
+        setWorkspace(createInitialWorkspaceState());
+      }
+    }
+
+    void loadConversations();
+
+    return () => {
+      active = false;
+    };
+  }, [reportSyncError, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (pendingMessageSaveIdsRef.current.size === 0) return;
+
+    const ids = Array.from(pendingMessageSaveIdsRef.current);
+    pendingMessageSaveIdsRef.current.clear();
+
+    for (const originalId of ids) {
+      const id = resolveConversationId(originalId);
+      if (id === originalId && optimisticConversationIdsRef.current.has(originalId)) {
+        continue;
+      }
+
+      const conversation = workspace.conversations.find((item) => item.id === id);
+      if (!conversation) continue;
+
+      void saveRemoteMessages(id, conversation.messages).catch((error: unknown) => {
+        reportSyncError(error, "对话消息保存失败");
+      });
+    }
+  }, [reportSyncError, resolveConversationId, user, workspace]);
 
   const activeConversation = useMemo(() => {
     return (
@@ -144,21 +256,94 @@ export function useAgentConversation() {
     );
   }, [workspace]);
 
+  const ensureRemoteConversationId = useCallback(
+    (id: string, title: string) => {
+      if (!user) return Promise.resolve(id);
+
+      const resolvedId = resolveConversationId(id);
+      if (resolvedId !== id) return Promise.resolve(resolvedId);
+      if (!optimisticConversationIdsRef.current.has(id)) {
+        return Promise.resolve(id);
+      }
+
+      const pending = pendingConversationCreatesRef.current.get(id);
+      if (pending) return pending;
+
+      const createPromise = createRemoteConversation(title)
+        .then(({ conversation: remoteConversation }) => {
+          const titleToSync =
+            workspaceRef.current.conversations.find((item) => item.id === id)
+              ?.title ?? remoteConversation.title;
+
+          idAliasesRef.current.set(id, remoteConversation.id);
+          optimisticConversationIdsRef.current.delete(id);
+          queueMessageSave(remoteConversation.id);
+          setWorkspace((current) => {
+            return replaceConversation(current, id, remoteConversation);
+          });
+
+          if (titleToSync !== remoteConversation.title) {
+            void renameRemoteConversation(remoteConversation.id, titleToSync).catch(
+              (error: unknown) => reportSyncError(error, "对话名称保存失败"),
+            );
+          }
+
+          return remoteConversation.id;
+        })
+        .catch((error: unknown) => {
+          reportSyncError(error, "新对话创建失败");
+          throw error;
+        })
+        .finally(() => {
+          pendingConversationCreatesRef.current.delete(id);
+        });
+
+      pendingConversationCreatesRef.current.set(id, createPromise);
+      return createPromise;
+    },
+    [queueMessageSave, reportSyncError, resolveConversationId, user],
+  );
+
   const startNewConversation = useCallback(() => {
     const conversation = createEmptyConversation();
+    optimisticConversationIdsRef.current.add(conversation.id);
+
     setWorkspace((current) => ({
       activeConversationId: conversation.id,
       conversations: [conversation, ...current.conversations],
     }));
     setSendState("idle");
-  }, []);
 
-  const rename = useCallback((id: string, title: string) => {
-    setWorkspace((current) => renameConversation(current, id, title));
-  }, []);
+    if (!user) return;
+
+    void ensureRemoteConversationId(conversation.id, conversation.title).catch(
+      () => undefined,
+    );
+  }, [ensureRemoteConversationId, user]);
+
+  const rename = useCallback(
+    (id: string, title: string) => {
+      const nextTitle = title.trim();
+      if (!nextTitle) return;
+
+      setWorkspace((current) => renameConversation(current, id, nextTitle));
+
+      if (!user) return;
+      void ensureRemoteConversationId(id, nextTitle)
+        .then((remoteConversationId) => {
+          return renameRemoteConversation(remoteConversationId, nextTitle);
+        })
+        .catch((error: unknown) => reportSyncError(error, "对话名称保存失败"));
+    },
+    [ensureRemoteConversationId, reportSyncError, user],
+  );
 
   const remove = useCallback(
     (id: string) => {
+      const deletingOnlyConversation =
+        workspace.conversations.length === 1 && workspace.conversations[0].id === id;
+      const fallback = deletingOnlyConversation ? createEmptyConversation() : null;
+
       if (id === workspace.activeConversationId) {
         abortRef.current?.abort();
         abortRef.current = null;
@@ -166,10 +351,35 @@ export function useAgentConversation() {
       }
 
       setWorkspace((current) => {
-        return deleteConversation(current, id, createEmptyConversation);
+        return deleteConversation(
+          current,
+          id,
+          () => fallback ?? createEmptyConversation(),
+        );
       });
+
+      if (!user) return;
+
+      void ensureRemoteConversationId(id, "新对话")
+        .then((remoteConversationId) => deleteRemoteConversation(remoteConversationId))
+        .catch((error: unknown) => {
+          reportSyncError(error, "对话删除失败");
+        });
+
+      if (fallback) {
+        optimisticConversationIdsRef.current.add(fallback.id);
+        void ensureRemoteConversationId(fallback.id, fallback.title).catch(
+          () => undefined,
+        );
+      }
     },
-    [workspace.activeConversationId],
+    [
+      ensureRemoteConversationId,
+      reportSyncError,
+      user,
+      workspace.activeConversationId,
+      workspace.conversations,
+    ],
   );
 
   const selectConversation = useCallback((id: string) => {
@@ -188,7 +398,7 @@ export function useAgentConversation() {
   const sendMessage = useCallback(
     async (input: string) => {
       const content = input.trim();
-      if (!content || sendState === "streaming") return;
+      if (!content || sendState === "streaming" || !activeConversation) return;
 
       const userMessage: ChatMessage = {
         id: createId("msg"),
@@ -206,15 +416,17 @@ export function useAgentConversation() {
         events: [],
       };
       const requestConversationId = activeConversation.id;
+      const shouldRenameRemote =
+        activeConversation.title === "新对话" &&
+        activeConversation.messages.length === 0;
+      const nextTitle = titleFromMessage(content);
 
+      queueMessageSave(requestConversationId);
       setWorkspace((current) => {
         return updateActiveConversation(current, (conversation) => {
-          const isUntitled =
-            conversation.title === "新对话" && conversation.messages.length === 0;
-
           return {
             ...conversation,
-            title: isUntitled ? titleFromMessage(content) : conversation.title,
+            title: shouldRenameRemote ? nextTitle : conversation.title,
             updatedAt: now(),
             messages: [...conversation.messages, userMessage, assistantMessage],
           };
@@ -226,11 +438,22 @@ export function useAgentConversation() {
       setSendState("streaming");
 
       try {
+        const remoteConversationId = await ensureRemoteConversationId(
+          requestConversationId,
+          nextTitle,
+        );
+
+        if (user && shouldRenameRemote) {
+          void renameRemoteConversation(remoteConversationId, nextTitle).catch(
+            (error: unknown) => reportSyncError(error, "对话名称保存失败"),
+          );
+        }
+
         const response = await fetch("/api/agent/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            conversationId: requestConversationId,
+            conversationId: remoteConversationId,
             messages: [...activeConversation.messages, userMessage].map(
               (message) => ({
                 role: message.role,
@@ -262,10 +485,11 @@ export function useAgentConversation() {
 
           for (const line of parsed.complete) {
             const event = parseAgentStreamEvent(line);
+            queueMessageSave(requestConversationId);
             setWorkspace((current) => {
               return updateConversation(
                 current,
-                requestConversationId,
+                resolveConversationId(requestConversationId),
                 (conversation) => ({
                   ...conversation,
                   updatedAt: now(),
@@ -282,10 +506,11 @@ export function useAgentConversation() {
 
         if (buffer.trim()) {
           const event = parseAgentStreamEvent(buffer);
+          queueMessageSave(requestConversationId);
           setWorkspace((current) => {
             return updateConversation(
               current,
-              requestConversationId,
+              resolveConversationId(requestConversationId),
               (conversation) => ({
                 ...conversation,
                 updatedAt: now(),
@@ -309,10 +534,11 @@ export function useAgentConversation() {
                 : String(error),
         };
 
+        queueMessageSave(requestConversationId);
         setWorkspace((current) => {
           return updateConversation(
             current,
-            requestConversationId,
+            resolveConversationId(requestConversationId),
             (conversation) => ({
               ...conversation,
               updatedAt: now(),
@@ -331,10 +557,20 @@ export function useAgentConversation() {
         setSendState("idle");
       }
     },
-    [activeConversation.id, activeConversation.messages, sendState],
+    [
+      activeConversation,
+      ensureRemoteConversationId,
+      queueMessageSave,
+      reportSyncError,
+      resolveConversationId,
+      sendState,
+      user,
+    ],
   );
 
   const retryLastUserMessage = useCallback(() => {
+    if (!activeConversation) return;
+
     const lastUserMessage = [...activeConversation.messages]
       .reverse()
       .find((message) => {
@@ -342,7 +578,7 @@ export function useAgentConversation() {
       });
 
     if (lastUserMessage) void sendMessage(lastUserMessage.content);
-  }, [activeConversation.messages, sendMessage]);
+  }, [activeConversation, sendMessage]);
 
   return {
     activeConversation,

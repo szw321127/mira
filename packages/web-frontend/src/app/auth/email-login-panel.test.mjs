@@ -54,6 +54,51 @@ test("email login panel requests and submits one-time email codes", () => {
   assert.match(panelSource, /Loader2/);
 });
 
+test("email login panel hardens submit state and code controls", () => {
+  const panelSource = readAuthFile("email-login-panel.tsx");
+
+  assert.match(panelSource, /useRef/);
+  assert.match(panelSource, /submittingRef/);
+  assert.match(panelSource, /submittingRef\.current \|\| !canSubmit/);
+  assert.match(panelSource, /mountedRef/);
+  assert.match(panelSource, /mountedRef\.current = false/);
+  assert.match(panelSource, /focus:outline-none/);
+
+  const directSubmittingDisables = panelSource.match(/disabled=\{submitting\}/g) ?? [];
+  assert.ok(
+    directSubmittingDisables.length >= 2,
+    "code input and change email button should be disabled while submitting",
+  );
+});
+
+test("email auth gate avoids ghost cards and keeps placeholders readable", () => {
+  const panelSource = readAuthFile("email-login-panel.tsx");
+  const pageSource = readFileSync(join(authDir, "../page.tsx"), "utf8");
+
+  assert.doesNotMatch(panelSource, /shadow-\[0_18px_48px/);
+  assert.doesNotMatch(pageSource, /shadow-\[0_18px_48px/);
+
+  const readablePlaceholders =
+    panelSource.match(/placeholder:text-\[var\(--muted-strong\)\]/g) ?? [];
+  assert.ok(
+    readablePlaceholders.length >= 2,
+    "email and code placeholders should use readable contrast",
+  );
+});
+
+test("email login primary action keeps mobile touch height", () => {
+  const panelSource = readAuthFile("email-login-panel.tsx");
+
+  assert.match(
+    panelSource,
+    /className="[^"]*inline-flex h-10[^"]*\bsm:flex-1\b/,
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /className="[^"]*inline-flex h-10 flex-1\b/,
+  );
+});
+
 test("email login panel reads as product UI, not a hero landing page", () => {
   const panelSource = readAuthFile("email-login-panel.tsx");
 
@@ -74,5 +119,5 @@ test("home page gates workspace behind auth session", () => {
   assert.match(pageSource, /status === "checking"/);
   assert.match(pageSource, /status === "guest"/);
   assert.match(pageSource, /AgentWorkspaceShell/);
-  assert.match(pageSource, /useAgentConversation\(\)/);
+  assert.match(pageSource, /useAgentConversation\(user\)/);
 });

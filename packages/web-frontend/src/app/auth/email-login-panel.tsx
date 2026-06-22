@@ -2,7 +2,7 @@
 
 import { ArrowRight, Loader2, Mail, ShieldCheck } from "lucide-react";
 import Image from "next/image";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { loginWithEmailCode, requestEmailCode } from "./auth-api";
 import type { AuthUser } from "./auth-types";
 
@@ -15,40 +15,58 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<Message>(null);
   const [submitting, setSubmitting] = useState(false);
+  const mountedRef = useRef(true);
+  const submittingRef = useRef(false);
+  const canSubmit = phase === "email" ? email.trim().length > 3 : code.length === 6;
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current || !canSubmit) return;
+
+    submittingRef.current = true;
     setSubmitting(true);
     setMessage(null);
 
     try {
+      const normalizedEmail = email.trim();
+
       if (phase === "email") {
-        await requestEmailCode(email.trim());
+        await requestEmailCode(normalizedEmail);
+        if (!mountedRef.current) return;
         setPhase("code");
         setMessage({ tone: "success", text: "验证码已发送，请查看邮箱。" });
         return;
       }
 
-      const session = await loginWithEmailCode(email.trim(), code);
+      const session = await loginWithEmailCode(normalizedEmail, code);
+      if (!mountedRef.current) return;
       setMessage({ tone: "success", text: "登录成功，正在进入工作区。" });
       onLogin(session.user);
     } catch (error) {
+      if (!mountedRef.current) return;
       setMessage({
         tone: "error",
         text: error instanceof Error ? error.message : "登录失败",
       });
     } finally {
-      setSubmitting(false);
+      submittingRef.current = false;
+      if (mountedRef.current) {
+        setSubmitting(false);
+      }
     }
   }
-
-  const canSubmit = phase === "email" ? email.trim().length > 3 : code.length === 6;
 
   return (
     <main className="min-h-dvh bg-[var(--background)] px-4 py-5 text-[var(--ink)] sm:px-6">
       <div className="mx-auto flex min-h-[calc(100dvh-40px)] w-full max-w-5xl items-center justify-center">
         <div className="grid w-full gap-4 lg:grid-cols-[minmax(0,420px)_minmax(320px,1fr)] lg:items-center">
-          <section className="order-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_18px_48px_oklch(0.18_0.01_260/0.08)] lg:order-1">
+          <section className="order-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 lg:order-1">
             <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
               <div className="min-w-0">
                 <div className="text-xs font-[650] tracking-[0.12em] text-[var(--accent-strong)] uppercase">
@@ -60,10 +78,10 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
                 受保护
               </div>
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="mt-4">
               <PreviewRow
                 label="上次会话"
-                title="整理 Rednote 增长素材"
+                title="整理 Mira 增长素材"
                 value="12 条上下文"
               />
               <PreviewRow
@@ -80,7 +98,7 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
           </section>
 
           <form
-            className="order-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[0_18px_48px_oklch(0.18_0.01_260/0.1)] lg:order-2"
+            className="order-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5 lg:order-2"
             onSubmit={submit}
           >
             <Image
@@ -107,7 +125,7 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
               邮箱
               <input
                 autoComplete="email"
-                className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors focus:border-[var(--accent)] disabled:text-[var(--muted)]"
+                className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
                 disabled={phase === "code" || submitting}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@example.com"
@@ -121,7 +139,8 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
                 验证码
                 <input
                   autoComplete="one-time-code"
-                  className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 font-mono text-sm tracking-[0.16em] transition-colors focus:border-[var(--accent)]"
+                  className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 font-mono text-sm tracking-[0.16em] transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
+                  disabled={submitting}
                   inputMode="numeric"
                   maxLength={6}
                   onChange={(event) =>
@@ -148,7 +167,7 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
-                className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-[9px] bg-[var(--accent)] px-3 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[9px] bg-[var(--accent)] px-3 text-sm font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55 sm:flex-1"
                 disabled={!canSubmit || submitting}
                 type="submit"
               >
@@ -163,7 +182,8 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
               </button>
               {phase === "code" ? (
                 <button
-                  className="inline-flex h-10 items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] hover:bg-[var(--surface-muted)]"
+                  className="inline-flex h-10 items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+                  disabled={submitting}
                   onClick={() => {
                     setPhase("email");
                     setCode("");
@@ -197,7 +217,7 @@ function PreviewRow({
   value: string;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 last:pb-0">
       <div className="min-w-0">
         <div className="text-xs text-[var(--muted)]">{label}</div>
         <div className="mt-1 truncate text-sm font-[650]">{title}</div>
