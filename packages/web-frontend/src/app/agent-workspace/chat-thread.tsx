@@ -1,10 +1,9 @@
 "use client";
 
-import { XMarkdown } from "@ant-design/x-markdown";
-import "@ant-design/x-markdown/themes/light.css";
 import { cn } from "./classnames";
 import { EmptyState } from "./empty-state";
 import { formatTime } from "./format";
+import { MarkdownRenderer } from "./markdown-renderer";
 import { shouldRenderMarkdown } from "./message-rendering";
 import type { ChatMessage, Conversation } from "./types";
 
@@ -46,12 +45,7 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       </div>
       {message.content ? (
         renderMarkdown ? (
-          <XMarkdown
-            className="message-markdown"
-            content={message.content}
-            escapeRawHtml
-            openLinksInNewTab
-          />
+          <MarkdownRenderer content={message.content} />
         ) : (
           <p className="whitespace-pre-wrap text-[13px] leading-6">
             {message.content}
