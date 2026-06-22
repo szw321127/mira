@@ -12,6 +12,14 @@ export type RuntimeSearchConfig = {
   tavilyApiKey: string;
 };
 
+export type RuntimeSmtpConfig = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+};
+
 @Injectable()
 export class RuntimeSecretsService {
   constructor(private readonly store: AdminStore) {}
@@ -29,6 +37,17 @@ export class RuntimeSecretsService {
     const secrets = await this.readSecrets();
     return {
       tavilyApiKey: secrets.TAVILY_API_KEY ?? ""
+    };
+  }
+
+  async getSmtpConfig(): Promise<RuntimeSmtpConfig> {
+    const secrets = await this.readSecrets();
+    return {
+      host: secrets.SMTP_HOST ?? "",
+      port: Number(secrets.SMTP_PORT ?? 0),
+      user: secrets.SMTP_USER ?? "",
+      password: secrets.SMTP_PASSWORD ?? "",
+      from: secrets.SMTP_FROM ?? ""
     };
   }
 
