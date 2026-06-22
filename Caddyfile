@@ -2,3 +2,8 @@
   encode gzip zstd
   reverse_proxy frontend:3000
 }
+
+http://{$APP_IP} {
+  encode gzip zstd
+  reverse_proxy frontend:3000
+}
