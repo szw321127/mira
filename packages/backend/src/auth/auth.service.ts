@@ -19,8 +19,21 @@ export class AuthService {
   async requestCode(emailValue: string, requestIp?: string): Promise<{ ok: true }> {
     const email = normalizeEmail(emailValue);
     await this.mailer.ensureCanSendVerificationCode();
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser?.status === "disabled") {
+      return { ok: true };
+    }
+
     const code = await this.codes.createCode(email, requestIp);
-    await this.mailer.sendVerificationCode(email, code);
+    try {
+      await this.mailer.sendVerificationCode(email, code);
+    } catch (error) {
+      await this.codes.invalidateLatestUnused(email);
+      throw error;
+    }
     return { ok: true };
   }
 

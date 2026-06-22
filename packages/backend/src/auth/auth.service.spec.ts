@@ -15,7 +15,7 @@ type UserRow = {
 
 type MockEmailCodeService = Pick<
   jest.Mocked<EmailCodeService>,
-  "createCode" | "verifyCode"
+  "createCode" | "invalidateLatestUnused" | "verifyCode"
 >;
 
 type MockMailerService = Pick<jest.Mocked<MailerService>, "sendVerificationCode">;
@@ -67,6 +67,7 @@ function createPrisma(initialUsers: UserRow[] = []) {
 function createService(prisma: PrismaService) {
   const codeService = {
     createCode: jest.fn(),
+    invalidateLatestUnused: jest.fn(() => Promise.resolve()),
     verifyCode: jest.fn(() => Promise.resolve())
   } satisfies MockEmailCodeService;
   const mailer = {
@@ -126,6 +127,42 @@ describe("AuthService", () => {
     expect(mailer.sendVerificationCode).toHaveBeenCalledWith(
       "user@example.com",
       "123456"
+    );
+  });
+
+  it("returns ok for disabled-user code requests without creating or sending a code", async () => {
+    const { prisma } = createPrisma([
+      {
+        id: "user-1",
+        email: "user@example.com",
+        status: "disabled",
+        lastLoginAt: null
+      }
+    ]);
+    const { service, codeService, mailer } = createService(prisma);
+
+    await expect(
+      service.requestCode("User@Example.COM", "203.0.113.10")
+    ).resolves.toEqual({ ok: true });
+
+    expect(mailer.ensureCanSendVerificationCode).toHaveBeenCalledTimes(1);
+    expect(codeService.createCode).not.toHaveBeenCalled();
+    expect(mailer.sendVerificationCode).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the latest unused code when sending fails", async () => {
+    const { prisma } = createPrisma();
+    const { service, codeService, mailer } = createService(prisma);
+    const sendError = new Error("smtp send failed");
+    codeService.createCode.mockResolvedValueOnce("123456");
+    mailer.sendVerificationCode.mockRejectedValueOnce(sendError);
+
+    await expect(
+      service.requestCode("user@example.com", "203.0.113.10")
+    ).rejects.toThrow(sendError);
+
+    expect(codeService.invalidateLatestUnused).toHaveBeenCalledWith(
+      "user@example.com"
     );
   });
 

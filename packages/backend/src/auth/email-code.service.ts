@@ -5,7 +5,12 @@ import {
   Injectable,
   ServiceUnavailableException
 } from "@nestjs/common";
-import { createHash, createHmac, randomInt } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomInt,
+  timingSafeEqual
+} from "node:crypto";
 import { PrismaService } from "../database/prisma.service.js";
 import { normalizeEmail } from "./auth.types.js";
 
@@ -113,7 +118,7 @@ export class EmailCodeService {
     }
 
     const codeHash = hashCode(email, code, getEmailCodeSecret());
-    if (row.codeHash !== codeHash) {
+    if (!isEqualHash(row.codeHash, codeHash)) {
       await this.prisma.emailVerificationCode.updateMany({
         where: {
           id: row.id,
@@ -151,6 +156,19 @@ export class EmailCodeService {
       }
     });
     if (result.count !== 1) throw new BadRequestException(INVALID_CODE_MESSAGE);
+  }
+
+  async invalidateLatestUnused(emailValue: string): Promise<void> {
+    const email = normalizeEmail(emailValue);
+    await this.prisma.emailVerificationCode.updateMany({
+      where: {
+        email,
+        usedAt: null
+      },
+      data: {
+        usedAt: new Date()
+      }
+    });
   }
 
   private async enforceRateLimits(
@@ -212,6 +230,15 @@ export class EmailCodeService {
 
 function hashCode(email: string, code: string, secret: string): string {
   return createHmac("sha256", secret).update(`${email}:${code}`).digest("hex");
+}
+
+function isEqualHash(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return (
+    leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+  );
 }
 
 function rateLimitException(): HttpException {
