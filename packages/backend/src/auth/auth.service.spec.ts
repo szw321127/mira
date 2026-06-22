@@ -145,7 +145,7 @@ describe("AuthService", () => {
       service.requestCode("User@Example.COM", "203.0.113.10")
     ).resolves.toEqual({ ok: true });
 
-    expect(mailer.ensureCanSendVerificationCode).toHaveBeenCalledTimes(1);
+    expect(mailer.ensureCanSendVerificationCode).not.toHaveBeenCalled();
     expect(codeService.createCode).not.toHaveBeenCalled();
     expect(mailer.sendVerificationCode).not.toHaveBeenCalled();
   });
