@@ -360,6 +360,9 @@ jobs:
             echo "Starting services with docker compose..."
             docker compose up -d --remove-orphans
 
+            echo "Reloading Caddy configuration..."
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+
             echo "Cleaning up old images..."
             docker image prune -af
 
