@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy, Optional } from "@nestjs/common";
 import { Redis } from "ioredis";
 
 type RedisClient = {
@@ -16,17 +16,25 @@ type RedisClient = {
 type RedisClientFactory = (url: string) => RedisClient;
 
 export type RedisHealth = "ok" | "disabled" | "unavailable";
+export const REDIS_CLIENT_FACTORY = Symbol("REDIS_CLIENT_FACTORY");
+export const REDIS_CONNECTION_URL = Symbol("REDIS_CONNECTION_URL");
+
+const defaultRedisClientFactory: RedisClientFactory = (url) =>
+  new Redis(url, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 2
+  });
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private client?: RedisClient;
 
   constructor(
-    private readonly createClient: RedisClientFactory = (url) =>
-      new Redis(url, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 2
-      }),
+    @Optional()
+    @Inject(REDIS_CLIENT_FACTORY)
+    private readonly createClient: RedisClientFactory = defaultRedisClientFactory,
+    @Optional()
+    @Inject(REDIS_CONNECTION_URL)
     private readonly redisUrl = process.env.REDIS_URL
   ) {}
 

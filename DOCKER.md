@@ -44,10 +44,16 @@ REDIS_URL=redis://localhost:6379
 
 # Session Secret (在生产环境中修改这个值)
 SESSION_SECRET=your_production_secret_key
+
+# HTTPS domain
+APP_DOMAIN=mira.autos
 ```
 
 模型 Base URL、模型名称、模型 API Key 和 Tavily 搜索 Key 不再写入 `.env`。
 服务启动后登录 `/admin`，在 Key 配置里填写；后端会保存到 PostgreSQL。
+
+生产环境由 Caddy 自动申请和续期 HTTPS 证书。域名备案通过后，确保 DNS `A`
+记录指向服务器公网 IP，并在云服务器安全组放开 `80/tcp` 和 `443/tcp`。
 
 ### 2. 构建并启动服务
 
@@ -62,9 +68,10 @@ docker-compose up -d
 
 ### 3. 访问应用
 
-- **前端**: http://localhost
-- **后端 API**: http://localhost:3000
-- **健康检查**: http://localhost:3000/health
+- **前端**: https://mira.autos
+- **管理后台**: https://mira.autos/admin
+- **后端 API**: 由前端同源 `/api/*` 路由代理到 Docker 内网后端
+- **后端健康检查**: 容器内访问 `http://backend:3000/health`
 
 ### 4. 查看日志
 
@@ -95,7 +102,7 @@ docker-compose down -v
 ### 前端服务 (rednote-frontend)
 
 - **基础镜像**: node:22-slim
-- **端口**: 3000（由 Compose 映射到宿主机 80）
+- **端口**: 3000（仅 Docker 内网暴露，由 Caddy 反向代理）
 - **构建方式**: 多阶段构建，先构建 Next.js 应用，再用 `next start` 提供页面和 `/api/*` 路由
 - **特性**:
   - Next.js App Router
@@ -114,6 +121,13 @@ docker-compose down -v
   - `REDIS_URL`: Redis 连接串
   - `SESSION_SECRET`: 会话密钥
   - `CORS_ORIGINS`: 跨域配置
+
+### Caddy 服务 (rednote-caddy)
+
+- **镜像**: `ghcr.io/<owner>/rednote_caddy:2-alpine`（由 GitHub Actions 从 `caddy:2-alpine` 同步）
+- **端口**: 对外暴露 `80` 和 `443`
+- **用途**: 自动申请/续期 HTTPS 证书，并把请求转发到 `frontend:3000`
+- **配置**: `APP_DOMAIN` 决定证书域名，例如 `mira.autos`
 
 ### PostgreSQL 服务 (rednote-postgres)
 
@@ -154,7 +168,7 @@ docker-compose ps
 ## 生产部署建议
 
 1. **修改默认密钥**: 确保修改 `.env` 中的 `SESSION_SECRET`
-2. **使用 HTTPS**: 在生产环境中配置 SSL 证书
+2. **配置 HTTPS 域名**: 设置 `APP_DOMAIN`，并确保域名备案、DNS、80/443 安全组都已完成
 3. **环境变量安全**: 不要将 `.env` 文件提交到版本控制
 4. **资源限制**: 为容器设置 CPU 和内存限制
 5. **日志管理**: 配置日志轮转和集中日志收集
@@ -164,13 +178,16 @@ docker-compose ps
 
 ### 端口冲突
 
-如果端口 80 或 3000 已被占用，修改 `docker-compose.yml` 中的端口映射：
+如果端口 80 或 443 已被占用，需要先停止占用这些端口的服务，或修改 Caddy 的宿主机端口映射：
 
 ```yaml
-ports:
-  - "8080:3000"  # 前端改为 8080
-  - "3001:3000"  # 后端改为 3001
+caddy:
+  ports:
+    - "8080:80"
+    - "8443:443"
 ```
+
+生产环境建议保持 `80:80` 和 `443:443`，否则浏览器访问标准 HTTPS 域名时不会命中服务。
 
 ### 构建失败
 
