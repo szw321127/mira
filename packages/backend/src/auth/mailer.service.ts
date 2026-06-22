@@ -10,13 +10,18 @@ export class MailerService {
 
   constructor(private readonly runtimeSecrets: RuntimeSecretsService) {}
 
+  async ensureCanSendVerificationCode(): Promise<void> {
+    const config = await this.runtimeSecrets.getSmtpConfig();
+    if (isSmtpConfigComplete(config) || process.env.NODE_ENV !== "production") {
+      return;
+    }
+    throw new ServiceUnavailableException(UNCONFIGURED_MESSAGE);
+  }
+
   async sendVerificationCode(email: string, code: string): Promise<void> {
     const config = await this.runtimeSecrets.getSmtpConfig();
-    const complete = Boolean(
-      config.host && config.port && config.user && config.password && config.from
-    );
 
-    if (!complete) {
+    if (!isSmtpConfigComplete(config)) {
       if (process.env.NODE_ENV === "production") {
         throw new ServiceUnavailableException(UNCONFIGURED_MESSAGE);
       }
@@ -41,4 +46,16 @@ export class MailerService {
       text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
     });
   }
+}
+
+function isSmtpConfigComplete(config: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+}): boolean {
+  return Boolean(
+    config.host && config.port && config.user && config.password && config.from
+  );
 }

@@ -1,4 +1,4 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, ServiceUnavailableException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import type { PrismaService } from "../database/prisma.service.js";
 import { AuthService } from "./auth.service.js";
@@ -70,8 +70,11 @@ function createService(prisma: PrismaService) {
     verifyCode: jest.fn(() => Promise.resolve())
   } satisfies MockEmailCodeService;
   const mailer = {
+    ensureCanSendVerificationCode: jest.fn(() => Promise.resolve()),
     sendVerificationCode: jest.fn(() => Promise.resolve())
-  } satisfies MockMailerService;
+  } satisfies MockMailerService & {
+    ensureCanSendVerificationCode: jest.Mock<() => Promise<void>>;
+  };
   const sessions = {
     createSession: jest.fn(() => Promise.resolve("session-token"))
   } satisfies MockUserSessionService;
@@ -90,6 +93,42 @@ function createService(prisma: PrismaService) {
 }
 
 describe("AuthService", () => {
+  it("does not create a code when mailer preflight fails", async () => {
+    const { prisma } = createPrisma();
+    const { service, codeService, mailer } = createService(prisma);
+    mailer.ensureCanSendVerificationCode.mockRejectedValueOnce(
+      new ServiceUnavailableException("邮件服务未配置，请联系管理员")
+    );
+
+    await expect(
+      service.requestCode("User@Example.COM", "203.0.113.10")
+    ).rejects.toThrow(
+      new ServiceUnavailableException("邮件服务未配置，请联系管理员")
+    );
+    expect(mailer.ensureCanSendVerificationCode).toHaveBeenCalledTimes(1);
+    expect(codeService.createCode).not.toHaveBeenCalled();
+    expect(mailer.sendVerificationCode).not.toHaveBeenCalled();
+  });
+
+  it("creates and sends a code after mailer preflight passes", async () => {
+    const { prisma } = createPrisma();
+    const { service, codeService, mailer } = createService(prisma);
+    codeService.createCode.mockResolvedValueOnce("123456");
+
+    await expect(
+      service.requestCode("User@Example.COM", "203.0.113.10")
+    ).resolves.toEqual({ ok: true });
+    expect(mailer.ensureCanSendVerificationCode).toHaveBeenCalledTimes(1);
+    expect(codeService.createCode).toHaveBeenCalledWith(
+      "user@example.com",
+      "203.0.113.10"
+    );
+    expect(mailer.sendVerificationCode).toHaveBeenCalledWith(
+      "user@example.com",
+      "123456"
+    );
+  });
+
   it("creates a new user and session after code verification", async () => {
     const { prisma, users } = createPrisma();
     const { service, codeService, sessions } = createService(prisma);

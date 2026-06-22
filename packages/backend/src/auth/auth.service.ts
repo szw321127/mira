@@ -18,6 +18,7 @@ export class AuthService {
 
   async requestCode(emailValue: string, requestIp?: string): Promise<{ ok: true }> {
     const email = normalizeEmail(emailValue);
+    await this.mailer.ensureCanSendVerificationCode();
     const code = await this.codes.createCode(email, requestIp);
     await this.mailer.sendVerificationCode(email, code);
     return { ok: true };
