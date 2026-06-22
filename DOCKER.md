@@ -48,7 +48,7 @@ SESSION_SECRET=your_production_secret_key
 # HTTPS domain
 APP_DOMAIN=mira.autos
 
-# Temporary HTTP IP fallback
+# Temporary HTTP/HTTPS IP fallback
 APP_IP=47.115.149.71
 ```
 
@@ -57,7 +57,9 @@ APP_IP=47.115.149.71
 
 生产环境由 Caddy 自动申请和续期 HTTPS 证书。域名备案通过后，确保 DNS `A`
 记录指向服务器公网 IP，并在云服务器安全组放开 `80/tcp` 和 `443/tcp`。
-`APP_IP` 只提供临时的 `http://<服务器 IP>` 访问入口，正式访问仍使用域名 HTTPS。
+`APP_IP` 提供临时的 `http://<服务器 IP>` 和 `https://<服务器 IP>` 访问入口。
+IP HTTPS 使用 Let’s Encrypt 短期 IP 证书，证书生命周期约 6 天并由 Caddy 自动续期；
+正式访问仍建议使用域名 HTTPS。
 
 ### 2. 构建并启动服务
 
@@ -74,7 +76,7 @@ docker-compose up -d
 
 - **前端**: https://mira.autos
 - **管理后台**: https://mira.autos/admin
-- **临时 IP 入口**: http://47.115.149.71
+- **临时 IP 入口**: https://47.115.149.71 或 http://47.115.149.71
 - **后端 API**: 由前端同源 `/api/*` 路由代理到 Docker 内网后端
 - **后端健康检查**: 容器内访问 `http://backend:3000/health`
 

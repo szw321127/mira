@@ -306,6 +306,16 @@ jobs:
               encode gzip zstd
               reverse_proxy frontend:3000
             }
+
+            https://{$APP_IP} {
+              tls {
+                issuer acme {
+                  profile shortlived
+                }
+              }
+              encode gzip zstd
+              reverse_proxy frontend:3000
+            }
             EOF
 
             echo "Creating .env file with configuration..."
