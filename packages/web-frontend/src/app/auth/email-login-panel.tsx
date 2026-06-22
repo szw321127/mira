@@ -9,12 +9,15 @@ import type { AuthUser } from "./auth-types";
 type Phase = "email" | "code";
 type Message = { tone: "success" | "error"; text: string } | null;
 
+const EMAIL_CODE_COOLDOWN_SECONDS = 60;
+
 export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   const [phase, setPhase] = useState<Phase>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<Message>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
   const mountedRef = useRef(true);
   const submittingRef = useRef(false);
   const canSubmit = phase === "email" ? email.trim().length > 3 : code.length === 6;
@@ -24,6 +27,16 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setResendCountdown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [resendCountdown]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,6 +53,7 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
         await requestEmailCode(normalizedEmail);
         if (!mountedRef.current) return;
         setPhase("code");
+        setResendCountdown(EMAIL_CODE_COOLDOWN_SECONDS);
         setMessage({ tone: "success", text: "验证码已发送，请查看邮箱。" });
         return;
       }
@@ -53,6 +67,33 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
       setMessage({
         tone: "error",
         text: error instanceof Error ? error.message : "登录失败",
+      });
+    } finally {
+      submittingRef.current = false;
+      if (mountedRef.current) {
+        setSubmitting(false);
+      }
+    }
+  }
+
+  async function resendEmailCode() {
+    if (submittingRef.current || resendCountdown > 0) return;
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setMessage(null);
+
+    try {
+      await requestEmailCode(email.trim());
+      if (!mountedRef.current) return;
+      setCode("");
+      setResendCountdown(EMAIL_CODE_COOLDOWN_SECONDS);
+      setMessage({ tone: "success", text: "验证码已重新发送，请查看邮箱。" });
+    } catch (error) {
+      if (!mountedRef.current) return;
+      setMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "验证码发送失败",
       });
     } finally {
       submittingRef.current = false;
@@ -181,18 +222,33 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
                 {phase === "email" ? "发送验证码" : "登录"}
               </button>
               {phase === "code" ? (
-                <button
-                  className="inline-flex h-10 items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
-                  disabled={submitting}
-                  onClick={() => {
-                    setPhase("email");
-                    setCode("");
-                    setMessage(null);
-                  }}
-                  type="button"
-                >
-                  更换邮箱
-                </button>
+                <>
+                  <button
+                    className="inline-flex h-10 min-w-[108px] items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] tabular-nums hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={submitting || resendCountdown > 0}
+                    onClick={resendEmailCode}
+                    type="button"
+                  >
+                    {resendCountdown > 0
+                      ? `${resendCountdown}s 后重发`
+                      : submitting
+                        ? "发送中"
+                        : "重新发送"}
+                  </button>
+                  <button
+                    className="inline-flex h-10 items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+                    disabled={submitting}
+                    onClick={() => {
+                      setPhase("email");
+                      setCode("");
+                      setMessage(null);
+                      setResendCountdown(0);
+                    }}
+                    type="button"
+                  >
+                    更换邮箱
+                  </button>
+                </>
               ) : null}
             </div>
 

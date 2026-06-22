@@ -71,6 +71,19 @@ test("email login panel hardens submit state and code controls", () => {
   );
 });
 
+test("email login panel shows a resend countdown after requesting a code", () => {
+  const panelSource = readAuthFile("email-login-panel.tsx");
+
+  assert.match(panelSource, /EMAIL_CODE_COOLDOWN_SECONDS\s*=\s*60/);
+  assert.match(panelSource, /resendCountdown/);
+  assert.match(panelSource, /setResendCountdown\(EMAIL_CODE_COOLDOWN_SECONDS\)/);
+  assert.match(panelSource, /setTimeout/);
+  assert.match(panelSource, /Math\.max\(0, seconds - 1\)/);
+  assert.match(panelSource, /\$\{resendCountdown\}s 后重发/);
+  assert.match(panelSource, /重新发送/);
+  assert.match(panelSource, /disabled=\{submitting \|\| resendCountdown > 0\}/);
+});
+
 test("email auth gate avoids ghost cards and keeps placeholders readable", () => {
   const panelSource = readAuthFile("email-login-panel.tsx");
   const pageSource = readFileSync(join(authDir, "../page.tsx"), "utf8");
