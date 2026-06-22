@@ -9,14 +9,14 @@
 - **触发条件**:
   - `packages/backend/` 目录有变化时
   - 可手动触发
-- **镜像名称**: `ghcr.io/你的用户名/rednote_backend`
+- **镜像名称**: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_backend`
 
 ### 2. build-frontend.yml
 - **功能**: 构建并推送前端 Docker 镜像
 - **触发条件**:
   - `packages/web-frontend/` 目录有变化时
   - 可手动触发
-- **镜像名称**: `ghcr.io/你的用户名/rednote_frontend`
+- **镜像名称**: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_frontend`
 
 ### 3. deploy.yml
 - **功能**: 构建前后端镜像并部署到服务器
@@ -25,24 +25,29 @@
   - 可手动触发
 - **流程**:
   1. 并行构建前端和后端镜像
-  2. 推送镜像到 GitHub Container Registry
+  2. 推送镜像到阿里云 Container Registry
   3. 通过 SSH 部署到服务器，只拉取更新后的前后端镜像
   4. 启动后端、前端和 Caddy，PostgreSQL、Redis 作为依赖保持运行
   5. 后端容器启动时执行 `prisma migrate deploy`，再启动 NestJS 服务
 
-服务器部署时会从 GHCR 拉取 `rednote_backend`、`rednote_frontend`、
+服务器部署时会从阿里云 ACR 拉取 `rednote_backend`、`rednote_frontend`、
 `rednote_postgres`、`rednote_redis` 和 `rednote_caddy`，避免服务器直接访问 Docker Hub。
 日常部署只更新业务镜像；如果需要重新同步 PostgreSQL、Redis、Caddy 基础镜像，
 手动运行 `deploy.yml` 时勾选 `mirror_service_images`。
+首次切换到 ACR 时也需要手动运行一次并勾选 `mirror_service_images`，把基础镜像先同步过去。
 
 ## 配置步骤
 
-### 1. 启用 GitHub Container Registry
+### 1. 配置阿里云 ACR
 
-1. 进入你的 GitHub 仓库
-2. 点击 `Settings` > `Actions` > `General`
-3. 在 `Workflow permissions` 中选择 `Read and write permissions`
-4. 保存更改
+1. 在阿里云容器镜像服务中创建命名空间，例如 `szw321127`
+2. 创建或允许创建以下镜像仓库：
+   - `rednote_backend`
+   - `rednote_frontend`
+   - `rednote_postgres`
+   - `rednote_redis`
+   - `rednote_caddy`
+3. 记录 ACR 登录地址，例如 `registry.cn-hangzhou.aliyuncs.com`
 
 ### 2. 配置 GitHub Secrets
 
@@ -53,10 +58,16 @@
 - `SERVER_USER`: SSH 登录用户名
 - `DEPLOY_KEY`: SSH 私钥（用于无密码登录）
 - `TARGET_DIR`: 服务器上的目标部署目录（例如：`/home/user/app`）
+- `ACR_USERNAME`: 阿里云 ACR 登录用户名
+- `ACR_PASSWORD`: 阿里云 ACR 登录密码
 
 #### 应用配置相关（仅 deploy.yml 需要）
 - `DB_PASSWORD`: PostgreSQL 密码（建议使用强随机字符串）
 - `SESSION_SECRET`: 会话密钥（建议使用强随机字符串）
+
+#### GitHub Variables（非敏感配置）
+- `ACR_REGISTRY`: 阿里云 ACR 登录地址，例如 `registry.cn-hangzhou.aliyuncs.com`
+- `ACR_NAMESPACE`: 阿里云 ACR 命名空间，例如 `szw321127`
 
 模型 API Key、模型 Base URL、模型名称和 Tavily 搜索 Key 不再放在 GitHub
 Secrets 或 `.env` 中。部署完成后登录 `/admin`，在 Key 配置里填写；这些值由
@@ -119,7 +130,7 @@ mkdir -p /home/user/app
 2. 选择要运行的 workflow
 3. 点击 `Run workflow` 按钮
 4. 选择分支并点击 `Run workflow`
-5. 只有需要刷新 PostgreSQL、Redis、Caddy 基础镜像时，才勾选 `mirror_service_images`
+5. 首次切换 ACR 或需要刷新 PostgreSQL、Redis、Caddy 基础镜像时，勾选 `mirror_service_images`
 
 ## 镜像标签说明
 
@@ -131,12 +142,13 @@ mkdir -p /home/user/app
 
 ## 查看镜像
 
-构建的镜像会存储在 GitHub Container Registry：
+构建的镜像会存储在阿里云 ACR：
 
-- 后端: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_backend`
-- 前端: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_frontend`
-- PostgreSQL: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_postgres`
-- Redis: `https://github.com/你的用户名/仓库名/pkgs/container/rednote_redis`
+- 后端: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_backend`
+- 前端: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_frontend`
+- PostgreSQL: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_postgres`
+- Redis: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_redis`
+- Caddy: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_caddy`
 
 ## 服务器上查看部署状态
 

@@ -131,7 +131,7 @@ docker-compose down -v
 
 ### Caddy 服务 (rednote-caddy)
 
-- **镜像**: `ghcr.io/<owner>/rednote_caddy:2-alpine`（由 GitHub Actions 从 `caddy:2-alpine` 同步）
+- **镜像**: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_caddy:2-alpine`（由 GitHub Actions 从 `caddy:2-alpine` 同步）
 - **拉取策略**: `pull_policy: missing`，日常部署不重复拉取
 - **端口**: 对外暴露 `80` 和 `443`
 - **用途**: 自动申请/续期 HTTPS 证书，并把请求转发到 `frontend:3000`
@@ -139,7 +139,7 @@ docker-compose down -v
 
 ### PostgreSQL 服务 (rednote-postgres)
 
-- **镜像**: `ghcr.io/<owner>/rednote_postgres:16-alpine`（由 GitHub Actions 从 `postgres:16-alpine` 同步）
+- **镜像**: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_postgres:16-alpine`（由 GitHub Actions 从 `postgres:16-alpine` 同步）
 - **拉取策略**: `pull_policy: missing`，日常部署不重复拉取
 - **数据库**: `rednote`
 - **用户**: `rednote`
@@ -153,7 +153,7 @@ pnpm --filter @rednote/backend prisma:migrate:deploy
 
 ### Redis 服务 (rednote-redis)
 
-- **镜像**: `ghcr.io/<owner>/rednote_redis:7-alpine`（由 GitHub Actions 从 `redis:7-alpine` 同步）
+- **镜像**: `<ACR_REGISTRY>/<ACR_NAMESPACE>/rednote_redis:7-alpine`（由 GitHub Actions 从 `redis:7-alpine` 同步）
 - **拉取策略**: `pull_policy: missing`，日常部署不重复拉取
 - **用途**: 登录会话、短期缓存、后续 agent 运行热状态
 - **数据卷**: `redis-data`

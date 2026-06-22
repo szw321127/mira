@@ -10,7 +10,7 @@ on:
   workflow_dispatch:  # 允许手动触发
     inputs:
       mirror_service_images:
-        description: "同步 PostgreSQL、Redis、Caddy 基础镜像到 GHCR"
+        description: "同步 PostgreSQL、Redis、Caddy 基础镜像到 ACR"
         required: false
         default: false
         type: boolean
@@ -21,12 +21,13 @@ concurrency:
 
 # 设置环境变量
 env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/rednote_backend
-  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/rednote_frontend
-  POSTGRES_IMAGE_NAME: ${{ github.repository_owner }}/rednote_postgres
-  REDIS_IMAGE_NAME: ${{ github.repository_owner }}/rednote_redis
-  CADDY_IMAGE_NAME: ${{ github.repository_owner }}/rednote_caddy
+  REGISTRY: ${{ vars.ACR_REGISTRY || 'registry.cn-hangzhou.aliyuncs.com' }}
+  IMAGE_OWNER: ${{ vars.ACR_NAMESPACE || github.repository_owner }}
+  BACKEND_IMAGE_NAME: ${{ vars.ACR_NAMESPACE || github.repository_owner }}/rednote_backend
+  FRONTEND_IMAGE_NAME: ${{ vars.ACR_NAMESPACE || github.repository_owner }}/rednote_frontend
+  POSTGRES_IMAGE_NAME: ${{ vars.ACR_NAMESPACE || github.repository_owner }}/rednote_postgres
+  REDIS_IMAGE_NAME: ${{ vars.ACR_NAMESPACE || github.repository_owner }}/rednote_redis
+  CADDY_IMAGE_NAME: ${{ vars.ACR_NAMESPACE || github.repository_owner }}/rednote_caddy
 
 jobs:
   # --- 任务1：构建并推送后端 Docker 镜像 ---
@@ -34,8 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-      actions: read
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -44,12 +44,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to the GitHub Container Registry
+      - name: Validate ACR configuration
+        run: |
+          test -n "${{ env.REGISTRY }}" || (echo "ACR_REGISTRY is required." && exit 1)
+          test -n "${{ env.IMAGE_OWNER }}" || (echo "ACR_NAMESPACE is required." && exit 1)
+          test -n "${{ secrets.ACR_USERNAME }}" || (echo "ACR_USERNAME secret is required." && exit 1)
+          test -n "${{ secrets.ACR_PASSWORD }}" || (echo "ACR_PASSWORD secret is required." && exit 1)
+
+      - name: Log in to Alibaba Cloud Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Extract metadata for Backend Docker
         id: meta
@@ -80,8 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-      actions: read
+      actions: write
 
     steps:
       - name: Checkout repository
@@ -90,12 +96,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to the GitHub Container Registry
+      - name: Validate ACR configuration
+        run: |
+          test -n "${{ env.REGISTRY }}" || (echo "ACR_REGISTRY is required." && exit 1)
+          test -n "${{ env.IMAGE_OWNER }}" || (echo "ACR_NAMESPACE is required." && exit 1)
+          test -n "${{ secrets.ACR_USERNAME }}" || (echo "ACR_USERNAME secret is required." && exit 1)
+          test -n "${{ secrets.ACR_PASSWORD }}" || (echo "ACR_PASSWORD secret is required." && exit 1)
+
+      - name: Log in to Alibaba Cloud Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Extract metadata for Frontend Docker
         id: meta
@@ -121,21 +134,27 @@ jobs:
       - name: Frontend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
 
-  # --- 任务3：同步基础服务镜像到 GHCR，避免服务器直接拉 Docker Hub ---
+  # --- 任务3：同步基础服务镜像到 ACR，避免服务器直接拉 Docker Hub ---
   mirror-service-images:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mirror_service_images == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
-      - name: Log in to the GitHub Container Registry
+      - name: Validate ACR configuration
+        run: |
+          test -n "${{ env.REGISTRY }}" || (echo "ACR_REGISTRY is required." && exit 1)
+          test -n "${{ env.IMAGE_OWNER }}" || (echo "ACR_NAMESPACE is required." && exit 1)
+          test -n "${{ secrets.ACR_USERNAME }}" || (echo "ACR_USERNAME secret is required." && exit 1)
+          test -n "${{ secrets.ACR_PASSWORD }}" || (echo "ACR_PASSWORD secret is required." && exit 1)
+
+      - name: Log in to Alibaba Cloud Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Mirror PostgreSQL, Redis and Caddy images
         run: |
@@ -169,6 +188,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate ACR configuration
+        run: |
+          test -n "${{ env.REGISTRY }}" || (echo "ACR_REGISTRY is required." && exit 1)
+          test -n "${{ env.IMAGE_OWNER }}" || (echo "ACR_NAMESPACE is required." && exit 1)
+          test -n "${{ secrets.ACR_USERNAME }}" || (echo "ACR_USERNAME secret is required." && exit 1)
+          test -n "${{ secrets.ACR_PASSWORD }}" || (echo "ACR_PASSWORD secret is required." && exit 1)
+
       - name: Deploy to server
         uses: appleboy/ssh-action@master
         with:
@@ -191,7 +217,7 @@ jobs:
             services:
               # PostgreSQL Database
               postgres:
-                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_postgres:16-alpine
                 pull_policy: missing
                 container_name: rednote-postgres
                 restart: unless-stopped
@@ -212,7 +238,7 @@ jobs:
 
               # Redis Cache
               redis:
-                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_redis:7-alpine
                 pull_policy: missing
                 container_name: rednote-redis
                 restart: unless-stopped
@@ -229,7 +255,7 @@ jobs:
 
               # Backend Service
               backend:
-                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
                 container_name: rednote-backend
                 restart: unless-stopped
                 command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node dist/main.js"]
@@ -269,7 +295,7 @@ jobs:
 
               # Frontend Service
               frontend:
-                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
                 container_name: rednote-frontend
                 restart: unless-stopped
                 expose:
@@ -292,7 +318,7 @@ jobs:
 
               # HTTPS Reverse Proxy
               caddy:
-                image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_caddy:2-alpine
                 pull_policy: missing
                 container_name: rednote-caddy
                 restart: unless-stopped
@@ -352,7 +378,7 @@ jobs:
             echo "Creating .env file with configuration..."
             cat > .env << 'EOF'
             REGISTRY=${{ env.REGISTRY }}
-            IMAGE_OWNER=${{ github.repository_owner }}
+            IMAGE_OWNER=${{ env.IMAGE_OWNER }}
             IMAGE_TAG=${{ github.ref_name }}
             APP_DOMAIN='${{ secrets.APP_DOMAIN }}'
             APP_IP='${{ secrets.SERVER_HOST }}'
@@ -360,8 +386,8 @@ jobs:
             SESSION_SECRET='${{ secrets.SESSION_SECRET }}'
             EOF
 
-            echo "Logging in to GitHub Container Registry..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            echo "Logging in to Alibaba Cloud Container Registry..."
+            echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.ACR_USERNAME }}" --password-stdin
 
             pull_app_images() {
               attempt=1
