@@ -116,6 +116,7 @@ services:
       - "443:443"
     environment:
       - APP_DOMAIN=${APP_DOMAIN:?APP_DOMAIN is required}
+      - APP_IP=${APP_IP:-127.0.0.1}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
