@@ -15,6 +15,8 @@ export type RuntimeSearchConfig = {
 export type RuntimeResendConfig = {
   apiKey: string;
   from: string;
+  templateId: string;
+  templateCodeVariable: string;
 };
 
 @Injectable()
@@ -41,7 +43,9 @@ export class RuntimeSecretsService {
     const secrets = await this.readSecrets();
     return {
       apiKey: secrets.RESEND_API_KEY ?? "",
-      from: secrets.RESEND_FROM ?? ""
+      from: secrets.RESEND_FROM ?? "",
+      templateId: secrets.RESEND_TEMPLATE_ID ?? "",
+      templateCodeVariable: secrets.RESEND_TEMPLATE_CODE_VARIABLE ?? ""
     };
   }
 

@@ -300,7 +300,7 @@ git commit -m "feat: add user auth database schema"
 
 - [ ] **Step 1: Use Resend email delivery**
 
-Use the official Resend Node.js SDK for verification email delivery, with `RESEND_API_KEY` and `RESEND_FROM` still read from managed secrets.
+Use the official Resend Node.js SDK for verification email delivery, with `RESEND_API_KEY` and `RESEND_FROM` still read from managed secrets. `RESEND_TEMPLATE_ID` is optional: when it is blank, send the default plain text verification code email; when it is configured, send through Resend hosted templates.
 
 - [ ] **Step 2: Extend managed secrets**
 
@@ -313,7 +313,9 @@ export type ManagedSecretKey =
   | "AGENT_MODEL_API_KEY"
   | "TAVILY_API_KEY"
   | "RESEND_API_KEY"
-  | "RESEND_FROM";
+  | "RESEND_FROM"
+  | "RESEND_TEMPLATE_ID"
+  | "RESEND_TEMPLATE_CODE_VARIABLE";
 ```
 
 Append these definitions to `MANAGED_SECRETS`:
@@ -328,6 +330,16 @@ Append these definitions to `MANAGED_SECRETS`:
     key: "RESEND_FROM",
     label: "Resend From",
     sensitive: false
+  },
+  {
+    key: "RESEND_TEMPLATE_ID",
+    label: "Resend Template ID",
+    sensitive: false
+  },
+  {
+    key: "RESEND_TEMPLATE_CODE_VARIABLE",
+    label: "Resend 验证码变量名",
+    sensitive: false
   }
 ```
 
@@ -339,6 +351,8 @@ In `packages/backend/src/admin/runtime-secrets.service.ts`, add:
 export type RuntimeResendConfig = {
   apiKey: string;
   from: string;
+  templateId: string;
+  templateCodeVariable: string;
 };
 ```
 
@@ -349,7 +363,9 @@ Add this method:
     const secrets = await this.readSecrets();
     return {
       apiKey: secrets.RESEND_API_KEY ?? "",
-      from: secrets.RESEND_FROM ?? ""
+      from: secrets.RESEND_FROM ?? "",
+      templateId: secrets.RESEND_TEMPLATE_ID ?? "",
+      templateCodeVariable: secrets.RESEND_TEMPLATE_CODE_VARIABLE ?? ""
     };
   }
 ```
@@ -809,10 +825,14 @@ Create `packages/backend/src/auth/mailer.service.ts`:
 ```ts
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { Resend } from "resend";
-import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
+import {
+  RuntimeSecretsService,
+  type RuntimeResendConfig
+} from "../admin/runtime-secrets.service.js";
 
 const UNCONFIGURED_MESSAGE = "邮件服务未配置，请联系管理员";
 const SEND_FAILED_MESSAGE = "验证码邮件发送失败，请稍后再试";
+const DEFAULT_TEMPLATE_CODE_VARIABLE = "CODE";
 
 @Injectable()
 export class MailerService {
@@ -833,12 +853,7 @@ export class MailerService {
     const resend = new Resend(config.apiKey);
     let result: Awaited<ReturnType<typeof resend.emails.send>>;
     try {
-      result = await resend.emails.send({
-        from: config.from,
-        to: [email],
-        subject: "Mira 登录验证码",
-        text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
-      });
+      result = await resend.emails.send(createVerificationEmailPayload(config, email, code));
     } catch (error) {
       this.logger.warn(`Resend verification email request failed: ${String(error)}`);
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
@@ -853,6 +868,37 @@ export class MailerService {
 
 function isResendConfigured(config: { apiKey: string; from: string }) {
   return Boolean(config.apiKey && config.from);
+}
+
+function createVerificationEmailPayload(
+  config: RuntimeResendConfig,
+  email: string,
+  code: string
+) {
+  const templateId = config.templateId.trim();
+  const subject = "Mira 登录验证码";
+  if (!templateId) {
+    return {
+      from: config.from,
+      to: [email],
+      subject,
+      text: `你的 Mira 登录验证码是 ${code}，10 分钟内有效。`
+    };
+  }
+
+  const codeVariable =
+    config.templateCodeVariable.trim() || DEFAULT_TEMPLATE_CODE_VARIABLE;
+  return {
+    from: config.from,
+    to: [email],
+    subject,
+    template: {
+      id: templateId,
+      variables: {
+        [codeVariable]: code
+      }
+    }
+  };
 }
 ```
 

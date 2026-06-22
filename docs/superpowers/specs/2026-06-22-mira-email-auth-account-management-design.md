@@ -90,8 +90,10 @@ Extend managed secrets with:
 
 - `RESEND_API_KEY`
 - `RESEND_FROM`
+- `RESEND_TEMPLATE_ID` optional Resend hosted template id or alias.
+- `RESEND_TEMPLATE_CODE_VARIABLE` optional template variable name for the verification code; defaults to `CODE`.
 
-Sensitive values are masked in admin UI like existing API keys. In development, if Resend is not configured, the backend logs the verification code and returns success. In production, missing Resend configuration returns a clear user-facing error before creating a usable code.
+Sensitive values are masked in admin UI like existing API keys. In development, if Resend is not configured, the backend logs the verification code and returns success. In production, missing Resend configuration returns a clear user-facing error before creating a usable code. If `RESEND_TEMPLATE_ID` is blank, the backend sends the current plain text verification email. If it is configured, the backend sends through Resend hosted templates with the configured code variable.
 
 ### Frontend Structure
 
@@ -154,5 +156,5 @@ Manual verification:
 - Social login.
 - Hard deleting users.
 - Organization/team accounts.
-- Email templates beyond a plain verification code message.
+- Complex email template variable mapping beyond the verification code value.
 - Billing, quotas, or per-user model key settings.

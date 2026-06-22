@@ -5,8 +5,12 @@ import type { RuntimeSecretsService } from "../admin/runtime-secrets.service.js"
 type ResendEmailPayload = {
   from: string;
   to: string[];
-  subject: string;
-  text: string;
+  subject?: string;
+  text?: string;
+  template?: {
+    id: string;
+    variables: Record<string, string | number>;
+  };
 };
 
 type ResendSendResult =
@@ -50,14 +54,26 @@ function createRuntimeSecrets(config: ResendConfig) {
 function incompleteConfig(): ResendConfig {
   return {
     apiKey: "",
-    from: ""
+    from: "",
+    templateId: "",
+    templateCodeVariable: ""
   };
 }
 
 function completeConfig(): ResendConfig {
   return {
     apiKey: "re_test_123",
-    from: "Mira <noreply@example.com>"
+    from: "Mira <noreply@example.com>",
+    templateId: "",
+    templateCodeVariable: ""
+  };
+}
+
+function completeTemplateConfig(): ResendConfig {
+  return {
+    ...completeConfig(),
+    templateId: "tmpl_login_code",
+    templateCodeVariable: "verificationCode"
   };
 }
 
@@ -130,6 +146,56 @@ describe("MailerService", () => {
       subject: "Mira 登录验证码",
       text: "你的 Mira 登录验证码是 123456，10 分钟内有效。"
     });
+  });
+
+  it("sends verification emails through a configured Resend template", async () => {
+    process.env.NODE_ENV = "production";
+    const service = new MailerService(
+      createRuntimeSecrets(completeTemplateConfig())
+    );
+
+    await expect(
+      service.sendVerificationCode("user@example.com", "123456")
+    ).resolves.toBeUndefined();
+
+    expect(sendMock).toHaveBeenCalledWith({
+      from: "Mira <noreply@example.com>",
+      to: ["user@example.com"],
+      subject: "Mira 登录验证码",
+      template: {
+        id: "tmpl_login_code",
+        variables: {
+          verificationCode: "123456"
+        }
+      }
+    });
+    expect(sendMock.mock.calls[0]?.[0]).not.toHaveProperty("text");
+  });
+
+  it("defaults the Resend template code variable to CODE", async () => {
+    process.env.NODE_ENV = "production";
+    const service = new MailerService(
+      createRuntimeSecrets({
+        ...completeConfig(),
+        templateId: "tmpl_login_code",
+        templateCodeVariable: ""
+      })
+    );
+
+    await expect(
+      service.sendVerificationCode("user@example.com", "123456")
+    ).resolves.toBeUndefined();
+
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: {
+          id: "tmpl_login_code",
+          variables: {
+            CODE: "123456"
+          }
+        }
+      })
+    );
   });
 
   it("treats Resend SDK errors as send failures", async () => {

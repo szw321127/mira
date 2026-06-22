@@ -32,7 +32,9 @@ describe("AdminController", () => {
         AGENT_MODEL_API_KEY: "model-secret",
         TAVILY_API_KEY: "tavily-secret",
         RESEND_API_KEY: "resend-secret",
-        RESEND_FROM: "Mira <noreply@example.com>"
+        RESEND_FROM: "Mira <noreply@example.com>",
+        RESEND_TEMPLATE_ID: "tmpl_login_code",
+        RESEND_TEMPLATE_CODE_VARIABLE: "verificationCode"
       }
     });
 
@@ -266,6 +268,18 @@ describe("AdminController", () => {
           label: "Resend From",
           value: "Mira <noreply@example.com>",
           masked: false
+        },
+        {
+          key: "RESEND_TEMPLATE_ID",
+          label: "Resend Template ID",
+          value: "tmpl_login_code",
+          masked: false
+        },
+        {
+          key: "RESEND_TEMPLATE_CODE_VARIABLE",
+          label: "Resend 验证码变量名",
+          value: "verificationCode",
+          masked: false
         }
       ])
     );
@@ -283,7 +297,9 @@ describe("AdminController", () => {
       .send({
         secrets: {
           AGENT_MODEL_NAME: "mira-admin",
-          TAVILY_API_KEY: "new-tavily-secret"
+          TAVILY_API_KEY: "new-tavily-secret",
+          RESEND_TEMPLATE_ID: "tmpl_next_code",
+          RESEND_TEMPLATE_CODE_VARIABLE: "code"
         }
       })
       .expect(200);
@@ -302,6 +318,16 @@ describe("AdminController", () => {
           key: "TAVILY_API_KEY",
           value: "ne********et",
           masked: true
+        }),
+        expect.objectContaining({
+          key: "RESEND_TEMPLATE_ID",
+          value: "tmpl_next_code",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "RESEND_TEMPLATE_CODE_VARIABLE",
+          value: "code",
+          masked: false
         })
       ])
     );
@@ -382,6 +408,16 @@ describe("AdminController", () => {
         }),
         expect.objectContaining({
           key: "RESEND_FROM",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "RESEND_TEMPLATE_ID",
+          value: "",
+          masked: false
+        }),
+        expect.objectContaining({
+          key: "RESEND_TEMPLATE_CODE_VARIABLE",
           value: "",
           masked: false
         })

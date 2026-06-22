@@ -4,7 +4,9 @@ export type ManagedSecretKey =
   | "AGENT_MODEL_API_KEY"
   | "TAVILY_API_KEY"
   | "RESEND_API_KEY"
-  | "RESEND_FROM";
+  | "RESEND_FROM"
+  | "RESEND_TEMPLATE_ID"
+  | "RESEND_TEMPLATE_CODE_VARIABLE";
 
 export type ManagedSecretDefinition = {
   key: ManagedSecretKey;
@@ -53,6 +55,16 @@ export const MANAGED_SECRETS: ManagedSecretDefinition[] = [
   {
     key: "RESEND_FROM",
     label: "Resend From",
+    sensitive: false
+  },
+  {
+    key: "RESEND_TEMPLATE_ID",
+    label: "Resend Template ID",
+    sensitive: false
+  },
+  {
+    key: "RESEND_TEMPLATE_CODE_VARIABLE",
+    label: "Resend 验证码变量名",
     sensitive: false
   }
 ];
