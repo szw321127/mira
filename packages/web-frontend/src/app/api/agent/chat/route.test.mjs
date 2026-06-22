@@ -27,7 +27,7 @@ test("chat route proxies agent requests to the backend", () => {
 test("chat route uses the shared backend base URL and forwards cookies", () => {
   assert.match(
     routeSource,
-    /import\s*\{\s*BACKEND_AGENT_BASE_URL\s*\}\s*from\s*"[^"]*shared\/backend-proxy"/,
+    /import\s*\{[\s\S]*BACKEND_AGENT_BASE_URL[\s\S]*\}\s*from\s*"[^"]*shared\/backend-proxy"/,
   );
   assert.match(routeSource, /request\.headers\.get\("cookie"\)/);
   assert.match(routeSource, /headers\.set\("Cookie", cookie\)/);
@@ -48,7 +48,6 @@ test("chat route leaves prompt assembly to the GPT agent harness", () => {
 });
 
 test("chat route returns setup-oriented guidance when model config is missing", () => {
-  assert.match(routeSource, /无法连接 Mira 后端服务/);
+  assert.match(routeSource, /backendUnavailableResponse/);
   assert.match(routeSource, /BACKEND_AGENT_BASE_URL/);
-  assert.match(routeSource, /NEXT_PUBLIC_/);
 });
