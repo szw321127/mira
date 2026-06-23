@@ -45,6 +45,8 @@ describe("production deployment topology", () => {
     expect(pruneIndex).toBeGreaterThan(smokeIndex);
     expect(workflow).toContain("docker compose exec -T backend node -e");
     expect(workflow).toContain("http://localhost:3000/health");
+    expect(workflow).toContain("export APP_DOMAIN='${{ secrets.APP_DOMAIN }}'");
+    expect(workflow).toContain("export APP_IP='${{ secrets.SERVER_HOST }}'");
     expect(workflow).toContain("http://${APP_IP}/admin");
     expect(workflow).toContain("http://${APP_IP}/image-workspace");
     expect(workflow).toContain("resolved_domain_ip");

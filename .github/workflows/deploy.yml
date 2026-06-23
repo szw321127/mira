@@ -426,6 +426,9 @@ jobs:
             SESSION_SECRET='${{ secrets.SESSION_SECRET }}'
             EOF
 
+            export APP_DOMAIN='${{ secrets.APP_DOMAIN }}'
+            export APP_IP='${{ secrets.SERVER_HOST }}'
+
             echo "Logging in to Alibaba Cloud Container Registry..."
             echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.ACR_USERNAME }}" --password-stdin
 
