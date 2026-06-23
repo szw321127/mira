@@ -59,9 +59,9 @@ describe("ImageUsageService", () => {
           missingKeys: []
         },
         { maxDailyTasksPerUser: "3" }
-      ),
-      () => new Date("2026-06-23T12:34:00.000Z")
+      )
     );
+    service.setClockForTesting(() => new Date("2026-06-23T12:34:00.000Z"));
 
     await expect(service.assertCanCreateTask("user-1")).rejects.toThrow(
       new HttpException("今日图像任务次数已用完", HttpStatus.TOO_MANY_REQUESTS)
@@ -94,9 +94,9 @@ describe("ImageUsageService", () => {
           missingKeys: []
         },
         { maxDailyTasksPerUser: "3" }
-      ),
-      () => new Date("2026-06-23T12:34:00.000Z")
+      )
     );
+    service.setClockForTesting(() => new Date("2026-06-23T12:34:00.000Z"));
 
     await expect(
       service.assertCanCreateTask("user-1", {

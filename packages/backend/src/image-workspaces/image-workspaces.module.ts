@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AdminModule } from "../admin/admin.module.js";
+import { RuntimeSecretsService } from "../admin/runtime-secrets.service.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { IMAGE_PROVIDER } from "./image-provider.types.js";
@@ -38,8 +39,22 @@ import { OpenAIImageProviderService } from "./openai-image-provider.service.js";
       provide: LocalImageStorageService,
       useFactory: createLocalImageStorageService
     },
-    ConfiguredImageStorageService,
-    OpenAIImageProviderService,
+    {
+      provide: ConfiguredImageStorageService,
+      useFactory: (
+        runtimeSecrets: RuntimeSecretsService,
+        localStorage: LocalImageStorageService
+      ) => new ConfiguredImageStorageService(runtimeSecrets, localStorage),
+      inject: [RuntimeSecretsService, LocalImageStorageService]
+    },
+    {
+      provide: OpenAIImageProviderService,
+      useFactory: (
+        runtimeSecrets: RuntimeSecretsService,
+        imageStorage: ConfiguredImageStorageService
+      ) => new OpenAIImageProviderService(runtimeSecrets, imageStorage),
+      inject: [RuntimeSecretsService, IMAGE_STORAGE]
+    },
     {
       provide: IMAGE_PROVIDER,
       useExisting: OpenAIImageProviderService

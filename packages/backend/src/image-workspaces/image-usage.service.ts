@@ -22,11 +22,16 @@ type ImageVersionUsageRow = {
 
 @Injectable()
 export class ImageUsageService {
+  private now: () => Date = () => new Date();
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly runtimeSecrets: RuntimeSecretsService,
-    private readonly now: () => Date = () => new Date()
+    private readonly runtimeSecrets: RuntimeSecretsService
   ) {}
+
+  setClockForTesting(now: () => Date): void {
+    this.now = now;
+  }
 
   async assertCanCreateTask(
     userId: string,
