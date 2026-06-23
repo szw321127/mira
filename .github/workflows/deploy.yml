@@ -69,7 +69,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./packages/backend/Dockerfile
@@ -77,7 +77,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-to: type=gha,mode=max,scope=backend,ignore-error=true
 
       - name: Backend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
@@ -121,7 +121,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Frontend Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./packages/web-frontend/Dockerfile
@@ -129,7 +129,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend,ignore-error=true
 
       - name: Frontend image digest
         run: echo "${{ steps.meta.outputs.tags }}"
