@@ -16,6 +16,7 @@ function imageConfig(overrides: Partial<RuntimeImageConfig> = {}): RuntimeImageC
   return {
     provider: "openai",
     openaiApiKey: "sk-live-secret",
+    openaiBaseURL: "",
     openaiModel: "gpt-image-1",
     storageProvider: "local",
     storageBucket: "",
@@ -153,6 +154,30 @@ describe("OpenAIImageProviderService", () => {
       quality: "high",
       size: "1536x1024"
     });
+  });
+
+  it("uses the configured OpenAI-compatible image base URL for generation requests", async () => {
+    const { calls, fetchMock } = createFetch(responseJson());
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(
+        imageConfig({
+          openaiBaseURL: "https://image-gateway.example/v1"
+        })
+      ),
+      createStorage(),
+      { fetch: fetchMock }
+    );
+
+    await service.generate({
+      prompt: "make a launch cover",
+      size: "1024x1024",
+      quality: "auto",
+      background: "auto"
+    });
+
+    expect(calls[0]?.url).toBe(
+      "https://image-gateway.example/v1/images/generations"
+    );
   });
 
   it("leaves estimated image cost null for unrecognized OpenAI-compatible models", async () => {

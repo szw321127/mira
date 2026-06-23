@@ -120,6 +120,9 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
     try {
       const openai = createOpenAI({
         apiKey: args.config.openaiApiKey,
+        ...(args.config.openaiBaseURL.trim()
+          ? { baseURL: args.config.openaiBaseURL.trim() }
+          : {}),
         fetch: this.fetcher
       });
       return await generateImage({

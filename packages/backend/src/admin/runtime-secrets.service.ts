@@ -22,6 +22,7 @@ export type RuntimeResendConfig = {
 export type RuntimeImageConfig = {
   provider: string;
   openaiApiKey: string;
+  openaiBaseURL: string;
   openaiModel: string;
   storageProvider: string;
   storageBucket: string;
@@ -76,6 +77,7 @@ export class RuntimeSecretsService {
     return {
       provider: secrets.IMAGE_PROVIDER ?? "openai",
       openaiApiKey: secrets.OPENAI_IMAGE_API_KEY ?? "",
+      openaiBaseURL: secrets.OPENAI_IMAGE_BASE_URL ?? "",
       openaiModel: secrets.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
       storageProvider: secrets.IMAGE_STORAGE_PROVIDER ?? "local",
       storageBucket: secrets.IMAGE_STORAGE_BUCKET ?? "",

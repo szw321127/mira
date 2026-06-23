@@ -8,6 +8,7 @@ export type ManagedSecretKey =
   | "RESEND_TEMPLATE_ID"
   | "RESEND_TEMPLATE_CODE_VARIABLE"
   | "OPENAI_IMAGE_API_KEY"
+  | "OPENAI_IMAGE_BASE_URL"
   | "OPENAI_IMAGE_MODEL"
   | "IMAGE_PROVIDER"
   | "IMAGE_STORAGE_PROVIDER"
@@ -83,6 +84,11 @@ export const MANAGED_SECRETS: ManagedSecretDefinition[] = [
     key: "OPENAI_IMAGE_API_KEY",
     label: "OpenAI 图像 API Key",
     sensitive: true
+  },
+  {
+    key: "OPENAI_IMAGE_BASE_URL",
+    label: "OpenAI 图像 Base URL",
+    sensitive: false
   },
   {
     key: "OPENAI_IMAGE_MODEL",

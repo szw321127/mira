@@ -317,6 +317,7 @@ function createRuntimeSecrets(config: Partial<{
       Promise.resolve({
         provider: "openai",
         openaiApiKey: "",
+        openaiBaseURL: "",
         openaiModel: "gpt-image-1",
         storageProvider: config.storageProvider ?? "local",
         storageBucket: config.storageBucket ?? "",

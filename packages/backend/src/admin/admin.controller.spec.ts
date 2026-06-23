@@ -224,6 +224,7 @@ describe("AdminController", () => {
         secrets: {
           IMAGE_PROVIDER: "openai",
           OPENAI_IMAGE_API_KEY: "sk-live-secret",
+          OPENAI_IMAGE_BASE_URL: "https://image-gateway.example/v1",
           OPENAI_IMAGE_MODEL: "gpt-image-1"
         }
       })
@@ -240,7 +241,7 @@ describe("AdminController", () => {
       message: "图像 Provider 配置可用"
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.openai.com/v1/models/gpt-image-1",
+      "https://image-gateway.example/v1/models/gpt-image-1",
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer sk-live-secret"

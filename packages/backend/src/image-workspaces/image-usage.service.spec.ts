@@ -390,6 +390,7 @@ function createRuntimeSecrets(
       Promise.resolve({
         provider: "openai",
         openaiApiKey: "sk-live-secret",
+        openaiBaseURL: "",
         openaiModel: "gpt-image-1",
         storageProvider: "local",
         storageBucket: "",

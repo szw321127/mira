@@ -64,4 +64,23 @@ describe("RuntimeSecretsService", () => {
       missingKeys: []
     });
   });
+
+  it("loads the OpenAI image base URL from managed secrets", async () => {
+    const service = new RuntimeSecretsService(
+      createStore({
+        secrets: {
+          IMAGE_PROVIDER: "openai",
+          OPENAI_IMAGE_API_KEY: "sk-live-secret",
+          OPENAI_IMAGE_BASE_URL: "https://image-gateway.example/v1",
+          OPENAI_IMAGE_MODEL: "gpt-image-1"
+        }
+      })
+    );
+
+    await expect(service.getImageConfig()).resolves.toEqual(
+      expect.objectContaining({
+        openaiBaseURL: "https://image-gateway.example/v1"
+      })
+    );
+  });
 });

@@ -239,10 +239,15 @@ export class AdminService {
     const missingKeys = secrets.OPENAI_IMAGE_API_KEY?.trim()
       ? []
       : ["OPENAI_IMAGE_API_KEY"];
+    const baseURL = secrets.OPENAI_IMAGE_BASE_URL?.trim() || "";
     const model = secrets.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1";
     const configured = missingKeys.length === 0;
     const reachable = configured
-      ? await validateOpenAIImageProvider(secrets.OPENAI_IMAGE_API_KEY ?? "", model)
+      ? await validateOpenAIImageProvider(
+          secrets.OPENAI_IMAGE_API_KEY ?? "",
+          model,
+          baseURL
+        )
       : false;
 
     return {
@@ -408,10 +413,14 @@ function normalizeImageProvider(value: string): ImageProviderName {
   return value.trim().toLowerCase() === "disabled" ? "disabled" : "openai";
 }
 
-async function validateOpenAIImageProvider(apiKey: string, model: string) {
+async function validateOpenAIImageProvider(
+  apiKey: string,
+  model: string,
+  baseURL: string
+) {
   try {
     const response = await fetch(
-      `https://api.openai.com/v1/models/${encodeURIComponent(model)}`,
+      `${normalizeOpenAIBaseURL(baseURL)}/models/${encodeURIComponent(model)}`,
       {
         headers: {
           Accept: "application/json",
@@ -425,4 +434,9 @@ async function validateOpenAIImageProvider(apiKey: string, model: string) {
   } catch {
     return false;
   }
+}
+
+function normalizeOpenAIBaseURL(baseURL: string) {
+  const trimmed = baseURL.trim();
+  return (trimmed || "https://api.openai.com/v1").replace(/\/+$/, "");
 }
