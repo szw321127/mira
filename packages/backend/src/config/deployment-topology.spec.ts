@@ -45,10 +45,10 @@ describe("production deployment topology", () => {
     expect(pruneIndex).toBeGreaterThan(smokeIndex);
     expect(workflow).toContain("docker compose exec -T backend node -e");
     expect(workflow).toContain("http://localhost:3000/health");
-    expect(workflow).toContain("https://${{ secrets.APP_DOMAIN }}/admin");
-    expect(workflow).toContain(
-      "https://${{ secrets.APP_DOMAIN }}/image-workspace"
-    );
+    expect(workflow).toContain("http://${APP_IP}/admin");
+    expect(workflow).toContain("http://${APP_IP}/image-workspace");
+    expect(workflow).toContain("resolved_domain_ip");
+    expect(workflow).toContain("Skipping domain smoke checks");
     expect(workflow).toContain("grep -E \"(Mira|管理员|登录|邮箱|图像)\"");
   });
 

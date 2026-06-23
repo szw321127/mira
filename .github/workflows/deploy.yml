@@ -488,13 +488,24 @@ jobs:
                 });
               '
 
-              echo "Checking public admin page..."
-              curl --fail --silent --show-error --location --max-time 20 "https://${{ secrets.APP_DOMAIN }}/admin" \
-                | grep -E "(Mira|管理员|登录|邮箱|图像)" >/dev/null
+              check_frontend_page() {
+                page_url="$1"
+                label="$2"
+                echo "Checking ${label}: ${page_url}"
+                curl --fail --silent --show-error --location --max-time 20 "$page_url" \
+                  | grep -E "(Mira|管理员|登录|邮箱|图像)" >/dev/null
+              }
 
-              echo "Checking public image workspace login gate..."
-              curl --fail --silent --show-error --location --max-time 20 "https://${{ secrets.APP_DOMAIN }}/image-workspace" \
-                | grep -E "(Mira|管理员|登录|邮箱|图像)" >/dev/null
+              check_frontend_page "http://${APP_IP}/admin" "server IP admin page"
+              check_frontend_page "http://${APP_IP}/image-workspace" "server IP image workspace login gate"
+
+              resolved_domain_ip="$(getent ahostsv4 "${APP_DOMAIN}" | awk '{print $1; exit}' || true)"
+              if [ "$resolved_domain_ip" = "$APP_IP" ]; then
+                check_frontend_page "https://${APP_DOMAIN}/admin" "domain admin page"
+                check_frontend_page "https://${APP_DOMAIN}/image-workspace" "domain image workspace login gate"
+              else
+                echo "Skipping domain smoke checks because ${APP_DOMAIN} resolves to ${resolved_domain_ip:-<none>}, expected ${APP_IP}."
+              fi
             }
 
             echo "Running post-deploy smoke checks..."
