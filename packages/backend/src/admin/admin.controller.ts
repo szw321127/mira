@@ -83,6 +83,19 @@ export class AdminController {
     return this.adminService.listUsers(parseUserListQuery(query));
   }
 
+  @Get("image-usage")
+  async imageUsage(@Req() request: Request) {
+    this.requireSession(request);
+    return this.adminService.listImageUsage();
+  }
+
+  @Post("image-provider/test")
+  @HttpCode(HttpStatus.OK)
+  async testImageProvider(@Req() request: Request) {
+    this.requireSession(request);
+    return this.adminService.testImageProvider();
+  }
+
   @Patch("users/:id/status")
   async updateUserStatus(
     @Req() request: Request,

@@ -1,4 +1,6 @@
 import type {
+  AdminImageProviderTestResponse,
+  AdminImageUsageResponse,
   AdminSession,
   AdminUser,
   AdminUsersResponse,
@@ -93,6 +95,20 @@ export async function loadAdminUsers(options: {
   const response = await fetch(`/api/admin/users${suffix}`);
   await assertOk(response, "账号列表加载失败");
   return readJson<AdminUsersResponse>(response);
+}
+
+export async function loadAdminImageUsage() {
+  const response = await fetch("/api/admin/image-usage");
+  await assertOk(response, "图像用量加载失败");
+  return readJson<AdminImageUsageResponse>(response);
+}
+
+export async function testAdminImageProvider() {
+  const response = await fetch("/api/admin/image-provider/test", {
+    method: "POST",
+  });
+  await assertOk(response, "图像 Provider 测试失败");
+  return readJson<AdminImageProviderTestResponse>(response);
 }
 
 export async function updateAdminUserStatus(

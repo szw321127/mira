@@ -5,9 +5,18 @@ type BackendMessage = {
   error?: string;
 };
 
+const AUTH_SESSION_TIMEOUT_MS = 5000;
+
 async function readJson<T>(response: Response): Promise<T | null> {
   const value: unknown = await response.json().catch(() => null);
   return value as T | null;
+}
+
+function createTimeoutSignal(timeoutMs: number): AbortSignal | undefined {
+  if (typeof AbortSignal === "undefined" || typeof AbortSignal.timeout !== "function") {
+    return undefined;
+  }
+  return AbortSignal.timeout(timeoutMs);
 }
 
 function readBackendMessage(value: BackendMessage | null, fallback: string) {
@@ -17,6 +26,7 @@ function readBackendMessage(value: BackendMessage | null, fallback: string) {
 export async function loadAuthSession(): Promise<AuthSession | null> {
   const response = await fetch("/api/auth/session", {
     method: "GET",
+    signal: createTimeoutSignal(AUTH_SESSION_TIMEOUT_MS),
   });
 
   if (!response.ok) {

@@ -29,6 +29,15 @@ test("auth api uses same-origin email code endpoints with backend fallback messa
   assert.match(apiSource, /response\.json\(\)\.catch/);
 });
 
+test("auth session check has a browser-side timeout before falling back to guest", () => {
+  const apiSource = readAuthFile("auth-api.ts");
+
+  assert.match(apiSource, /AUTH_SESSION_TIMEOUT_MS\s*=\s*5000/);
+  assert.match(apiSource, /createTimeoutSignal\(AUTH_SESSION_TIMEOUT_MS\)/);
+  assert.match(apiSource, /signal:\s*createTimeoutSignal/);
+  assert.match(apiSource, /AbortSignal\.timeout/);
+});
+
 test("auth session hook exposes checking guest ready states and cookie logout", () => {
   const hookSource = readAuthFile("use-auth-session.ts");
 
@@ -38,6 +47,15 @@ test("auth session hook exposes checking guest ready states and cookie logout", 
   assert.match(hookSource, /setUser/);
   assert.match(hookSource, /logoutAuthSession\(\)/);
   assert.match(hookSource, /status: "guest"/);
+});
+
+test("auth session hook has a watchdog fallback for unresolved session checks", () => {
+  const hookSource = readAuthFile("use-auth-session.ts");
+
+  assert.match(hookSource, /AUTH_SESSION_WATCHDOG_MS\s*=\s*6500/);
+  assert.match(hookSource, /setTimeout\(\(\) => \{/);
+  assert.match(hookSource, /setState\(\{\s*status: "guest"\s*\}\)/);
+  assert.match(hookSource, /clearTimeout\(watchdog\)/);
 });
 
 test("email login panel requests and submits one-time email codes", () => {

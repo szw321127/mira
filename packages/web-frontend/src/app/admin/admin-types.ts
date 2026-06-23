@@ -26,3 +26,42 @@ export type AdminUsersResponse = {
   page: number;
   pageSize: number;
 };
+
+export type AdminImageUsageStatusCounts = {
+  canceled: number;
+  complete: number;
+  failed: number;
+  queued: number;
+  running: number;
+};
+
+export type AdminImageUsageProvider = {
+  provider: string;
+  taskCount: number;
+  estimatedCostUsd: number;
+};
+
+export type AdminImageUsageType = {
+  type: string;
+  taskCount: number;
+  estimatedCostUsd: number;
+};
+
+export type AdminImageUsageResponse = {
+  activeUsers: number;
+  byProvider: AdminImageUsageProvider[];
+  byType: AdminImageUsageType[];
+  estimatedCostUsd: number;
+  statusCounts: AdminImageUsageStatusCounts;
+  totalTasks: number;
+  windowDays: number;
+};
+
+export type AdminImageProviderTestResponse = {
+  configured: boolean;
+  missingKeys: string[];
+  model: string | null;
+  ok: boolean;
+  provider: "openai" | "disabled";
+  message: string;
+};

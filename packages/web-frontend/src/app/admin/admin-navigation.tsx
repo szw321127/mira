@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChartNoAxesColumnIncreasing,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -10,7 +11,12 @@ import {
 } from "lucide-react";
 import type { AdminSession } from "./admin-types";
 
-export type AdminSection = "overview" | "users" | "secrets" | "security";
+export type AdminSection =
+  | "overview"
+  | "users"
+  | "imageUsage"
+  | "secrets"
+  | "security";
 
 export type AdminNavigationItem = {
   id: AdminSection;
@@ -34,6 +40,13 @@ export const adminNavigationItems: AdminNavigationItem[] = [
     title: "账号管理",
     description: "搜索邮箱登录账号，并控制账号是否可以继续使用 Mira。",
     icon: UsersRound,
+  },
+  {
+    id: "imageUsage",
+    label: "图像用量",
+    title: "图像用量",
+    description: "查看图像任务、成本和失败状态。",
+    icon: ChartNoAxesColumnIncreasing,
   },
   {
     id: "secrets",

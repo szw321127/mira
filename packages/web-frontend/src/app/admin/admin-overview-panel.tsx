@@ -1,6 +1,12 @@
 "use client";
 
-import { KeyRound, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import {
+  ChartNoAxesColumnIncreasing,
+  KeyRound,
+  ShieldCheck,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import type { AdminSection } from "./admin-navigation";
 import type { AdminSession, ManagedSecret } from "./admin-types";
 
@@ -42,12 +48,18 @@ export function AdminOverviewPanel({
             </p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction
             description="搜索邮箱账号，调整启用状态。"
             icon={UsersRound}
             label="打开账号管理"
             onClick={() => onSelectSection("users")}
+          />
+          <QuickAction
+            description="查看图像任务、成本和失败状态。"
+            icon={ChartNoAxesColumnIncreasing}
+            label="打开图像用量"
+            onClick={() => onSelectSection("imageUsage")}
           />
           <QuickAction
             description="更新模型和搜索服务密钥。"

@@ -40,6 +40,9 @@ model User {
   lastLoginAt   DateTime?
   sessions      UserSession[]
   conversations Conversation[]
+  imageWorkspaces ImageWorkspace[]
+  imageAssets     ImageAsset[]
+  imageTasks      ImageTask[]
 
   @@map("users")
 }
@@ -99,4 +102,132 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+enum ImageWorkspaceStatus {
+  active
+  archived
+}
+
+enum ImageTaskStatus {
+  queued
+  running
+  complete
+  failed
+  canceled
+}
+
+enum ImageTaskType {
+  generate
+  edit
+  variation
+  upscale
+  background_removal
+}
+
+model ImageWorkspace {
+  id        String               @id @default(cuid())
+  userId    String
+  title     String
+  status    ImageWorkspaceStatus @default(active)
+  viewport  Json?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  deletedAt DateTime?
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objects   CanvasObject[]
+  assets    ImageAsset[]
+  tasks     ImageTask[]
+
+  @@index([userId, updatedAt])
+  @@map("image_workspaces")
+}
+
+model CanvasObject {
+  id          String         @id @default(cuid())
+  workspaceId String
+  assetId     String?
+  type        String
+  x           Float
+  y           Float
+  width       Float
+  height      Float
+  rotation    Float          @default(0)
+  zIndex      Int            @default(0)
+  props       Json           @default("{}")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   ImageWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  asset       ImageAsset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, zIndex])
+  @@index([assetId])
+  @@map("canvas_objects")
+}
+
+model ImageAsset {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  userId           String
+  currentVersionId String?
+  title            String?
+  prompt           String?
+  metadata         Json           @default("{}")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  workspace        ImageWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions         ImageVersion[]
+  objects          CanvasObject[]
+
+  @@index([workspaceId, updatedAt])
+  @@index([userId, updatedAt])
+  @@map("image_assets")
+}
+
+model ImageVersion {
+  id          String     @id @default(cuid())
+  assetId     String
+  parentId    String?
+  storageKey  String
+  mimeType    String
+  width       Int
+  height      Int
+  sizeBytes   Int
+  prompt      String?
+  editPrompt  String?
+  maskKey     String?
+  provider    String
+  providerJob String?
+  metadata    Json       @default("{}")
+  createdAt   DateTime   @default(now())
+  asset       ImageAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, createdAt])
+  @@index([parentId])
+  @@map("image_versions")
+}
+
+model ImageTask {
+  id          String          @id @default(cuid())
+  workspaceId String
+  userId      String
+  requestIp   String?
+  type        ImageTaskType
+  status      ImageTaskStatus @default(queued)
+  input       Json
+  output      Json?
+  error       String?
+  cost        Json?
+  createdAt   DateTime        @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  workspace   ImageWorkspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([userId, createdAt])
+  @@index([requestIp, createdAt])
+  @@index([status, createdAt])
+  @@map("image_tasks")
 }

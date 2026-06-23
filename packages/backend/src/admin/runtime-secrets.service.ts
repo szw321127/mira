@@ -19,6 +19,28 @@ export type RuntimeResendConfig = {
   templateCodeVariable: string;
 };
 
+export type RuntimeImageConfig = {
+  provider: string;
+  openaiApiKey: string;
+  openaiModel: string;
+  storageProvider: string;
+  storageBucket: string;
+  storageRegion: string;
+  storageEndpoint: string;
+  storageAccessKey: string;
+  storageSecretKey: string;
+  maxDailyTasksPerUser: string;
+  maxImageSizeMb: string;
+  defaultQuality: string;
+};
+
+export type RuntimeImageProviderStatus = {
+  configured: boolean;
+  provider: "openai" | "disabled";
+  model: string | null;
+  missingKeys: string[];
+};
+
 @Injectable()
 export class RuntimeSecretsService {
   constructor(private readonly store: AdminStore) {}
@@ -49,8 +71,51 @@ export class RuntimeSecretsService {
     };
   }
 
+  async getImageConfig(): Promise<RuntimeImageConfig> {
+    const secrets = await this.readSecrets();
+    return {
+      provider: secrets.IMAGE_PROVIDER ?? "openai",
+      openaiApiKey: secrets.OPENAI_IMAGE_API_KEY ?? "",
+      openaiModel: secrets.OPENAI_IMAGE_MODEL ?? "gpt-image-1",
+      storageProvider: secrets.IMAGE_STORAGE_PROVIDER ?? "local",
+      storageBucket: secrets.IMAGE_STORAGE_BUCKET ?? "",
+      storageRegion: secrets.IMAGE_STORAGE_REGION ?? "",
+      storageEndpoint: secrets.IMAGE_STORAGE_ENDPOINT ?? "",
+      storageAccessKey: secrets.IMAGE_STORAGE_ACCESS_KEY ?? "",
+      storageSecretKey: secrets.IMAGE_STORAGE_SECRET_KEY ?? "",
+      maxDailyTasksPerUser: secrets.IMAGE_MAX_DAILY_TASKS_PER_USER ?? "50",
+      maxImageSizeMb: secrets.IMAGE_MAX_IMAGE_SIZE_MB ?? "20",
+      defaultQuality: secrets.IMAGE_DEFAULT_QUALITY ?? "auto"
+    };
+  }
+
+  async getImageProviderStatus(): Promise<RuntimeImageProviderStatus> {
+    const config = await this.getImageConfig();
+    const provider = normalizeImageProvider(config.provider);
+    if (provider === "disabled") {
+      return {
+        configured: false,
+        provider,
+        model: null,
+        missingKeys: []
+      };
+    }
+
+    const missingKeys = config.openaiApiKey.trim() ? [] : ["OPENAI_IMAGE_API_KEY"];
+    return {
+      configured: missingKeys.length === 0,
+      provider,
+      model: config.openaiModel.trim() || "gpt-image-1",
+      missingKeys
+    };
+  }
+
   private async readSecrets(): Promise<Partial<Record<ManagedSecretKey, string>>> {
     const store = await this.store.read();
     return store.secrets ?? {};
   }
+}
+
+function normalizeImageProvider(value: string): RuntimeImageProviderStatus["provider"] {
+  return value.trim().toLowerCase() === "disabled" ? "disabled" : "openai";
 }

@@ -6,6 +6,7 @@ import { CacheModule } from "./cache/cache.module.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { ImageWorkspacesModule } from "./image-workspaces/image-workspaces.module.js";
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { HealthModule } from "./health/health.module.js";
     AdminModule,
     AuthModule,
     ConversationsModule,
-    AgentModule
+    AgentModule,
+    ImageWorkspacesModule
   ]
 })
 export class AppModule {}

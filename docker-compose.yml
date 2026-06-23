@@ -81,6 +81,38 @@ services:
       retries: 3
       start_period: 40s
 
+  # Image Worker Service
+  worker:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
+    container_name: rednote-worker
+    restart: unless-stopped
+    command: ["node", "dist/image-worker-runner.js"]
+    environment:
+      - NODE_ENV=production
+      - CI=true
+      - PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
+      - TZ=Asia/Shanghai
+      - DATABASE_TYPE=postgres
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=rednote
+      - DATABASE_USER=rednote
+      - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
+      - FRONTEND_ORIGIN=https://${APP_DOMAIN:?APP_DOMAIN is required}
+      - AI_BASE_URL_ALLOWLIST=${AI_BASE_URL_ALLOWLIST:-}
+      - IMAGE_WORKER_IDLE_MS=${IMAGE_WORKER_IDLE_MS:-1000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - rednote-network
+
   # Frontend Service
   frontend:
     # build:

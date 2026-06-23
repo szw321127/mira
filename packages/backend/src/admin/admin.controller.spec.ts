@@ -57,6 +57,7 @@ describe("AdminController", () => {
 
   afterEach(async () => {
     await app?.close();
+    jest.restoreAllMocks();
     process.env = originalEnv;
   });
 
@@ -88,6 +89,14 @@ describe("AdminController", () => {
 
   it("requires an admin session for user management", async () => {
     await request(server).get("/admin/users").expect(401);
+  });
+
+  it("requires an admin session for image usage reporting", async () => {
+    await request(server).get("/admin/image-usage").expect(401);
+  });
+
+  it("requires an admin session for image provider testing", async () => {
+    await request(server).post("/admin/image-provider/test").expect(401);
   });
 
   it("lists users for authenticated admins", async () => {
@@ -128,6 +137,133 @@ describe("AdminController", () => {
         include: { _count: { select: { conversations: true } } }
       })
     );
+  });
+
+  it("returns image task usage reporting for authenticated admins", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent.get("/admin/image-usage").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        activeUsers: 2,
+        estimatedCostUsd: 0.142,
+        totalTasks: 4,
+        windowDays: 30,
+        statusCounts: {
+          canceled: 0,
+          complete: 2,
+          failed: 1,
+          queued: 1,
+          running: 0
+        }
+      })
+    );
+    expect(response.body.byProvider).toEqual(
+      expect.arrayContaining([
+        {
+          estimatedCostUsd: 0.142,
+          provider: "openai",
+          taskCount: 2
+        }
+      ])
+    );
+    expect(response.body.byType).toEqual(
+      expect.arrayContaining([
+        {
+          estimatedCostUsd: 0.142,
+          taskCount: 2,
+          type: "generate"
+        },
+        {
+          estimatedCostUsd: 0,
+          taskCount: 1,
+          type: "edit"
+        }
+      ])
+    );
+    expect(prisma.imageTask.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: {
+          cost: true,
+          createdAt: true,
+          status: true,
+          type: true,
+          userId: true
+        }
+      })
+    );
+  });
+
+  it("returns a safe image provider test result for authenticated admins", async () => {
+    const agent = request.agent(server);
+    const fetchMock = jest.spyOn(globalThis, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ id: "gpt-image-1" }),
+      ok: true,
+      status: 200
+    } as Response);
+
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    await agent
+      .put("/admin/secrets")
+      .send({
+        secrets: {
+          IMAGE_PROVIDER: "openai",
+          OPENAI_IMAGE_API_KEY: "sk-live-secret",
+          OPENAI_IMAGE_MODEL: "gpt-image-1"
+        }
+      })
+      .expect(200);
+
+    const response = await agent.post("/admin/image-provider/test").expect(200);
+
+    expect(response.body).toEqual({
+      configured: true,
+      missingKeys: [],
+      model: "gpt-image-1",
+      ok: true,
+      provider: "openai",
+      message: "图像 Provider 配置可用"
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/models/gpt-image-1",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer sk-live-secret"
+        }),
+        method: "GET"
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("sk-live-secret");
+  });
+
+  it("reports missing image provider keys without exposing secret values", async () => {
+    const agent = request.agent(server);
+    await agent
+      .post("/admin/login")
+      .send({ username: "owner", password: "initial-pass" })
+      .expect(200);
+
+    const response = await agent.post("/admin/image-provider/test").expect(200);
+
+    expect(response.body).toEqual({
+      configured: false,
+      missingKeys: ["OPENAI_IMAGE_API_KEY"],
+      model: "gpt-image-1",
+      ok: false,
+      provider: "openai",
+      message: "图像 Provider 缺少必要配置"
+    });
+    expect(JSON.stringify(response.body)).not.toContain("model-secret");
+    expect(JSON.stringify(response.body)).not.toContain("tavily-secret");
   });
 
   it("treats unsafe page values as page one", async () => {
@@ -427,6 +563,9 @@ describe("AdminController", () => {
 });
 
 type MockPrismaService = PrismaService & {
+  imageTask: {
+    findMany: jest.Mock;
+  };
   user: {
     findMany: jest.Mock;
     count: jest.Mock;
@@ -449,6 +588,52 @@ function createPrismaStore(initialValue?: unknown): MockPrismaService {
       createdAt: new Date("2026-06-01T00:00:00.000Z"),
       lastLoginAt: new Date("2026-06-02T00:00:00.000Z"),
       _count: { conversations: 3 }
+    }
+  ];
+  const imageTasks = [
+    {
+      id: "task-1",
+      userId: "user-1",
+      type: "generate",
+      status: "complete",
+      createdAt: new Date("2026-06-23T08:00:00.000Z"),
+      cost: {
+        provider: "openai",
+        model: "gpt-image-1",
+        size: "1024x1024",
+        quality: "auto",
+        estimatedCostUsd: 0.042
+      }
+    },
+    {
+      id: "task-2",
+      userId: "user-2",
+      type: "generate",
+      status: "complete",
+      createdAt: new Date("2026-06-23T09:00:00.000Z"),
+      cost: {
+        provider: "openai",
+        model: "gpt-image-1.5",
+        size: "1536x1024",
+        quality: "high",
+        estimatedCostUsd: 0.1
+      }
+    },
+    {
+      id: "task-3",
+      userId: "user-1",
+      type: "edit",
+      status: "failed",
+      createdAt: new Date("2026-06-23T10:00:00.000Z"),
+      cost: null
+    },
+    {
+      id: "task-4",
+      userId: "user-1",
+      type: "variation",
+      status: "queued",
+      createdAt: new Date("2026-06-23T11:00:00.000Z"),
+      cost: null
     }
   ];
 
@@ -475,6 +660,9 @@ function createPrismaStore(initialValue?: unknown): MockPrismaService {
           return Promise.resolve(row);
         }
       )
+    },
+    imageTask: {
+      findMany: jest.fn(() => Promise.resolve(imageTasks))
     },
     user: {
       findMany: jest.fn(() => Promise.resolve(users)),

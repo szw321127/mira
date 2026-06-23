@@ -1,6 +1,7 @@
 "use client";
 
-import { Menu, Plus, RefreshCcw, X } from "lucide-react";
+import Link from "next/link";
+import { Image, Menu, Plus, RefreshCcw, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatThread } from "./chat-thread";
 import { Composer } from "./composer";
@@ -132,6 +133,13 @@ export function AgentWorkspaceShell({
           <div className="min-w-0 flex-1 overflow-hidden text-sm font-[650] text-ellipsis whitespace-nowrap">
             {activeConversation.title}
           </div>
+          <Link
+            aria-label="打开图像画布"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] transition-colors hover:bg-[var(--surface-muted)]"
+            href="/image-workspace"
+          >
+            <Image aria-hidden="true" size={17} />
+          </Link>
           <IconButton
             aria-label="新对话"
             onClick={onNew}
@@ -143,7 +151,7 @@ export function AgentWorkspaceShell({
         </header>
 
         <header className="hidden h-[var(--workspace-header-height)] items-center gap-3 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_82%,var(--surface))] px-[22px] py-3 md:flex">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="m-0 max-w-[56ch] overflow-hidden text-[15px] leading-[1.3] font-[650] text-ellipsis whitespace-nowrap">
               {activeConversation.title}
             </h1>
@@ -153,6 +161,13 @@ export function AgentWorkspaceShell({
                 : `${activeConversation.messages.length} 条消息`}
             </p>
           </div>
+          <Link
+            className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--surface-muted)]"
+            href="/image-workspace"
+          >
+            <Image aria-hidden="true" size={15} />
+            图像画布
+          </Link>
         </header>
 
         {storageWarning ? (

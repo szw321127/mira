@@ -26,9 +26,10 @@
 - **流程**:
   1. 并行构建前端和后端镜像
   2. 推送镜像到阿里云 Container Registry
-  3. 通过 SSH 部署到服务器，只拉取更新后的前后端镜像
-  4. 启动后端、前端和 Caddy，PostgreSQL、Redis 作为依赖保持运行
+  3. 通过 SSH 部署到服务器，拉取后端镜像、worker 服务和前端镜像
+  4. 启动后端、图像 worker、前端和 Caddy，PostgreSQL、Redis 作为依赖保持运行
   5. 后端容器启动时执行 `prisma migrate deploy`，再启动 NestJS 服务
+  6. 图像 worker 复用 `rednote_backend` 镜像，只运行 `node dist/image-worker-runner.js`，不重复执行数据库迁移
 
 服务器部署时会从阿里云 ACR 拉取 `rednote_backend`、`rednote_frontend`、
 `rednote_postgres`、`rednote_redis` 和 `rednote_caddy`，避免服务器直接访问 Docker Hub。
@@ -130,6 +131,71 @@ mkdir -p /home/user/app
 3. 点击 `Run workflow` 按钮
 4. 选择分支并点击 `Run workflow`
 5. 需要强制刷新 PostgreSQL、Redis、Caddy 基础镜像时，勾选 `mirror_service_images`
+
+## 图像工作台真实烟测
+
+`deploy.yml` 里内置的是匿名页面和后端健康检查。图像生成、编辑、对象存储、
+下载等功能需要登录态和真实 Provider，因此用本地脚本手动跑。这个脚本会创建图像
+任务，可能产生模型调用和对象存储费用。
+
+前置条件：
+
+- 已部署包含 `/image-workspace` 的最新前端镜像
+- `/admin` 中已经配置图像 Provider 和图像存储 Key
+- 已经用普通用户登录 Mira
+- 本地准备一张 PNG/JPEG/WebP 测试图，建议小于 5MB
+
+获取 `MIRA_USER_COOKIE`：
+
+1. 在浏览器打开生产站点并登录
+2. 打开开发者工具的 Network 面板
+3. 刷新 `/image-workspace`
+4. 选中任意同域请求，例如 `/api/auth/session`
+5. 复制 Request Headers 里的完整 `cookie` 值
+
+运行：
+
+```bash
+APP_ORIGIN="https://mira.autos" \
+MIRA_USER_COOKIE="<完整 cookie 请求头值>" \
+MIRA_SMOKE_SOURCE_IMAGE="/absolute/path/to/source.png" \
+node scripts/image-workspace-smoke.mjs
+```
+
+可选参数：
+
+```bash
+MIRA_SMOKE_MASK_IMAGE="/absolute/path/to/mask.png"
+MIRA_SMOKE_PROMPT="A clean product image on a white desk"
+MIRA_SMOKE_TASK_TIMEOUT_MS=240000
+MIRA_SMOKE_TASK_POLL_MS=2000
+```
+
+期望输出包含：
+
+```json
+{
+  "ok": true,
+  "workspaceId": "...",
+  "sourceAssetId": "...",
+  "finalAssetId": "...",
+  "taskCount": 5,
+  "assetCount": 2
+}
+```
+
+该脚本会验证：
+
+- 创建图像工作台
+- 上传源图
+- 预览和下载源图
+- 文生图任务完成
+- 上传 mask
+- edit、variation、upscale、remove-background 任务完成
+- 最终资产预览和下载可用
+
+脚本不会打印 Cookie、Provider Key、对象存储 Key、`storageKey`、`maskKey` 或原始
+Provider 响应。
 
 ## 镜像标签说明
 

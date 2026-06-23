@@ -13,10 +13,23 @@ const sharedProxySource = readFileSync(
   join(apiDir, "shared", "backend-proxy.ts"),
   "utf8",
 );
+const imageUsageRouteSource = readFileSync(
+  join(apiDir, "admin", "image-usage", "route.ts"),
+  "utf8",
+);
+const imageProviderTestRouteSource = readFileSync(
+  join(apiDir, "admin", "image-provider", "test", "route.ts"),
+  "utf8",
+);
 
 test("admin proxy targets backend admin routes", () => {
   assert.match(routeSource, /proxyBackendRequest/);
   assert.match(routeSource, /`admin\/\$\{adminPath\}`/);
+  assert.match(imageUsageRouteSource, /proxyAdminRequest\(request, "image-usage"\)/);
+  assert.match(
+    imageProviderTestRouteSource,
+    /proxyAdminRequest\(request, "image-provider\/test"\)/,
+  );
 });
 
 test("shared backend proxy forwards cookies and preserves backend response headers", () => {

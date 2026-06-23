@@ -10,10 +10,33 @@ type RedisClient = {
     ttlSeconds: number
   ): Promise<unknown>;
   del(key: string): Promise<unknown>;
+  lpush(key: string, value: string): Promise<unknown>;
+  rpop(key: string): Promise<string | null>;
+  lrem(key: string, count: number, value: string): Promise<unknown>;
+  eval(
+    script: string,
+    numKeys: number,
+    key: string,
+    field: string,
+    value: string
+  ): Promise<unknown>;
+  expire(key: string, seconds: number): Promise<unknown>;
+  publish(channel: string, message: string): Promise<unknown>;
+  subscribe(channel: string): Promise<unknown>;
+  unsubscribe(channel: string): Promise<unknown>;
+  on(
+    event: "message",
+    listener: (channel: string, message: string) => void
+  ): unknown;
+  off(
+    event: "message",
+    listener: (channel: string, message: string) => void
+  ): unknown;
   ping(): Promise<string>;
   quit(): Promise<unknown>;
 };
 type RedisClientFactory = (url: string) => RedisClient;
+type RedisMessageListener = (message: string) => void;
 
 export type RedisHealth = "ok" | "disabled" | "unavailable";
 export const REDIS_CLIENT_FACTORY = Symbol("REDIS_CLIENT_FACTORY");
@@ -28,6 +51,13 @@ const defaultRedisClientFactory: RedisClientFactory = (url) =>
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private client?: RedisClient;
+  private subscriber?: RedisClient;
+  private readonly channelListeners = new Map<string, Set<RedisMessageListener>>();
+  private readonly handleSubscriberMessage = (channel: string, message: string) => {
+    for (const listener of this.channelListeners.get(channel) ?? []) {
+      listener(message);
+    }
+  };
 
   constructor(
     @Optional()
@@ -52,6 +82,70 @@ export class RedisService implements OnModuleDestroy {
     await this.getClient().del(key);
   }
 
+  async pushListJson(key: string, value: unknown, ttlSeconds: number) {
+    const client = this.getClient();
+    await client.lpush(key, JSON.stringify(value));
+    await client.expire(key, ttlSeconds);
+  }
+
+  async popListJson<T>(key: string): Promise<T | null> {
+    const raw = await this.getClient().rpop(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  }
+
+  async removeListJson(key: string, value: unknown) {
+    await this.getClient().lrem(key, 0, JSON.stringify(value));
+  }
+
+  async removeListJsonByField(key: string, field: string, value: string) {
+    const script = `
+      local key = KEYS[1]
+      local field = ARGV[1]
+      local expected = ARGV[2]
+      local values = redis.call("LRANGE", key, 0, -1)
+      local removed = 0
+      for _, item in ipairs(values) do
+        local ok, decoded = pcall(cjson.decode, item)
+        if ok and decoded[field] == expected then
+          removed = removed + redis.call("LREM", key, 0, item)
+        end
+      end
+      return removed
+    `;
+    await this.getClient().eval(script, 1, key, field, value);
+  }
+
+  async publish(channel: string, message: string) {
+    await this.getClient().publish(channel, message);
+  }
+
+  async subscribe(
+    channel: string,
+    listener: RedisMessageListener
+  ): Promise<() => void> {
+    const listeners = this.channelListeners.get(channel) ?? new Set();
+    const shouldSubscribe = listeners.size === 0;
+    listeners.add(listener);
+    this.channelListeners.set(channel, listeners);
+
+    if (shouldSubscribe) {
+      try {
+        await this.getSubscriberClient().subscribe(channel);
+      } catch (error) {
+        listeners.delete(listener);
+        if (listeners.size === 0) this.channelListeners.delete(channel);
+        throw error;
+      }
+    }
+
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      void this.removeSubscriber(channel, listener);
+    };
+  }
+
   async checkHealth(): Promise<RedisHealth> {
     if (!this.redisUrl) return "disabled";
 
@@ -67,6 +161,9 @@ export class RedisService implements OnModuleDestroy {
     if (this.client) {
       await this.client.quit();
     }
+    if (this.subscriber && this.subscriber !== this.client) {
+      await this.subscriber.quit();
+    }
   }
 
   private getClient() {
@@ -76,5 +173,34 @@ export class RedisService implements OnModuleDestroy {
 
     this.client ??= this.createClient(this.redisUrl);
     return this.client;
+  }
+
+  private getSubscriberClient() {
+    if (!this.redisUrl) {
+      throw new Error("REDIS_URL is not configured.");
+    }
+
+    if (!this.subscriber) {
+      this.subscriber = this.createClient(this.redisUrl);
+      this.subscriber.on("message", this.handleSubscriberMessage);
+    }
+    return this.subscriber;
+  }
+
+  private async removeSubscriber(
+    channel: string,
+    listener: RedisMessageListener
+  ) {
+    const listeners = this.channelListeners.get(channel);
+    if (!listeners) return;
+    listeners.delete(listener);
+    if (listeners.size > 0) return;
+
+    this.channelListeners.delete(channel);
+    try {
+      await this.subscriber?.unsubscribe(channel);
+    } catch {
+      // Losing an unsubscribe acknowledgement should not keep request cleanup from finishing.
+    }
   }
 }

@@ -301,6 +301,38 @@ jobs:
                   retries: 3
                   start_period: 40s
 
+              # Image Worker Service
+              worker:
+                image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_backend:${IMAGE_TAG:-latest}
+                container_name: rednote-worker
+                restart: unless-stopped
+                command: ["node", "dist/image-worker-runner.js"]
+                environment:
+                  - NODE_ENV=production
+                  - CI=true
+                  - PNPM_CONFIG_CONFIRM_MODULES_PURGE=false
+                  - TZ=Asia/Shanghai
+                  - DATABASE_TYPE=postgres
+                  - DATABASE_HOST=postgres
+                  - DATABASE_PORT=5432
+                  - DATABASE_NAME=rednote
+                  - DATABASE_USER=rednote
+                  - DATABASE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+                  - REDIS_URL=redis://redis:6379
+                  - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET is required and must be strong}
+                  - FRONTEND_ORIGIN=https://${APP_DOMAIN:?APP_DOMAIN is required}
+                  - CORS_ORIGINS=https://${APP_DOMAIN},http://frontend
+                  - IMAGE_WORKER_IDLE_MS=${IMAGE_WORKER_IDLE_MS:-1000}
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                  redis:
+                    condition: service_healthy
+                  backend:
+                    condition: service_healthy
+                networks:
+                  - rednote-network
+
               # Frontend Service
               frontend:
                 image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com}/${IMAGE_OWNER:-szw321127}/rednote_frontend:${IMAGE_TAG:-latest}
@@ -401,7 +433,7 @@ jobs:
               attempt=1
               while [ "$attempt" -le 3 ]; do
                 echo "Pulling application images (attempt ${attempt}/3)..."
-                if docker compose pull backend frontend; then
+                if docker compose pull backend worker frontend; then
                   return 0
                 fi
                 attempt=$((attempt + 1))
@@ -414,10 +446,59 @@ jobs:
             pull_app_images
 
             echo "Starting application services with docker compose..."
-            docker compose up -d --remove-orphans backend frontend caddy
+            docker compose up -d --remove-orphans backend worker frontend caddy
 
             echo "Reloading Caddy configuration..."
             docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+
+            run_smoke_checks() {
+              echo "Checking backend health inside the backend container..."
+              docker compose exec -T backend node -e '
+                const http = require("http");
+                const request = http.get("http://localhost:3000/health", (response) => {
+                  let body = "";
+                  response.setEncoding("utf8");
+                  response.on("data", (chunk) => {
+                    body += chunk;
+                  });
+                  response.on("end", () => {
+                    if (response.statusCode !== 200) {
+                      console.error(body);
+                      process.exit(1);
+                    }
+                    let payload;
+                    try {
+                      payload = JSON.parse(body);
+                    } catch {
+                      console.error(body);
+                      process.exit(1);
+                    }
+                    if (payload.status !== "ok" && payload.status !== "degraded") {
+                      console.error(body);
+                      process.exit(1);
+                    }
+                  });
+                });
+                request.setTimeout(5000, () => {
+                  request.destroy(new Error("health timeout"));
+                });
+                request.on("error", (error) => {
+                  console.error(error.message);
+                  process.exit(1);
+                });
+              '
+
+              echo "Checking public admin page..."
+              curl --fail --silent --show-error --location --max-time 20 "https://${{ secrets.APP_DOMAIN }}/admin" \
+                | grep -E "(Mira|管理员|登录|邮箱|图像)" >/dev/null
+
+              echo "Checking public image workspace login gate..."
+              curl --fail --silent --show-error --location --max-time 20 "https://${{ secrets.APP_DOMAIN }}/image-workspace" \
+                | grep -E "(Mira|管理员|登录|邮箱|图像)" >/dev/null
+            }
+
+            echo "Running post-deploy smoke checks..."
+            run_smoke_checks
 
             echo "Cleaning up dangling images..."
             docker image prune -f

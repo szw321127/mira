@@ -21,7 +21,17 @@ import {
 const DEFAULT_SESSION_SECRET = "mira-local-admin-session-secret-change-me";
 const ADMIN_USERS_PAGE_SIZE = 20;
 const ADMIN_USERS_MAX_PAGE = 1000;
+const IMAGE_USAGE_WINDOW_DAYS = 30;
 type UserStatus = "enabled" | "disabled";
+type ImageTaskUsageStatus = "queued" | "running" | "complete" | "failed" | "canceled";
+type ImageTaskUsageRow = {
+  cost: unknown;
+  createdAt: Date;
+  status: ImageTaskUsageStatus;
+  type: string;
+  userId: string;
+};
+type ImageProviderName = "openai" | "disabled";
 
 @Injectable()
 export class AdminService {
@@ -150,6 +160,97 @@ export class AdminService {
     };
   }
 
+  async listImageUsage() {
+    const startedAt = new Date(
+      Date.now() - IMAGE_USAGE_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    );
+    const tasks = (await this.prisma.imageTask.findMany({
+      where: {
+        createdAt: {
+          gte: startedAt
+        }
+      },
+      select: {
+        cost: true,
+        createdAt: true,
+        status: true,
+        type: true,
+        userId: true
+      }
+    })) as ImageTaskUsageRow[];
+
+    const statusCounts = {
+      canceled: 0,
+      complete: 0,
+      failed: 0,
+      queued: 0,
+      running: 0
+    } satisfies Record<ImageTaskUsageStatus, number>;
+    const activeUsers = new Set<string>();
+    const byProvider = new Map<string, { estimatedCostUsd: number; taskCount: number }>();
+    const byType = new Map<string, { estimatedCostUsd: number; taskCount: number }>();
+    let estimatedCostUsd = 0;
+
+    for (const task of tasks) {
+      statusCounts[task.status] = (statusCounts[task.status] ?? 0) + 1;
+      activeUsers.add(task.userId);
+
+      const cost = readImageTaskCost(task.cost);
+      estimatedCostUsd += cost.estimatedCostUsd;
+      addUsageGroup(byProvider, cost.provider, cost.estimatedCostUsd);
+      addUsageGroup(byType, task.type, cost.estimatedCostUsd);
+    }
+
+    return {
+      activeUsers: activeUsers.size,
+      byProvider: mapUsageGroups(byProvider, "provider"),
+      byType: mapUsageGroups(byType, "type"),
+      estimatedCostUsd: roundUsd(estimatedCostUsd),
+      statusCounts,
+      totalTasks: tasks.length,
+      windowDays: IMAGE_USAGE_WINDOW_DAYS
+    };
+  }
+
+  async testImageProvider() {
+    const store = await this.store.read();
+    const secrets = store.secrets ?? {};
+    const provider = normalizeImageProvider(secrets.IMAGE_PROVIDER ?? "openai");
+
+    if (provider === "disabled") {
+      return {
+        configured: false,
+        missingKeys: [],
+        model: null,
+        ok: false,
+        provider,
+        message: "图像生成功能已关闭"
+      };
+    }
+
+    const missingKeys = secrets.OPENAI_IMAGE_API_KEY?.trim()
+      ? []
+      : ["OPENAI_IMAGE_API_KEY"];
+    const model = secrets.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1";
+    const configured = missingKeys.length === 0;
+    const reachable = configured
+      ? await validateOpenAIImageProvider(secrets.OPENAI_IMAGE_API_KEY ?? "", model)
+      : false;
+
+    return {
+      configured,
+      missingKeys,
+      model,
+      ok: configured && reachable,
+      provider,
+      message: configured
+        ? reachable
+          ? "图像 Provider 配置可用"
+          : "图像 Provider 校验失败，请检查 Key 或模型"
+        : "图像 Provider 缺少必要配置"
+    };
+  }
+
   async updateUserStatus(userId: string, status: UserStatus) {
     const user = await this.updateUserStatusRow(userId, status);
 
@@ -219,4 +320,88 @@ export function maskSecret(value: string) {
   const start = value.slice(0, 2);
   const end = value.slice(-2);
   return `${start}${"*".repeat(8)}${end}`;
+}
+
+function readImageTaskCost(value: unknown): {
+  estimatedCostUsd: number;
+  provider: string;
+} {
+  if (!isRecord(value)) {
+    return {
+      estimatedCostUsd: 0,
+      provider: "unknown"
+    };
+  }
+
+  return {
+    estimatedCostUsd: readFiniteNumber(value.estimatedCostUsd),
+    provider: typeof value.provider === "string" && value.provider.trim()
+      ? value.provider.trim()
+      : "unknown"
+  };
+}
+
+function addUsageGroup(
+  groups: Map<string, { estimatedCostUsd: number; taskCount: number }>,
+  key: string,
+  estimatedCostUsd: number
+) {
+  const current = groups.get(key) ?? { estimatedCostUsd: 0, taskCount: 0 };
+  groups.set(key, {
+    estimatedCostUsd: current.estimatedCostUsd + estimatedCostUsd,
+    taskCount: current.taskCount + 1
+  });
+}
+
+function mapUsageGroups(
+  groups: Map<string, { estimatedCostUsd: number; taskCount: number }>,
+  keyName: "provider" | "type"
+) {
+  return [...groups.entries()]
+    .map(([key, value]) => ({
+      [keyName]: key,
+      estimatedCostUsd: roundUsd(value.estimatedCostUsd),
+      taskCount: value.taskCount
+    }))
+    .sort((left, right) => {
+      if (right.taskCount !== left.taskCount) return right.taskCount - left.taskCount;
+      return String(left[keyName]).localeCompare(String(right[keyName]));
+    });
+}
+
+function readFiniteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : 0;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeImageProvider(value: string): ImageProviderName {
+  return value.trim().toLowerCase() === "disabled" ? "disabled" : "openai";
+}
+
+async function validateOpenAIImageProvider(apiKey: string, model: string) {
+  try {
+    const response = await fetch(
+      `https://api.openai.com/v1/models/${encodeURIComponent(model)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        method: "GET"
+      }
+    );
+    await response.json().catch(() => ({}));
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

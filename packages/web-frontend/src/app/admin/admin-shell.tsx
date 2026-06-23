@@ -8,6 +8,7 @@ import {
   type AdminSection,
   isAdminSection,
 } from "./admin-navigation";
+import { AdminImageUsagePanel } from "./admin-image-usage-panel";
 import { AdminOverviewPanel } from "./admin-overview-panel";
 import { AdminSectionFrame } from "./admin-section-frame";
 import { AdminSecurityPanel } from "./admin-security-panel";
@@ -21,7 +22,8 @@ export function AdminShell() {
   const [loadState, setLoadState] = useState<LoadState>("checking");
   const [session, setSession] = useState<AdminSession | null>(null);
   const [secrets, setSecrets] = useState<ManagedSecret[]>([]);
-  const [activeSection, setActiveSection] = useState<AdminSection>("overview");
+  const [activeSection, setActiveSection] =
+    useState<AdminSection>(getInitialAdminSection);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -48,8 +50,8 @@ export function AdminShell() {
 
   useEffect(() => {
     function syncSectionFromHash() {
-      const sectionFromHash = window.location.hash.replace("#", "");
-      if (isAdminSection(sectionFromHash)) {
+      const sectionFromHash = readSectionFromHash(window.location.hash);
+      if (sectionFromHash) {
         setActiveSection(sectionFromHash);
       }
     }
@@ -94,6 +96,10 @@ export function AdminShell() {
 
     if (activeSection === "users") {
       return <AdminUsersPanel onMessage={setMessage} showHeader={false} />;
+    }
+
+    if (activeSection === "imageUsage") {
+      return <AdminImageUsagePanel showHeader={false} />;
     }
 
     if (activeSection === "secrets") {
@@ -159,4 +165,17 @@ export function AdminShell() {
       ) : null}
     </main>
   );
+}
+
+function getInitialAdminSection(): AdminSection {
+  if (typeof window === "undefined") {
+    return "overview";
+  }
+
+  return readSectionFromHash(window.location.hash) ?? "overview";
+}
+
+function readSectionFromHash(hash: string): AdminSection | null {
+  const section = hash.replace("#", "");
+  return isAdminSection(section) ? section : null;
 }

@@ -1,9 +1,13 @@
 "use client";
 
-import { KeyRound, RefreshCw, Save } from "lucide-react";
+import { KeyRound, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { loadAdminSecrets, saveAdminSecrets } from "./admin-api";
-import type { ManagedSecret } from "./admin-types";
+import {
+  loadAdminSecrets,
+  saveAdminSecrets,
+  testAdminImageProvider,
+} from "./admin-api";
+import type { AdminImageProviderTestResponse, ManagedSecret } from "./admin-types";
 
 const inputClass =
   "h-11 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] md:h-10";
@@ -22,6 +26,9 @@ export function AdminSecretsPanel({
   const [values, setValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [testingProvider, setTestingProvider] = useState(false);
+  const [providerResult, setProviderResult] =
+    useState<AdminImageProviderTestResponse | null>(null);
 
   async function refresh() {
     if (refreshing) return;
@@ -60,6 +67,30 @@ export function AdminSecretsPanel({
     }
   }
 
+  async function testProvider() {
+    if (testingProvider) return;
+    setTestingProvider(true);
+    try {
+      const result = await testAdminImageProvider();
+      setProviderResult(result);
+      onMessage(result.message);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "图像 Provider 测试失败";
+      setProviderResult({
+        configured: false,
+        missingKeys: [],
+        model: null,
+        ok: false,
+        provider: "openai",
+        message,
+      });
+      onMessage(message);
+    } finally {
+      setTestingProvider(false);
+    }
+  }
+
   return (
     <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
       <div
@@ -78,16 +109,47 @@ export function AdminSecretsPanel({
             </p>
           </div>
         ) : null}
-        <button
-          className="inline-flex h-11 items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55 md:h-9"
-          disabled={refreshing}
-          onClick={() => void refresh()}
-          type="button"
-        >
-          <RefreshCw aria-hidden="true" size={15} />
-          刷新
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55 md:h-9"
+            disabled={testingProvider}
+            onClick={() => void testProvider()}
+            type="button"
+          >
+            <ShieldCheck aria-hidden="true" size={15} />
+            {testingProvider ? "测试中" : "测试图像 Provider"}
+          </button>
+          <button
+            className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55 md:h-9"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" size={15} />
+            刷新
+          </button>
+        </div>
       </div>
+
+      {providerResult ? (
+        <div
+          className={`mt-4 rounded-[8px] border px-3 py-2 text-xs leading-5 ${
+            providerResult.ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          <div className="font-[700]">{providerResult.message}</div>
+          <div className="mt-1">
+            Provider: {providerResult.provider}
+            {providerResult.model ? ` · 模型: ${providerResult.model}` : ""}
+            {providerResult.missingKeys.length
+              ? ` · 缺少: ${providerResult.missingKeys.join(", ")}`
+              : ""}
+          </div>
+        </div>
+      ) : null}
+
       <form className="mt-4" onSubmit={submit}>
         <div className="overflow-hidden rounded-[8px] border border-[var(--border)]">
           {secrets.map((secret) => (
