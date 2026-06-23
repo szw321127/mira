@@ -210,6 +210,9 @@ describe("image storage service", () => {
     expect(headers.get("content-type")).toBe("image/png");
     expect(headers.has("host")).toBe(false);
     expect(headers.get("x-amz-date")).toBe("20260623T120000Z");
+    expect(headers.get("authorization")).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=access-key\/20260623\/cn-shenzhen\/s3\/aws4_request, /
+    );
     expect(headers.get("authorization")).toContain(
       "Credential=access-key/20260623/cn-shenzhen/s3/aws4_request"
     );

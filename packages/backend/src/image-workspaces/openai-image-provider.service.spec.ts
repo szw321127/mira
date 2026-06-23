@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from "@nestjs/common";
+import { Logger, ServiceUnavailableException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import type {
   RuntimeImageConfig,
@@ -267,6 +267,9 @@ describe("OpenAIImageProviderService", () => {
   });
 
   it("wraps OpenAI failures as short safe user errors without leaking the API key", async () => {
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
     const { fetchMock } = createFetch(
       {
         error: {
@@ -298,5 +301,76 @@ describe("OpenAIImageProviderService", () => {
         background: "auto"
       })
     ).rejects.not.toThrow("sk-live-secret");
+
+    expect(loggerSpy).toHaveBeenCalledWith(
+      expect.stringContaining("OpenAI image request failed"),
+      expect.anything()
+    );
+    expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain("sk-live-secret");
+    loggerSpy.mockRestore();
+  });
+
+  it("maps image safety rejections to actionable safe user errors", async () => {
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
+    const { fetchMock } = createFetch(
+      {
+        error: {
+          message:
+            "Your request was rejected by the safety system. safety_violations=[sexual]. sk-live-secret"
+        }
+      },
+      false
+    );
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(imageConfig()),
+      createStorage(),
+      { fetch: fetchMock }
+    );
+
+    await expect(
+      service.generate({
+        prompt: "restricted prompt",
+        size: "1024x1024",
+        quality: "auto",
+        background: "auto"
+      })
+    ).rejects.toThrow("提示词可能包含平台限制内容，请调整后再试");
+
+    expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain("sk-live-secret");
+    loggerSpy.mockRestore();
+  });
+
+  it("maps provider channel exhaustion to an actionable safe user error", async () => {
+    const loggerSpy = jest
+      .spyOn(Logger.prototype, "warn")
+      .mockImplementation(() => undefined);
+    const { fetchMock } = createFetch(
+      {
+        error: {
+          message:
+            "分组 sora 下模型 gpt-image-2 无可用渠道（distributor），请尝试切换其他分组"
+        }
+      },
+      false
+    );
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(imageConfig()),
+      createStorage(),
+      { fetch: fetchMock }
+    );
+
+    await expect(
+      service.generate({
+        prompt: "make a launch cover",
+        size: "1024x1024",
+        quality: "auto",
+        background: "auto"
+      })
+    ).rejects.toThrow("图像模型通道暂不可用，请稍后重试或在后台切换模型");
+
+    expect(JSON.stringify(loggerSpy.mock.calls)).not.toContain("sk-live-secret");
+    loggerSpy.mockRestore();
   });
 });

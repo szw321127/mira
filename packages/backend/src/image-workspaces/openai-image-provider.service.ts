@@ -1,4 +1,9 @@
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException
+} from "@nestjs/common";
 import {
   createOpenAI,
   type OpenAIImageModelEditOptions,
@@ -30,9 +35,15 @@ export type OpenAIImageProviderOptions = {
   fetch?: OpenAIImageFetch;
 };
 
+const IMAGE_GENERATION_FAILED_MESSAGE = "图像生成失败，请稍后再试";
+const IMAGE_PROVIDER_UNAVAILABLE_MESSAGE =
+  "图像模型通道暂不可用，请稍后重试或在后台切换模型";
+const IMAGE_PROMPT_REJECTED_MESSAGE = "提示词可能包含平台限制内容，请调整后再试";
+
 @Injectable()
 export class OpenAIImageProviderService implements ImageProviderAdapter {
   private readonly fetcher: OpenAIImageFetch;
+  private readonly logger = new Logger(OpenAIImageProviderService.name);
 
   constructor(
     private readonly runtimeSecrets: RuntimeSecretsService,
@@ -132,8 +143,12 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
         providerOptions: args.providerOptions,
         ...(args.size === "auto" ? {} : { size: args.size })
       });
-    } catch {
-      throw new ServiceUnavailableException("图像生成失败，请稍后再试");
+    } catch (error) {
+      const summary = summarizeImageProviderError(error);
+      this.logger.warn("OpenAI image request failed", JSON.stringify(summary));
+      throw new ServiceUnavailableException(
+        imageProviderFailureMessage(summary)
+      );
     }
   }
 
@@ -169,6 +184,15 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
       }
     });
   }
+}
+
+function imageProviderFailureMessage(summary: {
+  providerUnavailable: boolean;
+  safetyRejected: boolean;
+}): string {
+  if (summary.safetyRejected) return IMAGE_PROMPT_REJECTED_MESSAGE;
+  if (summary.providerUnavailable) return IMAGE_PROVIDER_UNAVAILABLE_MESSAGE;
+  return IMAGE_GENERATION_FAILED_MESSAGE;
 }
 
 function dimensionsForSize(size: ImageGenerateInput["size"]): [number, number] {
@@ -232,4 +256,58 @@ function firstResponseRequestId(value: GenerateImageResult): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function summarizeImageProviderError(error: unknown): {
+  code: string | null;
+  message: string;
+  name: string;
+  providerUnavailable: boolean;
+  safetyRejected: boolean;
+  statusCode: number | null;
+  type: string | null;
+} {
+  const name = error instanceof Error ? error.name : typeof error;
+  const message = sanitizeProviderErrorMessage(readErrorMessage(error));
+  const lowerMessage = message.toLowerCase();
+  return {
+    code: readStringField(error, "code"),
+    message,
+    name,
+    providerUnavailable:
+      lowerMessage.includes("无可用渠道") ||
+      lowerMessage.includes("distributor") ||
+      lowerMessage.includes("no available channel"),
+    safetyRejected:
+      lowerMessage.includes("safety") ||
+      lowerMessage.includes("safety_violations") ||
+      lowerMessage.includes("rejected by the safety system"),
+    statusCode: readNumberField(error, "statusCode") ?? readNumberField(error, "status"),
+    type: readStringField(error, "type")
+  };
+}
+
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Unknown image provider error";
+}
+
+function readStringField(error: unknown, key: string): string | null {
+  if (!isRecord(error)) return null;
+  const value = error[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readNumberField(error: unknown, key: string): number | null {
+  if (!isRecord(error)) return null;
+  const value = error[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function sanitizeProviderErrorMessage(message: string): string {
+  return message
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .slice(0, 500);
 }

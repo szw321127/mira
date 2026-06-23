@@ -137,6 +137,60 @@ describe("ImageWorkerService", () => {
     );
   });
 
+  it("preserves safe provider rejection messages for the task and stream", async () => {
+    const prisma = createPrisma();
+    const queue = createQueue();
+    const provider = createProvider();
+    provider.generate.mockRejectedValueOnce(
+      new Error("提示词可能包含平台限制内容，请调整后再试")
+    );
+    const worker = new ImageWorkerService(prisma, queue, provider, createStorage());
+
+    await worker.processTask("task-1");
+
+    expect(prisma.imageTask.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({
+          status: "failed",
+          error: "提示词可能包含平台限制内容，请调整后再试"
+        })
+      })
+    );
+    expect(queue.emitEvent).toHaveBeenCalledWith("task-1", {
+      type: "error",
+      taskId: "task-1",
+      message: "提示词可能包含平台限制内容，请调整后再试"
+    });
+  });
+
+  it("preserves safe provider availability messages for the task and stream", async () => {
+    const prisma = createPrisma();
+    const queue = createQueue();
+    const provider = createProvider();
+    provider.generate.mockRejectedValueOnce(
+      new Error("图像模型通道暂不可用，请稍后重试或在后台切换模型")
+    );
+    const worker = new ImageWorkerService(prisma, queue, provider, createStorage());
+
+    await worker.processTask("task-1");
+
+    expect(prisma.imageTask.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({
+          status: "failed",
+          error: "图像模型通道暂不可用，请稍后重试或在后台切换模型"
+        })
+      })
+    );
+    expect(queue.emitEvent).toHaveBeenCalledWith("task-1", {
+      type: "error",
+      taskId: "task-1",
+      message: "图像模型通道暂不可用，请稍后重试或在后台切换模型"
+    });
+  });
+
   it("skips tasks that were canceled before the worker claimed them", async () => {
     const prisma = createPrisma({ status: "canceled" });
     const queue = createQueue();

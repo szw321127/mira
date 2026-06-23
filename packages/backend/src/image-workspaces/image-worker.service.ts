@@ -83,8 +83,8 @@ export class ImageWorkerService {
       }
 
       throw new Error("Unsupported image task type");
-    } catch {
-      await this.markFailed(task);
+    } catch (error) {
+      await this.markFailed(task, error);
     }
   }
 
@@ -231,8 +231,11 @@ export class ImageWorkerService {
     });
   }
 
-  private async markFailed(task: ImageTaskRow): Promise<void> {
-    const message = getImageTaskProgressCopy(task.type).failed;
+  private async markFailed(task: ImageTaskRow, error: unknown): Promise<void> {
+    const message = getSafeTaskFailureMessage(
+      error,
+      getImageTaskProgressCopy(task.type).failed
+    );
     await this.prisma.imageTask.update({
       where: { id: task.id },
       data: {
@@ -618,6 +621,18 @@ function getImageTaskProgressCopy(type: ImageTaskRow["type"]): {
         failed: "图像生成失败，请稍后再试"
       };
   }
+}
+
+function getSafeTaskFailureMessage(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (
+    message === "提示词可能包含平台限制内容，请调整后再试" ||
+    message === "图像模型通道暂不可用，请稍后重试或在后台切换模型" ||
+    message === "图像生成服务未配置，请联系管理员"
+  ) {
+    return message;
+  }
+  return fallback;
 }
 
 function parseTarget(value: unknown): { x: number; y: number } {

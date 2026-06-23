@@ -207,8 +207,7 @@ export class S3CompatibleImageStorageService implements ImageStorageService {
     headers.set(
       "authorization",
       [
-        "AWS4-HMAC-SHA256",
-        `Credential=${this.accessKey}/${scope}`,
+        `AWS4-HMAC-SHA256 Credential=${this.accessKey}/${scope}`,
         `SignedHeaders=${signedHeaders}`,
         `Signature=${signature}`
       ].join(", ")
