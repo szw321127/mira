@@ -175,7 +175,7 @@ describe("image storage service", () => {
         storageProvider: "oss",
         storageBucket: "mira-images",
         storageRegion: "cn-shenzhen",
-        storageEndpoint: "https://oss.example.com",
+        storageEndpoint: "https://s3.oss-cn-shenzhen-internal.aliyuncs.com",
         storageAccessKey: "access-key",
         storageSecretKey: "secret-key"
       }),
@@ -203,7 +203,7 @@ describe("image storage service", () => {
     expect(fetchImage).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImage.mock.calls[0];
     expect(String(url)).toBe(
-      "https://oss.example.com/mira-images/s3/user-1/workspace-1/task-1/0123456789abcdef-cover-hero.png"
+      "https://mira-images.s3.oss-cn-shenzhen-internal.aliyuncs.com/s3/user-1/workspace-1/task-1/0123456789abcdef-cover-hero.png"
     );
     expect(init?.method).toBe("PUT");
     const headers = new Headers(init?.headers);
@@ -267,10 +267,42 @@ describe("image storage service", () => {
       mimeType: "image/png"
     });
     expect(fetchImage).toHaveBeenCalledWith(
-      "https://oss.example.com/mira-images/s3/user-1/workspace-1/task-1/cover.png",
+      "https://mira-images.oss.example.com/s3/user-1/workspace-1/task-1/cover.png",
       expect.objectContaining({
         method: "GET"
       })
+    );
+  });
+
+  it("keeps path-style S3-compatible URLs for localhost storage endpoints", async () => {
+    const local = createLocalStorageDouble();
+    const fetchImage = jest.fn<ImageStorageFetch>(() =>
+      Promise.resolve(new Response(null, { status: 200 }))
+    );
+    const storage = new ConfiguredImageStorageService(
+      createRuntimeSecrets({
+        storageProvider: "s3",
+        storageBucket: "mira-images",
+        storageRegion: "local",
+        storageEndpoint: "http://localhost:9000",
+        storageAccessKey: "access-key",
+        storageSecretKey: "secret-key"
+      }),
+      local,
+      {
+        fetch: fetchImage,
+        now: () => new Date("2026-06-23T12:00:00.000Z"),
+        publicBaseUrl: "https://mira.example",
+        randomBytes: () => Buffer.from("0123456789abcdef", "hex"),
+        signingSecret: "preview-secret"
+      }
+    );
+
+    await storage.putImage(createStoreInput());
+
+    const [url] = fetchImage.mock.calls[0];
+    expect(String(url)).toBe(
+      "http://localhost:9000/mira-images/s3/user-1/workspace-1/task-1/0123456789abcdef-cover-hero.png"
     );
   });
 });

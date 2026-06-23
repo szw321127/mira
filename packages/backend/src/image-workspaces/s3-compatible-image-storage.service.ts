@@ -222,12 +222,19 @@ export class S3CompatibleImageStorageService implements ImageStorageService {
       throw new Error("Invalid S3 image storage key");
     }
     const url = new URL(this.endpoint.toString());
+    const keyParts = storageKey.split("/").filter(Boolean);
+    if (shouldUseVirtualHostedStyle(url)) {
+      url.hostname = `${this.bucket}.${url.hostname}`;
+      url.pathname = `/${[
+        ...url.pathname.split("/").filter(Boolean),
+        ...keyParts
+      ].map(encodeURIComponent).join("/")}`;
+      url.search = "";
+      return url;
+    }
+
     const prefixParts = url.pathname.split("/").filter(Boolean);
-    const pathParts = [
-      ...prefixParts,
-      this.bucket,
-      ...storageKey.split("/").filter(Boolean)
-    ];
+    const pathParts = [...prefixParts, this.bucket, ...keyParts];
     url.pathname = `/${pathParts.map(encodeURIComponent).join("/")}`;
     url.search = "";
     return url;
@@ -357,6 +364,14 @@ function safeSegment(value: string): string {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return normalized || "unknown";
+}
+
+function shouldUseVirtualHostedStyle(url: URL): boolean {
+  return url.hostname !== "localhost" && !isIpAddress(url.hostname);
+}
+
+function isIpAddress(hostname: string): boolean {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) || hostname.includes(":");
 }
 
 function signingKey(secretKey: string, dateStamp: string, region: string): Buffer {
