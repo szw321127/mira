@@ -1,10 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { EmailBindPanel } from "../auth/email-bind-panel";
 import { EmailLoginPanel } from "../auth/email-login-panel";
 import { useAuthSession } from "../auth/use-auth-session";
-import type { AuthUser } from "../auth/auth-types";
 import { useImageWorkspace } from "./use-image-workspace";
 
 const ImageWorkspaceShell = dynamic(
@@ -38,21 +36,14 @@ export default function ImageWorkspacePage() {
     return <EmailLoginPanel onLogin={auth.setUser} />;
   }
 
-  return <ImageWorkspaceHome onUserChange={auth.setUser} user={auth.user} />;
+  return <ImageWorkspaceHome />;
 }
 
-function ImageWorkspaceHome({
-  onUserChange,
-  user,
-}: {
-  onUserChange: (user: AuthUser) => void;
-  user: AuthUser;
-}) {
+function ImageWorkspaceHome() {
   const workspace = useImageWorkspace();
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[var(--background)] text-[var(--ink)]">
-      {user.email === null ? <EmailBindPanel onUserChange={onUserChange} /> : null}
       <ImageWorkspaceShell
         activeWorkspace={workspace.activeWorkspace}
         creatingTask={workspace.creatingTask}

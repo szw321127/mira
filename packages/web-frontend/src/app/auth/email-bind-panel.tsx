@@ -71,25 +71,27 @@ export function EmailBindPanel({
 
   return (
     <form
-      className="border-b border-[var(--border)] bg-[var(--accent-subtle)] px-4 py-2.5 text-[13px] text-[var(--ink)]"
+      className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4 text-[13px] text-[var(--ink)]"
       onSubmit={submit}
     >
-      <div className="mx-auto flex max-w-[980px] flex-col gap-2 md:flex-row md:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <Mail
             aria-hidden="true"
-            className="shrink-0 text-[var(--accent-strong)]"
-            size={16}
+            className="mt-0.5 shrink-0 text-[var(--accent-strong)]"
+            size={18}
           />
-          <span className="font-[650]">绑定邮箱</span>
-          <span className="min-w-0 text-[var(--muted-strong)]">
-            绑定后可继续使用邮箱验证码登录，也能找回账号。
-          </span>
+          <div className="min-w-0">
+            <h2 className="text-base leading-tight font-[700]">绑定邮箱</h2>
+            <p className="mt-1 text-sm leading-5 text-[var(--muted-strong)]">
+              绑定后可继续使用邮箱验证码登录，也能找回账号。
+            </p>
+          </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             autoComplete="email"
-            className="h-9 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] sm:w-[220px]"
+            className="h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] sm:w-[260px]"
             disabled={phase === "code" || submitting}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="name@example.com"
@@ -99,7 +101,7 @@ export function EmailBindPanel({
           {phase === "code" ? (
             <input
               autoComplete="one-time-code"
-              className="h-9 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 font-mono text-sm tracking-[0.16em] placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] sm:w-[118px]"
+              className="h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 font-mono text-sm tracking-[0.16em] placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)] sm:w-[128px]"
               disabled={submitting}
               inputMode="numeric"
               maxLength={6}
@@ -111,7 +113,7 @@ export function EmailBindPanel({
             />
           ) : null}
           <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 text-sm font-[700] text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-[var(--accent)] px-3 text-sm font-[700] text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
             disabled={!canSubmit || submitting}
             type="submit"
           >
@@ -126,7 +128,7 @@ export function EmailBindPanel({
           </button>
           {phase === "code" ? (
             <button
-              className="h-9 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-[650] tabular-nums hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
+              className="h-10 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] tabular-nums hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
               disabled={submitting || resendCountdown > 0}
               onClick={async () => {
                 if (resendCountdown > 0) return;
@@ -154,10 +156,10 @@ export function EmailBindPanel({
       </div>
       {message ? (
         <div
-          className={`mx-auto mt-2 max-w-[980px] text-xs ${
+          className={`mt-3 rounded-[8px] px-3 py-2 text-sm ${
             message.tone === "success"
-              ? "text-[var(--success)]"
-              : "text-[var(--danger)]"
+              ? "bg-[var(--success-soft)] text-[var(--success)]"
+              : "bg-[var(--danger-soft)] text-[var(--danger)]"
           }`}
           role="status"
         >

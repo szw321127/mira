@@ -114,7 +114,7 @@ test("login panel supports account password register and login modes", () => {
 test("email binding panel requests codes and verifies the current account email", () => {
   const bindingSource = readAuthFile("email-bind-panel.tsx");
   const apiSource = readAuthFile("auth-api.ts");
-  const pageSource = readFileSync(join(authDir, "../page.tsx"), "utf8");
+  const accountPageSource = readFileSync(join(authDir, "../account/page.tsx"), "utf8");
 
   assert.match(bindingSource, /requestBindEmailCode/);
   assert.match(bindingSource, /bindEmailToAccount/);
@@ -124,8 +124,38 @@ test("email binding panel requests codes and verifies the current account email"
   assert.match(bindingSource, /EMAIL_BIND_COOLDOWN_SECONDS\s*=\s*60/);
   assert.match(bindingSource, /onUserChange/);
   assert.match(apiSource, /bindEmailToAccount/);
-  assert.match(pageSource, /EmailBindPanel/);
-  assert.match(pageSource, /user\.email === null/);
+  assert.match(accountPageSource, /EmailBindPanel/);
+  assert.match(accountPageSource, /user\.email === null/);
+  assert.match(accountPageSource, /用户信息/);
+});
+
+test("email binding is not mounted permanently in workspace pages", () => {
+  const homePageSource = readFileSync(join(authDir, "../page.tsx"), "utf8");
+  const imagePageSource = readFileSync(join(authDir, "../image-workspace/page.tsx"), "utf8");
+
+  assert.doesNotMatch(homePageSource, /EmailBindPanel/);
+  assert.doesNotMatch(imagePageSource, /EmailBindPanel/);
+  assert.match(homePageSource, /AgentWorkspaceShell/);
+  assert.match(imagePageSource, /ImageWorkspaceShell/);
+});
+
+test("workspace surfaces link to the user information page", () => {
+  const chatShellSource = readFileSync(
+    join(authDir, "../agent-workspace/workspace-shell.tsx"),
+    "utf8",
+  );
+  const imageHeaderSource = readFileSync(
+    join(authDir, "../image-workspace/components/mobile-drawers.tsx"),
+    "utf8",
+  );
+  const imageRailSource = readFileSync(
+    join(authDir, "../image-workspace/components/workspace-rail.tsx"),
+    "utf8",
+  );
+
+  assert.match(chatShellSource, /href="\/account"/);
+  assert.match(imageHeaderSource, /href="\/account"/);
+  assert.match(imageRailSource, /href="\/account"/);
 });
 
 test("email login panel hardens submit state and code controls", () => {

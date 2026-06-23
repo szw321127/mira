@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Image as ImageIcon, Menu, Plus, RefreshCcw, X } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Menu,
+  Plus,
+  RefreshCcw,
+  UserCircle,
+  X,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatThread } from "./chat-thread";
 import { Composer } from "./composer";
@@ -140,6 +147,13 @@ export function AgentWorkspaceShell({
           >
             <ImageIcon aria-hidden="true" size={17} />
           </Link>
+          <Link
+            aria-label="打开用户信息"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] transition-colors hover:bg-[var(--surface-muted)]"
+            href="/account"
+          >
+            <UserCircle aria-hidden="true" size={17} />
+          </Link>
           <IconButton
             aria-label="新对话"
             onClick={onNew}
@@ -167,6 +181,13 @@ export function AgentWorkspaceShell({
           >
             <ImageIcon aria-hidden="true" size={15} />
             图像画布
+          </Link>
+          <Link
+            className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] transition-colors hover:bg-[var(--surface-muted)]"
+            href="/account"
+          >
+            <UserCircle aria-hidden="true" size={15} />
+            账户
           </Link>
         </header>
 

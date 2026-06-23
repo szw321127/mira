@@ -2,7 +2,6 @@
 
 import { AgentWorkspaceShell } from "./agent-workspace/components";
 import { useAgentConversation } from "./agent-workspace/use-agent-conversation";
-import { EmailBindPanel } from "./auth/email-bind-panel";
 import { EmailLoginPanel } from "./auth/email-login-panel";
 import { useAuthSession } from "./auth/use-auth-session";
 import type { AuthUser } from "./auth/auth-types";
@@ -24,21 +23,14 @@ export default function Home() {
     return <EmailLoginPanel onLogin={auth.setUser} />;
   }
 
-  return <WorkspaceHome onUserChange={auth.setUser} user={auth.user} />;
+  return <WorkspaceHome user={auth.user} />;
 }
 
-function WorkspaceHome({
-  onUserChange,
-  user,
-}: {
-  onUserChange: (user: AuthUser) => void;
-  user: AuthUser;
-}) {
+function WorkspaceHome({ user }: { user: AuthUser }) {
   const workspace = useAgentConversation(user);
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[var(--background)] text-[var(--ink)]">
-      {user.email === null ? <EmailBindPanel onUserChange={onUserChange} /> : null}
       <AgentWorkspaceShell
         activeConversation={workspace.activeConversation}
         conversations={workspace.conversations}

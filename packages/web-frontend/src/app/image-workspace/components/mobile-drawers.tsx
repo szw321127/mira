@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, PanelLeft, Sparkles } from "lucide-react";
+import { ChevronLeft, PanelLeft, Sparkles, UserCircle } from "lucide-react";
 
 export function MobileWorkspaceHeader({
   onOpenInspector,
@@ -34,6 +34,13 @@ export function MobileWorkspaceHeader({
       >
         <Sparkles aria-hidden="true" size={18} />
       </button>
+      <Link
+        className="inline-flex h-11 w-11 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)]"
+        href="/account"
+      >
+        <UserCircle aria-hidden="true" size={18} />
+        <span className="sr-only">用户信息</span>
+      </Link>
       <Link
         className="inline-flex h-11 w-11 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)]"
         href="/"

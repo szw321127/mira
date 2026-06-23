@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Image as ImageIcon, Plus, Search } from "lucide-react";
+import { Image as ImageIcon, Plus, Search, UserCircle } from "lucide-react";
 import type { ImageWorkspace } from "../types";
 
 export function WorkspaceRail({
@@ -52,6 +53,15 @@ export function WorkspaceRail({
           <Plus aria-hidden="true" size={16} />
           <span className="sr-only">新建图像工作区</span>
         </button>
+      </div>
+      <div className="border-b border-[var(--border)] p-2">
+        <Link
+          className="flex h-9 items-center gap-2 rounded-[8px] px-2 text-sm font-[650] text-[var(--muted-strong)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]"
+          href="/account"
+        >
+          <UserCircle aria-hidden="true" size={16} />
+          用户信息
+        </Link>
       </div>
       <div className="border-b border-[var(--border)] p-2">
         <label className="relative block">
