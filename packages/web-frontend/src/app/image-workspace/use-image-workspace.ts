@@ -206,6 +206,8 @@ export function useImageWorkspace() {
 
   async function persistCanvas(snapshot: CanvasSnapshot) {
     if (!activeWorkspace) return;
+    if (!shouldPersistCanvasSnapshot(activeWorkspace, snapshot)) return;
+
     setError(null);
     try {
       replaceWorkspace(await saveCanvasSnapshot(activeWorkspace.id, snapshot));
@@ -458,6 +460,15 @@ export function useImageWorkspace() {
 
 function isSupportedSourceImage(file: File) {
   return file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/webp";
+}
+
+function shouldPersistCanvasSnapshot(
+  activeWorkspace: ImageWorkspace,
+  snapshot: CanvasSnapshot,
+) {
+  return !(
+    activeWorkspace.objects.length > 0 && snapshot.objects.length === 0
+  );
 }
 
 function readFileAsDataUrl(file: File) {

@@ -150,13 +150,24 @@ export class ImageWorkspacesService {
 
       await this.assertCanvasAssetsBelongToWorkspace(tx, id, snapshot);
 
-      await tx.canvasObject.deleteMany({
+      const existingObjectCount = await tx.canvasObject.count({
         where: {
           workspaceId: id
         }
       });
 
-      if (snapshot.objects.length > 0) {
+      const shouldReplaceObjects =
+        snapshot.objects.length > 0 || existingObjectCount === 0;
+
+      if (shouldReplaceObjects) {
+        await tx.canvasObject.deleteMany({
+          where: {
+            workspaceId: id
+          }
+        });
+      }
+
+      if (shouldReplaceObjects && snapshot.objects.length > 0) {
         await tx.canvasObject.createMany({
           data: snapshot.objects.map((object) => ({
             id: object.id,

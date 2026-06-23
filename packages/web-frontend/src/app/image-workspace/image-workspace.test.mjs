@@ -141,6 +141,14 @@ test("image canvas persists tldraw geometry and viewport through backend snapsho
   assert.match(persistenceSource, /onPersistCanvas\(snapshot\)/);
 });
 
+test("image workspace ignores transient empty canvas autosaves over existing objects", () => {
+  const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
+
+  assert.match(hookSource, /shouldPersistCanvasSnapshot/);
+  assert.match(hookSource, /activeWorkspace\.objects\.length\s*>\s*0/);
+  assert.match(hookSource, /snapshot\.objects\.length\s*===\s*0/);
+});
+
 test("image canvas exposes a focused Mira toolbar for common canvas actions", () => {
   const canvasSource = readImageWorkspaceFile("image-canvas.tsx");
   const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");

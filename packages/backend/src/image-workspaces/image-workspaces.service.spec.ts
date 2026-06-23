@@ -154,6 +154,11 @@ function createPrisma(workspaces: WorkspaceRow[]) {
       })
     },
     canvasObject: {
+      count: jest.fn(({ where }: Record<string, unknown>) => {
+        const typedWhere = where as { workspaceId: string };
+        const workspace = workspaces.find((row) => row.id === typedWhere.workspaceId);
+        return Promise.resolve(workspace?.objects.length ?? 0);
+      }),
       deleteMany: jest.fn(({ where }: Record<string, unknown>) => {
         const typedWhere = where as { workspaceId: string };
         const workspace = workspaces.find((row) => row.id === typedWhere.workspaceId);
@@ -463,6 +468,50 @@ describe("ImageWorkspacesService", () => {
         ]
       })
     });
+  });
+
+  it("does not clear existing canvas objects with a transient empty snapshot", async () => {
+    const prisma = createPrisma([
+      workspace("workspace-1", "user-1", "Board", "2026-06-23T08:00:00.000Z", {
+        objects: [
+          {
+            id: "image-object",
+            workspaceId: "workspace-1",
+            assetId: null,
+            type: "image",
+            x: 40,
+            y: 50,
+            width: 320,
+            height: 320,
+            rotation: 0,
+            zIndex: 0,
+            props: {},
+            createdAt: new Date("2026-06-23T08:01:00.000Z"),
+            updatedAt: new Date("2026-06-23T08:01:00.000Z")
+          }
+        ]
+      })
+    ]);
+    const service = new ImageWorkspacesService(prisma);
+
+    await expect(
+      service.updateCanvas("user-1", "workspace-1", {
+        viewport: { x: 10, y: 20, zoom: 0.75 },
+        objects: []
+      })
+    ).resolves.toEqual({
+      workspace: expect.objectContaining({
+        id: "workspace-1",
+        viewport: { x: 10, y: 20, zoom: 0.75 },
+        objects: [
+          expect.objectContaining({
+            id: "image-object",
+            type: "image"
+          })
+        ]
+      })
+    });
+    expect(prisma.canvasObject.deleteMany).not.toHaveBeenCalled();
   });
 
   it("rejects canvas objects that reference assets from another workspace", async () => {
