@@ -12,25 +12,66 @@ describe("AuthController", () => {
   let app: INestApplication;
   let server: Server;
   const requestCode = jest.fn();
+  const requestBindEmailCode = jest.fn();
   const login = jest.fn();
+  const registerWithPassword = jest.fn();
+  const loginWithPassword = jest.fn();
+  const bindEmail = jest.fn();
   const requireUser = jest.fn();
   const revokeToken = jest.fn();
 
   beforeEach(async () => {
     delete process.env.TRUST_PROXY_HEADERS;
     requestCode.mockReset();
+    requestBindEmailCode.mockReset();
     login.mockReset();
+    registerWithPassword.mockReset();
+    loginWithPassword.mockReset();
+    bindEmail.mockReset();
     requireUser.mockReset();
     revokeToken.mockReset();
 
     requestCode.mockResolvedValue({ ok: true });
+    requestBindEmailCode.mockResolvedValue({ ok: true });
     login.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com", status: "enabled" },
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: null,
+        status: "enabled"
+      },
       token: "session-token"
+    });
+    registerWithPassword.mockResolvedValue({
+      user: {
+        id: "user-1",
+        email: null,
+        username: "mirauser",
+        status: "enabled"
+      },
+      token: "session-token"
+    });
+    loginWithPassword.mockResolvedValue({
+      user: {
+        id: "user-1",
+        email: null,
+        username: "mirauser",
+        status: "enabled"
+      },
+      token: "session-token"
+    });
+    bindEmail.mockResolvedValue({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: "mirauser",
+        status: "enabled"
+      }
     });
     requireUser.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
+      username: null,
       status: "enabled"
     });
     revokeToken.mockResolvedValue(undefined);
@@ -42,7 +83,11 @@ describe("AuthController", () => {
           provide: AuthService,
           useValue: {
             requestCode,
-            login
+            requestBindEmailCode,
+            login,
+            registerWithPassword,
+            loginWithPassword,
+            bindEmail
           }
         },
         {
@@ -113,7 +158,12 @@ describe("AuthController", () => {
       .expect(200);
 
     expect(response.body).toEqual({
-      user: { id: "user-1", email: "user@example.com", status: "enabled" }
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: null,
+        status: "enabled"
+      }
     });
     expect(login).toHaveBeenCalledWith("user@example.com", "123456");
     expect(response.headers["set-cookie"]?.[0]).toContain("mira_user_session=");
@@ -132,6 +182,101 @@ describe("AuthController", () => {
     expect(login).not.toHaveBeenCalled();
   });
 
+  it("registers a password account and sets the user session cookie", async () => {
+    const response = await request(server)
+      .post("/auth/password/register")
+      .send({ username: " MiraUser ", password: "strong-pass-123" })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      user: {
+        id: "user-1",
+        email: null,
+        username: "mirauser",
+        status: "enabled"
+      }
+    });
+    expect(registerWithPassword).toHaveBeenCalledWith(
+      "mirauser",
+      "strong-pass-123"
+    );
+    expect(response.headers["set-cookie"]?.[0]).toContain("mira_user_session=");
+    expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+  });
+
+  it("logs in with a password account identifier", async () => {
+    const response = await request(server)
+      .post("/auth/password/login")
+      .send({ identifier: " MiraUser ", password: "strong-pass-123" })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      user: {
+        id: "user-1",
+        email: null,
+        username: "mirauser",
+        status: "enabled"
+      }
+    });
+    expect(loginWithPassword).toHaveBeenCalledWith(
+      "mirauser",
+      "strong-pass-123"
+    );
+    expect(response.headers["set-cookie"]?.[0]).toContain("mira_user_session=");
+  });
+
+  it("rejects invalid password auth requests", async () => {
+    await request(server)
+      .post("/auth/password/register")
+      .send({ username: "a", password: "short" })
+      .expect(400);
+
+    await request(server)
+      .post("/auth/password/login")
+      .send({ identifier: "", password: "" })
+      .expect(400);
+
+    expect(registerWithPassword).not.toHaveBeenCalled();
+    expect(loginWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("requests a bind-email code for the current user", async () => {
+    await request(server)
+      .post("/auth/email/bind/code")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({ email: " User@Example.COM " })
+      .expect(200, { ok: true });
+
+    expect(requireUser).toHaveBeenCalledWith("session-token");
+    expect(requestBindEmailCode).toHaveBeenCalledWith(
+      "user@example.com",
+      expect.any(String)
+    );
+  });
+
+  it("binds a verified email to the current session user", async () => {
+    const response = await request(server)
+      .post("/auth/email/bind")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({ email: " User@Example.COM ", code: "123456" })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: "mirauser",
+        status: "enabled"
+      }
+    });
+    expect(requireUser).toHaveBeenCalledWith("session-token");
+    expect(bindEmail).toHaveBeenCalledWith(
+      "user-1",
+      "user@example.com",
+      "123456"
+    );
+  });
+
   it("returns the current user from the session cookie", async () => {
     const response = await request(server)
       .get("/auth/session")
@@ -139,7 +284,12 @@ describe("AuthController", () => {
       .expect(200);
 
     expect(response.body).toEqual({
-      user: { id: "user-1", email: "user@example.com", status: "enabled" }
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        username: null,
+        status: "enabled"
+      }
     });
     expect(requireUser).toHaveBeenCalledWith("session-token");
   });

@@ -129,7 +129,12 @@ export class AdminService {
     const query = options.query?.trim().toLowerCase();
     const where = {
       ...(query
-        ? { email: { contains: query, mode: "insensitive" as const } }
+        ? {
+            OR: [
+              { email: { contains: query, mode: "insensitive" as const } },
+              { username: { contains: query, mode: "insensitive" as const } }
+            ]
+          }
         : {}),
       ...(options.status ? { status: options.status } : {})
     };
@@ -149,6 +154,9 @@ export class AdminService {
       users: users.map((user) => ({
         id: user.id,
         email: user.email,
+        username: user.username,
+        emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+        authMethods: readUserAuthMethods(user),
         status: user.status,
         createdAt: user.createdAt.toISOString(),
         lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
@@ -265,6 +273,9 @@ export class AdminService {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
+        emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+        authMethods: readUserAuthMethods(user),
         status: user.status,
         createdAt: user.createdAt.toISOString(),
         lastLoginAt: user.lastLoginAt?.toISOString() ?? null
@@ -304,6 +315,16 @@ export class AdminService {
       DEFAULT_SESSION_SECRET
     );
   }
+}
+
+function readUserAuthMethods(user: {
+  email: string | null;
+  passwordHash?: string | null;
+}) {
+  const methods: string[] = [];
+  if (user.email) methods.push("email");
+  if (user.passwordHash) methods.push("password");
+  return methods;
 }
 
 function isPrismaNotFoundError(error: unknown) {

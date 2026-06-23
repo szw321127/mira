@@ -116,6 +116,9 @@ describe("AdminController", () => {
         {
           id: "user-1",
           email: "a@example.com",
+          username: "mirauser",
+          emailVerifiedAt: "2026-06-01T00:00:00.000Z",
+          authMethods: ["email", "password"],
           status: "enabled",
           createdAt: "2026-06-01T00:00:00.000Z",
           lastLoginAt: "2026-06-02T00:00:00.000Z",
@@ -129,7 +132,10 @@ describe("AdminController", () => {
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          email: { contains: "a@example.com", mode: "insensitive" }
+          OR: [
+            { email: { contains: "a@example.com", mode: "insensitive" } },
+            { username: { contains: "a@example.com", mode: "insensitive" } }
+          ]
         },
         orderBy: { createdAt: "desc" },
         skip: 0,
@@ -205,7 +211,7 @@ describe("AdminController", () => {
       json: () => Promise.resolve({ id: "gpt-image-1" }),
       ok: true,
       status: 200
-    } as Response);
+    });
 
     await agent
       .post("/admin/login")
@@ -308,6 +314,9 @@ describe("AdminController", () => {
       user: {
         id: "user-1",
         email: "a@example.com",
+        username: "mirauser",
+        emailVerifiedAt: "2026-06-01T00:00:00.000Z",
+        authMethods: ["email", "password"],
         status: "disabled",
         createdAt: "2026-06-01T00:00:00.000Z",
         lastLoginAt: "2026-06-02T00:00:00.000Z"
@@ -584,6 +593,9 @@ function createPrismaStore(initialValue?: unknown): MockPrismaService {
     {
       id: "user-1",
       email: "a@example.com",
+      username: "mirauser",
+      passwordHash: "scrypt:salt:key",
+      emailVerifiedAt: new Date("2026-06-01T00:00:00.000Z"),
       status: "enabled",
       createdAt: new Date("2026-06-01T00:00:00.000Z"),
       lastLoginAt: new Date("2026-06-02T00:00:00.000Z"),

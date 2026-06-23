@@ -108,9 +108,17 @@ test("admin key management can test image provider configuration", () => {
 
 test("admin users panel manages account search filters and status actions", () => {
   const usersPanelSource = readAdminFile("admin-users-panel.tsx");
+  const typesSource = readAdminFile("admin-types.ts");
 
   assert.match(usersPanelSource, /账号管理/);
-  assert.match(usersPanelSource, /搜索邮箱/);
+  assert.match(usersPanelSource, /搜索账号或邮箱/);
+  assert.match(usersPanelSource, /账号名/);
+  assert.match(usersPanelSource, /邮箱绑定/);
+  assert.match(usersPanelSource, /登录方式/);
+  assert.match(usersPanelSource, /renderAuthMethods/);
+  assert.match(typesSource, /username:\s*string\s*\|\s*null/);
+  assert.match(typesSource, /email:\s*string\s*\|\s*null/);
+  assert.match(typesSource, /authMethods:\s*string\[\]/);
   assert.match(usersPanelSource, /全部账号/);
   assert.match(usersPanelSource, /启用账号/);
   assert.match(usersPanelSource, /禁用账号/);

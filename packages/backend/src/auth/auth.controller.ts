@@ -16,7 +16,13 @@ import {
   setUserSessionCookie
 } from "./auth-session.js";
 import { AuthService } from "./auth.service.js";
-import { parseCodeRequest, parseLoginRequest } from "./auth.types.js";
+import {
+  parseBindEmailRequest,
+  parseCodeRequest,
+  parseLoginRequest,
+  parsePasswordLoginRequest,
+  parsePasswordRegisterRequest
+} from "./auth.types.js";
 import { UserSessionService } from "./user-session.service.js";
 
 @Controller("auth")
@@ -48,6 +54,69 @@ export class AuthController {
     const result = await this.authService.login(parsed.email, parsed.code);
     setUserSessionCookie(response, result.token);
     return response.json({ user: result.user });
+  }
+
+  @Post("password/register")
+  @HttpCode(HttpStatus.OK)
+  async passwordRegister(@Body() body: unknown, @Res() response: Response) {
+    const parsed = parsePasswordRegisterRequest(body);
+    if (!parsed) {
+      throw new BadRequestException("请输入 3-32 位账号名和至少 8 位密码");
+    }
+
+    const result = await this.authService.registerWithPassword(
+      parsed.username,
+      parsed.password
+    );
+    setUserSessionCookie(response, result.token);
+    return response.json({ user: result.user });
+  }
+
+  @Post("password/login")
+  @HttpCode(HttpStatus.OK)
+  async passwordLogin(@Body() body: unknown, @Res() response: Response) {
+    const parsed = parsePasswordLoginRequest(body);
+    if (!parsed) {
+      throw new BadRequestException("请输入账号和密码");
+    }
+
+    const result = await this.authService.loginWithPassword(
+      parsed.identifier,
+      parsed.password
+    );
+    setUserSessionCookie(response, result.token);
+    return response.json({ user: result.user });
+  }
+
+  @Post("email/bind/code")
+  @HttpCode(HttpStatus.OK)
+  async requestBindEmailCode(@Req() request: Request, @Body() body: unknown) {
+    await this.sessions.requireUser(
+      readUserSessionToken(request.headers.cookie)
+    );
+    const parsed = parseCodeRequest(body);
+    if (!parsed) {
+      throw new BadRequestException("请输入有效邮箱");
+    }
+
+    return this.authService.requestBindEmailCode(
+      parsed.email,
+      readRequestIp(request) ?? undefined
+    );
+  }
+
+  @Post("email/bind")
+  @HttpCode(HttpStatus.OK)
+  async bindEmail(@Req() request: Request, @Body() body: unknown) {
+    const user = await this.sessions.requireUser(
+      readUserSessionToken(request.headers.cookie)
+    );
+    const parsed = parseBindEmailRequest(body);
+    if (!parsed) {
+      throw new BadRequestException("请输入有效邮箱和 6 位验证码");
+    }
+
+    return this.authService.bindEmail(user.id, parsed.email, parsed.code);
   }
 
   @Post("logout")

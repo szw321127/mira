@@ -13,7 +13,10 @@ export type AdminUserStatus = "enabled" | "disabled";
 
 export type AdminUser = {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
+  emailVerifiedAt: string | null;
+  authMethods: string[];
   status: AdminUserStatus;
   createdAt: string;
   lastLoginAt: string | null;

@@ -81,7 +81,7 @@ export function ImageWorkspaceShell({
   }
 
   return (
-    <main className="grid h-dvh bg-[var(--background)] text-[var(--ink)] md:grid-cols-[260px_minmax(0,1fr)_320px]">
+    <main className="grid h-full min-h-0 bg-[var(--background)] text-[var(--ink)] md:grid-cols-[260px_minmax(0,1fr)_320px]">
       <MobileWorkspaceHeader
         onOpenInspector={() => setMobileInspectorOpen(true)}
         onOpenWorkspace={() => setMobilePanelOpen(true)}

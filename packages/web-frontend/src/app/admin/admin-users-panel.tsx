@@ -138,7 +138,7 @@ export function AdminUsersPanel({
               账号管理
             </div>
             <p className="mt-1 text-xs text-[var(--muted-strong)]">
-              查看邮箱登录账号，按状态筛选，并控制账号是否可继续使用 Mira。
+              查看账号和邮箱绑定状态，按状态筛选，并控制账号是否可继续使用 Mira。
             </p>
           </div>
         ) : null}
@@ -157,7 +157,7 @@ export function AdminUsersPanel({
           <input
             className={inputClass}
             onChange={(event) => setQueryDraft(event.target.value)}
-            placeholder="搜索邮箱"
+            placeholder="搜索账号或邮箱"
             value={queryDraft}
           />
         </form>
@@ -190,7 +190,10 @@ export function AdminUsersPanel({
           <table className="w-full border-collapse text-left text-sm">
             <thead className="bg-[var(--surface-muted)] text-xs text-[var(--muted-strong)]">
               <tr>
+                <th className="px-3 py-2 font-[650]">账号名</th>
                 <th className="px-3 py-2 font-[650]">邮箱</th>
+                <th className="px-3 py-2 font-[650]">邮箱绑定</th>
+                <th className="px-3 py-2 font-[650]">登录方式</th>
                 <th className="px-3 py-2 font-[650]">状态</th>
                 <th className="px-3 py-2 font-[650]">对话</th>
                 <th className="px-3 py-2 font-[650]">最近登录</th>
@@ -200,7 +203,16 @@ export function AdminUsersPanel({
             <tbody className="divide-y divide-[var(--border)]">
               {data.users.map((user) => (
                 <tr className="bg-[var(--surface)]" key={user.id}>
-                  <td className="px-3 py-3 font-[650]">{user.email}</td>
+                  <td className="px-3 py-3 font-[650]">
+                    {user.username ?? "未设置"}
+                  </td>
+                  <td className="px-3 py-3 font-[650]">
+                    {user.email ?? "未绑定"}
+                  </td>
+                  <td className="px-3 py-3 text-[var(--muted-strong)]">
+                    {user.emailVerifiedAt ? "已验证" : "未绑定"}
+                  </td>
+                  <td className="px-3 py-3">{renderAuthMethods(user.authMethods)}</td>
                   <td className="px-3 py-3">{renderStatus(user.status)}</td>
                   <td className="px-3 py-3 text-[var(--muted-strong)]">
                     {user.conversationCount ?? 0}
@@ -226,8 +238,14 @@ export function AdminUsersPanel({
             <div className="bg-[var(--surface)] p-3" key={user.id}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-[700]">{user.email}</div>
+                  <div className="truncate text-sm font-[700]">
+                    {user.username ?? user.email ?? "未设置账号名"}
+                  </div>
                   <div className="mt-1 text-xs text-[var(--muted-strong)]">
+                    邮箱 {user.email ?? "未绑定"} · 登录方式{" "}
+                    {user.authMethods.length > 0
+                      ? user.authMethods.map(formatAuthMethod).join(" / ")
+                      : "未配置"} ·{" "}
                     {user.conversationCount ?? 0} 个对话 · 最近登录{" "}
                     {formatDate(user.lastLoginAt)}
                   </div>
@@ -323,6 +341,31 @@ function StatusActionButton({
       {enabling ? "启用账号" : "禁用账号"}
     </button>
   );
+}
+
+function renderAuthMethods(methods: string[]) {
+  if (methods.length === 0) {
+    return <span className="text-xs text-[var(--muted)]">未配置</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {methods.map((method) => (
+        <span
+          className="inline-flex h-7 items-center rounded-full bg-[var(--surface-muted)] px-2.5 text-xs font-[650] text-[var(--muted-strong)]"
+          key={method}
+        >
+          {formatAuthMethod(method)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function formatAuthMethod(method: string) {
+  if (method === "email") return "邮箱";
+  if (method === "password") return "密码";
+  return method;
 }
 
 function renderStatus(status: AdminUserStatus) {

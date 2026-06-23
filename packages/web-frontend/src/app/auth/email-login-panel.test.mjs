@@ -18,15 +18,36 @@ test("auth api uses same-origin email code endpoints with backend fallback messa
   assert.match(apiSource, /fetch\("\/api\/auth\/session"/);
   assert.match(apiSource, /fetch\("\/api\/auth\/code"/);
   assert.match(apiSource, /fetch\("\/api\/auth\/login"/);
+  assert.match(apiSource, /fetch\("\/api\/auth\/password\/register"/);
+  assert.match(apiSource, /fetch\("\/api\/auth\/password\/login"/);
+  assert.match(apiSource, /fetch\("\/api\/auth\/email\/bind\/code"/);
+  assert.match(apiSource, /fetch\("\/api\/auth\/email\/bind"/);
   assert.match(apiSource, /fetch\("\/api\/auth\/logout"/);
   assert.match(apiSource, /验证码发送失败/);
+  assert.match(apiSource, /注册失败/);
   assert.match(apiSource, /登录失败/);
+  assert.match(apiSource, /邮箱绑定失败/);
   assert.match(apiSource, /退出登录失败/);
   assert.match(
     apiSource,
     /logoutAuthSession[\s\S]*if \(!response\.ok\)[\s\S]*readBackendMessage/,
   );
   assert.match(apiSource, /response\.json\(\)\.catch/);
+});
+
+test("auth proxy routes include password auth and email binding endpoints", () => {
+  const routes = [
+    "../api/auth/password/register/route.ts",
+    "../api/auth/password/login/route.ts",
+    "../api/auth/email/bind/code/route.ts",
+    "../api/auth/email/bind/route.ts",
+  ];
+
+  for (const route of routes) {
+    const routeSource = readFileSync(join(authDir, route), "utf8");
+    assert.match(routeSource, /proxyBackendRequest/);
+    assert.match(routeSource, /export async function POST/);
+  }
 });
 
 test("auth session check has a browser-side timeout before falling back to guest", () => {
@@ -70,6 +91,41 @@ test("email login panel requests and submits one-time email codes", () => {
   assert.match(panelSource, /maxLength=\{6\}/);
   assert.match(panelSource, /replace\(\/\\D\+\/g/);
   assert.match(panelSource, /Loader2/);
+});
+
+test("login panel supports account password register and login modes", () => {
+  const panelSource = readAuthFile("email-login-panel.tsx");
+  const typesSource = readAuthFile("auth-types.ts");
+
+  assert.match(panelSource, /registerWithPassword/);
+  assert.match(panelSource, /loginWithPassword/);
+  assert.match(panelSource, /authMode/);
+  assert.match(panelSource, /账号密码/);
+  assert.match(panelSource, /注册账号/);
+  assert.match(panelSource, /登录账号/);
+  assert.match(panelSource, /autoComplete="username"/);
+  assert.match(panelSource, /autoComplete=\{passwordMode === "register"/);
+  assert.match(panelSource, /type=\{showPassword \? "text" : "password"\}/);
+  assert.match(panelSource, /Eye/);
+  assert.match(typesSource, /username:\s*string\s*\|\s*null/);
+  assert.match(typesSource, /email:\s*string\s*\|\s*null/);
+});
+
+test("email binding panel requests codes and verifies the current account email", () => {
+  const bindingSource = readAuthFile("email-bind-panel.tsx");
+  const apiSource = readAuthFile("auth-api.ts");
+  const pageSource = readFileSync(join(authDir, "../page.tsx"), "utf8");
+
+  assert.match(bindingSource, /requestBindEmailCode/);
+  assert.match(bindingSource, /bindEmailToAccount/);
+  assert.match(bindingSource, /绑定邮箱/);
+  assert.match(bindingSource, /autoComplete="email"/);
+  assert.match(bindingSource, /autoComplete="one-time-code"/);
+  assert.match(bindingSource, /EMAIL_BIND_COOLDOWN_SECONDS\s*=\s*60/);
+  assert.match(bindingSource, /onUserChange/);
+  assert.match(apiSource, /bindEmailToAccount/);
+  assert.match(pageSource, /EmailBindPanel/);
+  assert.match(pageSource, /user\.email === null/);
 });
 
 test("email login panel hardens submit state and code controls", () => {

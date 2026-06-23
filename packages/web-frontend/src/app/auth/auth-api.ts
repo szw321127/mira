@@ -72,6 +72,88 @@ export async function loginWithEmailCode(
   return session;
 }
 
+export async function registerWithPassword(
+  username: string,
+  password: string,
+): Promise<AuthSession> {
+  const response = await fetch("/api/auth/password/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    const data = await readJson<BackendMessage>(response);
+    throw new Error(readBackendMessage(data, "注册失败"));
+  }
+
+  const session = await readJson<AuthSession>(response);
+  if (!session) {
+    throw new Error("注册失败");
+  }
+
+  return session;
+}
+
+export async function loginWithPassword(
+  identifier: string,
+  password: string,
+): Promise<AuthSession> {
+  const response = await fetch("/api/auth/password/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier, password }),
+  });
+
+  if (!response.ok) {
+    const data = await readJson<BackendMessage>(response);
+    throw new Error(readBackendMessage(data, "登录失败"));
+  }
+
+  const session = await readJson<AuthSession>(response);
+  if (!session) {
+    throw new Error("登录失败");
+  }
+
+  return session;
+}
+
+export async function requestBindEmailCode(email: string): Promise<void> {
+  const response = await fetch("/api/auth/email/bind/code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const data = await readJson<BackendMessage>(response);
+    throw new Error(readBackendMessage(data, "验证码发送失败"));
+  }
+}
+
+export async function bindEmailToAccount(
+  email: string,
+  code: string,
+): Promise<AuthSession> {
+  const response = await fetch("/api/auth/email/bind", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
+
+  if (!response.ok) {
+    const data = await readJson<BackendMessage>(response);
+    throw new Error(readBackendMessage(data, "邮箱绑定失败"));
+  }
+
+  const session = await readJson<AuthSession>(response);
+  if (!session) {
+    throw new Error("邮箱绑定失败");
+  }
+
+  return session;
+}
+
 export async function logoutAuthSession(): Promise<void> {
   const response = await fetch("/api/auth/logout", {
     method: "POST",

@@ -33,10 +33,13 @@ enum MessageStatus {
 
 model User {
   id            String         @id @default(cuid())
-  email         String         @unique
+  email         String?        @unique
+  username      String?        @unique
+  passwordHash  String?
   status        UserStatus     @default(enabled)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  emailVerifiedAt DateTime?
   lastLoginAt   DateTime?
   sessions      UserSession[]
   conversations Conversation[]

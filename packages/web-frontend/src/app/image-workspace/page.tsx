@@ -1,8 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { EmailBindPanel } from "../auth/email-bind-panel";
 import { EmailLoginPanel } from "../auth/email-login-panel";
 import { useAuthSession } from "../auth/use-auth-session";
+import type { AuthUser } from "../auth/auth-types";
 import { useImageWorkspace } from "./use-image-workspace";
 
 const ImageWorkspaceShell = dynamic(
@@ -36,34 +38,43 @@ export default function ImageWorkspacePage() {
     return <EmailLoginPanel onLogin={auth.setUser} />;
   }
 
-  return <ImageWorkspaceHome />;
+  return <ImageWorkspaceHome onUserChange={auth.setUser} user={auth.user} />;
 }
 
-function ImageWorkspaceHome() {
+function ImageWorkspaceHome({
+  onUserChange,
+  user,
+}: {
+  onUserChange: (user: AuthUser) => void;
+  user: AuthUser;
+}) {
   const workspace = useImageWorkspace();
 
   return (
-    <ImageWorkspaceShell
-      activeWorkspace={workspace.activeWorkspace}
-      creatingTask={workspace.creatingTask}
-      error={workspace.error}
-      loading={workspace.loading}
-      onCreate={workspace.createWorkspace}
-      onCancelTask={workspace.cancelTask}
-      onDeleteAsset={workspace.removeImageAsset}
-      onDownloadAsset={workspace.downloadAsset}
-      onEditAsset={workspace.editImageAsset}
-      onGenerate={workspace.generateImage}
-      onPersistCanvas={workspace.persistCanvas}
-      onRemoveBackgroundAsset={workspace.createImageBackgroundRemoval}
-      onRevertAsset={workspace.revertAssetVersion}
-      onRetryTask={workspace.retryTask}
-      onSelect={workspace.selectWorkspace}
-      onUpscaleAsset={workspace.createImageUpscale}
-      onUploadMask={workspace.uploadAssetMask}
-      onUploadSourceAsset={workspace.uploadSourceAsset}
-      onVariationAsset={workspace.createImageVariation}
-      workspaces={workspace.workspaces}
-    />
+    <main className="flex h-dvh flex-col overflow-hidden bg-[var(--background)] text-[var(--ink)]">
+      {user.email === null ? <EmailBindPanel onUserChange={onUserChange} /> : null}
+      <ImageWorkspaceShell
+        activeWorkspace={workspace.activeWorkspace}
+        creatingTask={workspace.creatingTask}
+        error={workspace.error}
+        loading={workspace.loading}
+        onCreate={workspace.createWorkspace}
+        onCancelTask={workspace.cancelTask}
+        onDeleteAsset={workspace.removeImageAsset}
+        onDownloadAsset={workspace.downloadAsset}
+        onEditAsset={workspace.editImageAsset}
+        onGenerate={workspace.generateImage}
+        onPersistCanvas={workspace.persistCanvas}
+        onRemoveBackgroundAsset={workspace.createImageBackgroundRemoval}
+        onRevertAsset={workspace.revertAssetVersion}
+        onRetryTask={workspace.retryTask}
+        onSelect={workspace.selectWorkspace}
+        onUpscaleAsset={workspace.createImageUpscale}
+        onUploadMask={workspace.uploadAssetMask}
+        onUploadSourceAsset={workspace.uploadSourceAsset}
+        onVariationAsset={workspace.createImageVariation}
+        workspaces={workspace.workspaces}
+      />
+    </main>
   );
 }

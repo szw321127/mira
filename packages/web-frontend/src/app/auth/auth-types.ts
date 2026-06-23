@@ -1,6 +1,7 @@
 export type AuthUser = {
   id: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   status: "enabled" | "disabled";
 };
 

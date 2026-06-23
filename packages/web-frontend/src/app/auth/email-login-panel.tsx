@@ -1,26 +1,43 @@
 "use client";
 
-import { ArrowRight, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { loginWithEmailCode, requestEmailCode } from "./auth-api";
+import {
+  loginWithEmailCode,
+  loginWithPassword,
+  registerWithPassword,
+  requestEmailCode,
+} from "./auth-api";
 import type { AuthUser } from "./auth-types";
 
+type AuthMode = "email" | "password";
 type Phase = "email" | "code";
+type PasswordMode = "login" | "register";
 type Message = { tone: "success" | "error"; text: string } | null;
 
 const EMAIL_CODE_COOLDOWN_SECONDS = 60;
 
 export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void }) {
+  const [authMode, setAuthMode] = useState<AuthMode>("email");
   const [phase, setPhase] = useState<Phase>("email");
+  const [passwordMode, setPasswordMode] = useState<PasswordMode>("login");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
   const mountedRef = useRef(true);
   const submittingRef = useRef(false);
-  const canSubmit = phase === "email" ? email.trim().length > 3 : code.length === 6;
+  const canSubmit =
+    authMode === "email"
+      ? phase === "email"
+        ? email.trim().length > 3
+        : code.length === 6
+      : username.trim().length >= 3 && password.length >= 8;
 
   useEffect(() => {
     return () => {
@@ -49,7 +66,7 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
     try {
       const normalizedEmail = email.trim();
 
-      if (phase === "email") {
+      if (authMode === "email" && phase === "email") {
         await requestEmailCode(normalizedEmail);
         if (!mountedRef.current) return;
         setPhase("code");
@@ -58,9 +75,20 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
         return;
       }
 
-      const session = await loginWithEmailCode(normalizedEmail, code);
+      const session =
+        authMode === "email"
+          ? await loginWithEmailCode(normalizedEmail, code)
+          : passwordMode === "register"
+            ? await registerWithPassword(username.trim(), password)
+            : await loginWithPassword(username.trim(), password);
       if (!mountedRef.current) return;
-      setMessage({ tone: "success", text: "登录成功，正在进入工作区。" });
+      setMessage({
+        tone: "success",
+        text:
+          authMode === "password" && passwordMode === "register"
+            ? "注册成功，正在进入工作区。"
+            : "登录成功，正在进入工作区。",
+      });
       onLogin(session.user);
     } catch (error) {
       if (!mountedRef.current) return;
@@ -132,8 +160,12 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
               />
               <PreviewRow
                 label="账户"
-                title={email.trim() || "you@example.com"}
-                value="邮箱验证码"
+                title={
+                  authMode === "password"
+                    ? username.trim() || "mira_user"
+                    : email.trim() || "you@example.com"
+                }
+                value={authMode === "password" ? "账号密码" : "邮箱验证码"}
               />
             </div>
           </section>
@@ -157,41 +189,146 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
               <div className="min-w-0">
                 <h1 className="text-xl leading-tight font-[720]">继续进入 Mira</h1>
                 <p className="mt-1 text-sm leading-5 text-[var(--muted)]">
-                  使用邮箱验证码登录或注册，回到你的工作区。
+                  使用邮箱验证码或账号密码，回到你的工作区。
                 </p>
               </div>
             </div>
 
-            <label className="mt-5 block text-sm font-[650]">
-              邮箱
-              <input
-                autoComplete="email"
-                className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
-                disabled={phase === "code" || submitting}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                type="email"
-                value={email}
-              />
-            </label>
+            <div className="mt-5 grid grid-cols-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-1">
+              <button
+                className={`h-9 rounded-[7px] text-sm font-[650] transition-colors ${
+                  authMode === "email"
+                    ? "bg-[var(--surface)] text-[var(--ink)]"
+                    : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                }`}
+                disabled={submitting}
+                onClick={() => {
+                  setAuthMode("email");
+                  setMessage(null);
+                }}
+                type="button"
+              >
+                邮箱验证码
+              </button>
+              <button
+                className={`h-9 rounded-[7px] text-sm font-[650] transition-colors ${
+                  authMode === "password"
+                    ? "bg-[var(--surface)] text-[var(--ink)]"
+                    : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                }`}
+                disabled={submitting}
+                onClick={() => {
+                  setAuthMode("password");
+                  setMessage(null);
+                }}
+                type="button"
+              >
+                账号密码
+              </button>
+            </div>
 
-            {phase === "code" ? (
-              <label className="mt-3 block text-sm font-[650]">
-                验证码
-                <input
-                  autoComplete="one-time-code"
-                  className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 font-mono text-sm tracking-[0.16em] transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
-                  disabled={submitting}
-                  inputMode="numeric"
-                  maxLength={6}
-                  onChange={(event) =>
-                    setCode(event.target.value.replace(/\D+/g, "").slice(0, 6))
-                  }
-                  placeholder="000000"
-                  value={code}
-                />
-              </label>
-            ) : null}
+            {authMode === "email" ? (
+              <>
+                <label className="mt-4 block text-sm font-[650]">
+                  邮箱
+                  <input
+                    autoComplete="email"
+                    className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
+                    disabled={phase === "code" || submitting}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@example.com"
+                    type="email"
+                    value={email}
+                  />
+                </label>
+
+                {phase === "code" ? (
+                  <label className="mt-3 block text-sm font-[650]">
+                    验证码
+                    <input
+                      autoComplete="one-time-code"
+                      className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 font-mono text-sm tracking-[0.16em] transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
+                      disabled={submitting}
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(event) =>
+                        setCode(event.target.value.replace(/\D+/g, "").slice(0, 6))
+                      }
+                      placeholder="000000"
+                      value={code}
+                    />
+                  </label>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="mt-4 inline-flex overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)]">
+                  <button
+                    className={`h-9 px-3 text-sm font-[650] transition-colors ${
+                      passwordMode === "login"
+                        ? "bg-[var(--accent-subtle)] text-[var(--accent-strong)]"
+                        : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                    disabled={submitting}
+                    onClick={() => setPasswordMode("login")}
+                    type="button"
+                  >
+                    登录账号
+                  </button>
+                  <button
+                    className={`h-9 border-l border-[var(--border)] px-3 text-sm font-[650] transition-colors ${
+                      passwordMode === "register"
+                        ? "bg-[var(--accent-subtle)] text-[var(--accent-strong)]"
+                        : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                    disabled={submitting}
+                    onClick={() => setPasswordMode("register")}
+                    type="button"
+                  >
+                    注册账号
+                  </button>
+                </div>
+                <label className="mt-3 block text-sm font-[650]">
+                  {passwordMode === "register" ? "账号名" : "账号名或邮箱"}
+                  <input
+                    autoComplete="username"
+                    className="mt-2 h-10 w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm transition-colors placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none disabled:text-[var(--muted)]"
+                    disabled={submitting}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder={
+                      passwordMode === "register" ? "mira_user" : "mira_user 或 name@example.com"
+                    }
+                    value={username}
+                  />
+                </label>
+                <label className="mt-3 block text-sm font-[650]">
+                  密码
+                  <span className="mt-2 grid h-10 grid-cols-[minmax(0,1fr)_40px] rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] transition-colors focus-within:border-[var(--accent)]">
+                    <input
+                      autoComplete={passwordMode === "register" ? "new-password" : "current-password"}
+                      className="min-w-0 border-0 bg-transparent px-3 text-sm outline-0 placeholder:text-[var(--muted-strong)] disabled:text-[var(--muted)]"
+                      disabled={submitting}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="至少 8 位"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                    />
+                    <button
+                      aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                      className="inline-flex h-full items-center justify-center text-[var(--muted)] hover:text-[var(--ink)]"
+                      onClick={() => setShowPassword((value) => !value)}
+                      type="button"
+                    >
+                      {showPassword ? (
+                        <EyeOff aria-hidden="true" size={16} />
+                      ) : (
+                        <Eye aria-hidden="true" size={16} />
+                      )}
+                    </button>
+                  </span>
+                </label>
+              </>
+            )}
 
             {message ? (
               <div
@@ -214,14 +351,22 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
               >
                 {submitting ? (
                   <Loader2 aria-hidden="true" className="animate-spin" size={16} />
+                ) : authMode === "password" ? (
+                  <LockKeyhole aria-hidden="true" size={16} />
                 ) : phase === "email" ? (
                   <Mail aria-hidden="true" size={16} />
                 ) : (
                   <ArrowRight aria-hidden="true" size={16} />
                 )}
-                {phase === "email" ? "发送验证码" : "登录"}
+                {authMode === "password"
+                  ? passwordMode === "register"
+                    ? "注册账号"
+                    : "登录账号"
+                  : phase === "email"
+                    ? "发送验证码"
+                    : "登录"}
               </button>
-              {phase === "code" ? (
+              {authMode === "email" && phase === "code" ? (
                 <>
                   <button
                     className="inline-flex h-10 min-w-[108px] items-center justify-center rounded-[9px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[650] tabular-nums hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-55"
@@ -254,7 +399,11 @@ export function EmailLoginPanel({ onLogin }: { onLogin: (user: AuthUser) => void
 
             <div className="mt-4 flex items-center gap-2 text-xs leading-5 text-[var(--muted)]">
               <ShieldCheck aria-hidden="true" className="shrink-0" size={15} />
-              <span>验证码会发送到你的邮箱，当前会话由 httpOnly Cookie 保护。</span>
+              <span>
+                {authMode === "email"
+                  ? "验证码会发送到你的邮箱，当前会话由 httpOnly Cookie 保护。"
+                  : "密码只会发送到 Mira 后端验证，当前会话由 httpOnly Cookie 保护。"}
+              </span>
             </div>
           </form>
         </div>
