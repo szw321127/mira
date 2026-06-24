@@ -65,6 +65,32 @@ function createFetch(json: unknown, ok = true) {
   return { calls, fetchMock };
 }
 
+function createFetchSequence(
+  responses: Array<{
+    body: Buffer | string;
+    contentType?: string;
+    ok?: boolean;
+    status?: number;
+  }>
+) {
+  const calls: FetchCall[] = [];
+  const fetchMock = jest.fn((url: string | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    const response = responses.shift();
+    if (!response) throw new Error("Unexpected fetch call");
+    return Promise.resolve(
+      new Response(response.body, {
+        status: response.status ?? (response.ok === false ? 400 : 200),
+        headers: {
+          "content-type": response.contentType ?? "application/json",
+          "x-request-id": "req_img_1"
+        }
+      })
+    );
+  });
+  return { calls, fetchMock };
+}
+
 function readJsonRequestBody(call: FetchCall | undefined): unknown {
   const body = call?.init?.body;
   if (typeof body !== "string") {
@@ -190,6 +216,59 @@ describe("OpenAIImageProviderService", () => {
     expect(calls[0]?.url).toBe(
       "https://image-gateway.example/v1/images/generations"
     );
+  });
+
+  it("normalizes OpenAI-compatible image URL responses into image bytes", async () => {
+    const { calls, fetchMock } = createFetchSequence([
+      {
+        body: JSON.stringify(
+          responseJson(undefined, {
+            data: [{ url: "https://image-gateway.example/generated.png" }]
+          })
+        )
+      },
+      {
+        body: Buffer.from("downloaded-image-bytes"),
+        contentType: "image/png"
+      }
+    ]);
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(
+        imageConfig({
+          openaiBaseURL: "https://image-gateway.example/v1",
+          openaiModel: "gpt-image-2"
+        })
+      ),
+      createStorage(),
+      { fetch: fetchMock }
+    );
+
+    await expect(
+      service.generate({
+        prompt: "make a launch cover",
+        size: "1024x1024",
+        quality: "auto",
+        background: "auto"
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        bytes: Buffer.from("downloaded-image-bytes"),
+        mimeType: "image/png",
+        metadata: expect.objectContaining({
+          model: "gpt-image-2"
+        })
+      })
+    );
+
+    expect(calls[0]?.url).toBe("https://image-gateway.example/v1/images/generations");
+    expect(readJsonRequestBody(calls[0])).toEqual(
+      expect.objectContaining({
+        model: "gpt-image-2",
+        output_format: "png",
+        response_format: "b64_json"
+      })
+    );
+    expect(calls[1]?.url).toBe("https://image-gateway.example/generated.png");
   });
 
   it("leaves estimated image cost null for unrecognized OpenAI-compatible models", async () => {

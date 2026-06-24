@@ -33,6 +33,12 @@ type LeaferEditor = LeaferEditorBase & {
   target?: IUI | IUI[];
 };
 
+type LeaferAppWithOverlay = IApp & {
+  sky: {
+    add: (target: IUI) => void;
+  };
+};
+
 type ControllerOptions = {
   container: HTMLDivElement;
   events: CanvasControllerEvents;
@@ -78,12 +84,12 @@ async function createLoadedLeaferCanvasController({
     height: Math.max(1, container.clientHeight),
     view: container,
     width: Math.max(1, container.clientWidth),
-  }) as IApp;
+  }) as LeaferAppWithOverlay;
   const imageLayer = new Group({ x: 0, y: 0 }) as IGroup;
   const editor = new Editor() as LeaferEditor;
 
   app.add(imageLayer);
-  app.add(editor);
+  app.sky.add(editor);
 
   const resizeObserver = new ResizeObserver(() => {
     safeCall(() => {

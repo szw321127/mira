@@ -31,6 +31,16 @@ type OpenAIImageFetch = (
   init?: RequestInit
 ) => Promise<Response>;
 
+type OpenAIImageResponseBody = {
+  background?: unknown;
+  created?: unknown;
+  data?: unknown;
+  output_format?: unknown;
+  quality?: unknown;
+  size?: unknown;
+  usage?: unknown;
+};
+
 type ImageTokenUsage = {
   imageInputTokens: number | null;
   inputTokens: number | null;
@@ -142,7 +152,7 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
         ...(args.config.openaiBaseURL.trim()
           ? { baseURL: args.config.openaiBaseURL.trim() }
           : {}),
-        fetch: this.fetcher
+        fetch: this.createCompatibleImageFetch(Boolean(args.config.openaiBaseURL.trim()))
       });
       return await generateImage({
         model: openai.image(args.config.openaiModel),
@@ -158,6 +168,14 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
         imageProviderFailureMessage(summary)
       );
     }
+  }
+
+  private createCompatibleImageFetch(requestBase64Response: boolean): OpenAIImageFetch {
+    return async (input, init) => {
+      const nextInit = normalizeImageRequest(input, init, requestBase64Response);
+      const response = await this.fetcher(input, nextInit);
+      return normalizeImageResponse(input, response, this.fetcher);
+    };
   }
 
   private toProviderResult(
@@ -333,6 +351,136 @@ function firstResponseRequestId(value: GenerateImageResult): string | null {
     }
   }
   return null;
+}
+
+function normalizeImageRequest(
+  input: string | URL | Request,
+  init: RequestInit | undefined,
+  requestBase64Response: boolean
+): RequestInit | undefined {
+  if (
+    !requestBase64Response ||
+    !isImageEndpoint(input) ||
+    typeof init?.body !== "string"
+  ) {
+    return init;
+  }
+
+  const body = parseJsonObject(init.body);
+  if (!body) return init;
+
+  return {
+    ...init,
+    body: JSON.stringify({
+      ...body,
+      response_format: "b64_json"
+    })
+  };
+}
+
+async function normalizeImageResponse(
+  input: string | URL | Request,
+  response: Response,
+  fetcher: OpenAIImageFetch
+): Promise<Response> {
+  if (!response.ok || !isImageEndpoint(input)) return response;
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.toLowerCase().startsWith("image/")) {
+    return imageBytesToOpenAIResponse(response, await response.arrayBuffer(), contentType);
+  }
+
+  const text = await response.text();
+  const body = parseJsonObject(text);
+  if (!body) return cloneTextResponse(response, text);
+
+  const normalized = await normalizeImageResponseBody(body, fetcher);
+  if (!normalized) return cloneTextResponse(response, text);
+
+  return jsonResponse(response, normalized);
+}
+
+async function normalizeImageResponseBody(
+  body: Record<string, unknown>,
+  fetcher: OpenAIImageFetch
+): Promise<OpenAIImageResponseBody | null> {
+  if (!Array.isArray(body.data)) return null;
+
+  const data = await Promise.all(
+    body.data.map(async (item) => {
+      if (!isRecord(item)) return item;
+      if (typeof item.b64_json === "string" && item.b64_json.trim()) {
+        return item;
+      }
+      if (typeof item.url !== "string" || !item.url.trim()) return item;
+
+      const downloaded = await fetcher(item.url);
+      if (!downloaded.ok) return item;
+      const mimeType = downloaded.headers.get("content-type") ?? "image/png";
+      const bytes = Buffer.from(await downloaded.arrayBuffer());
+      return {
+        ...item,
+        b64_json: bytes.toString("base64"),
+        mime_type: mimeType
+      };
+    })
+  );
+
+  return {
+    ...body,
+    data
+  };
+}
+
+function imageBytesToOpenAIResponse(
+  response: Response,
+  bytes: ArrayBuffer,
+  contentType: string
+): Response {
+  return jsonResponse(response, {
+    data: [
+      {
+        b64_json: Buffer.from(bytes).toString("base64"),
+        mime_type: contentType
+      }
+    ]
+  });
+}
+
+function jsonResponse(response: Response, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: normalizeResponseHeaders(response.headers, "application/json")
+  });
+}
+
+function cloneTextResponse(response: Response, text: string): Response {
+  return new Response(text, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  });
+}
+
+function normalizeResponseHeaders(headers: Headers, contentType: string): Headers {
+  const nextHeaders = new Headers(headers);
+  nextHeaders.set("content-type", contentType);
+  return nextHeaders;
+}
+
+function isImageEndpoint(input: string | URL | Request): boolean {
+  const url = input instanceof Request ? input.url : String(input);
+  return url.includes("/images/generations") || url.includes("/images/edits");
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
