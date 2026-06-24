@@ -5,8 +5,6 @@ import type {
   CanvasControllerEvents,
   CanvasTool,
   LocalExpandDirection,
-  LocalExpandExportInput,
-  LocalExpandMode,
   LocalExpandOverlayState,
   LocalExpandPadding,
   LocalEditMaskExportInput,
