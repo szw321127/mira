@@ -34,6 +34,7 @@ type LeaferEditor = {
 
 type LeaferAppWithEditor = IApp & {
   editor: LeaferEditor;
+  tree: IGroup;
 };
 
 type ControllerOptions = {
@@ -86,7 +87,7 @@ async function createLoadedLeaferCanvasController({
   const imageLayer = new Group({ x: 0, y: 0 }) as IGroup;
   const editor = app.editor as LeaferEditor;
 
-  app.add(imageLayer);
+  app.tree.add(imageLayer);
 
   const resizeObserver = new ResizeObserver(() => {
     safeCall(() => {

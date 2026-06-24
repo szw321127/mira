@@ -112,10 +112,13 @@ test("image canvas lets Leafer create the editor layer", () => {
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
 
   assert.match(adapterSource, /type\s+LeaferAppWithEditor/);
+  assert.match(adapterSource, /tree:\s*IGroup/);
   assert.match(adapterSource, /editor:\s*\{\}/);
   assert.match(adapterSource, /app\.editor\s+as\s+LeaferEditor/);
+  assert.match(adapterSource, /app\.tree\.add\(imageLayer\)/);
   assert.doesNotMatch(adapterSource, /app\.add\(editor\)/);
   assert.doesNotMatch(adapterSource, /app\.sky\.add\(editor\)/);
+  assert.doesNotMatch(adapterSource, /app\.add\(imageLayer\)/);
   assert.doesNotMatch(adapterSource, /new Editor\(\)/);
 });
 
