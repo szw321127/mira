@@ -2,7 +2,9 @@
 
 import { type ComponentType, useEffect, useState } from "react";
 import {
+  Brush,
   Hand,
+  MapPin,
   Maximize2,
   MousePointer2,
   Redo2,
@@ -49,6 +51,18 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
       icon: Hand,
       label: "平移",
       onClick: () => controller.setTool("pan"),
+    },
+    {
+      active: activeTool === "mask",
+      icon: Brush,
+      label: "蒙版",
+      onClick: () => controller.setTool("mask"),
+    },
+    {
+      active: activeTool === "marker",
+      icon: MapPin,
+      label: "标记局部",
+      onClick: () => controller.setTool("marker"),
     },
     {
       disabled: !controller.getCanUndo(),

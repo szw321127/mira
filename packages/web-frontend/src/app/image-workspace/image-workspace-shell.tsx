@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { InspectorPanel } from "./components/inspector-panel";
 import {
   MobileDrawerOverlay,
@@ -9,11 +9,23 @@ import {
 import { WorkspaceRail } from "./components/workspace-rail";
 import { ImageCanvas } from "./image-canvas";
 import type {
+  CanvasController,
+  LocalEditOverlayState,
+} from "./leafer-canvas-types";
+import type {
   CanvasSnapshot,
   ImageGenerationSettings,
+  ImageVersion,
   ImageWorkspace,
 } from "./types";
 import { useSelectedImageAsset } from "./use-selected-image-asset";
+
+const EMPTY_LOCAL_EDIT_OVERLAY_STATE: LocalEditOverlayState = {
+  assetId: null,
+  dirty: false,
+  markerRadius: 96,
+  source: null,
+};
 
 export function ImageWorkspaceShell({
   activeWorkspace,
@@ -65,6 +77,11 @@ export function ImageWorkspaceShell({
   onVariationAsset: (assetId: string) => Promise<void> | void;
   workspaces: ImageWorkspace[];
 }) {
+  const canvasControllerRef = useRef<CanvasController | null>(null);
+  const [canvasController, setCanvasController] =
+    useState<CanvasController | null>(null);
+  const [localEditOverlayState, setLocalEditOverlayState] =
+    useState<LocalEditOverlayState>(EMPTY_LOCAL_EDIT_OVERLAY_STATE);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const {
@@ -74,6 +91,61 @@ export function ImageWorkspaceShell({
     selectedAssetId,
     selectAsset,
   } = useSelectedImageAsset(activeWorkspace);
+
+  useEffect(() => {
+    if (!canvasController) {
+      return;
+    }
+
+    const syncOverlayState = () => {
+      setLocalEditOverlayState(canvasController.getLocalEditOverlayState());
+    };
+    syncOverlayState();
+    return canvasController.subscribeChange(syncOverlayState);
+  }, [canvasController]);
+
+  const handleCanvasControllerReady = useCallback(
+    (controller: CanvasController | null) => {
+      canvasControllerRef.current = controller;
+      setCanvasController(controller);
+      if (!controller) {
+        setLocalEditOverlayState(EMPTY_LOCAL_EDIT_OVERLAY_STATE);
+      }
+    },
+    [],
+  );
+
+  const clearLocalEditOverlay = useCallback(() => {
+    canvasControllerRef.current?.clearLocalEditOverlay();
+  }, []);
+
+  const setLocalEditMarkerRadius = useCallback((radius: number) => {
+    canvasControllerRef.current?.setLocalEditMarkerRadius(radius);
+  }, []);
+
+  const submitLocalEdit = useCallback(
+    async (assetId: string, version: ImageVersion, prompt: string) => {
+      const controller = canvasControllerRef.current;
+      if (!controller) {
+        throw new Error("图像画布还在加载，请稍后再试");
+      }
+
+      const mask = controller.exportLocalEditMask({
+        assetId,
+        height: version.height,
+        versionId: version.id,
+        width: version.width,
+      });
+      if (!mask.dataUrl) {
+        throw new Error("请先在画布中绘制蒙版或标记局部区域");
+      }
+
+      const { maskId } = await onUploadMask(assetId, mask.dataUrl);
+      await onEditAsset(assetId, prompt, maskId);
+      controller.clearLocalEditOverlay();
+    },
+    [onEditAsset, onUploadMask],
+  );
 
   function selectWorkspace(id: string) {
     onSelect(id);
@@ -106,6 +178,7 @@ export function ImageWorkspaceShell({
       <section className="min-h-0 border-r border-[var(--border)] max-md:h-[calc(100dvh-56px)]">
         <ImageCanvas
           loading={loading}
+          onControllerReady={handleCanvasControllerReady}
           onPersistCanvas={onPersistCanvas}
           onSelectAsset={selectAsset}
           selectedAssetId={selectedAssetId}
@@ -128,16 +201,18 @@ export function ImageWorkspaceShell({
         mobileOpen={mobileInspectorOpen}
         onCloseMobile={() => setMobileInspectorOpen(false)}
         onCancelTask={onCancelTask}
+        localEditOverlayState={localEditOverlayState}
+        onClearLocalEditOverlay={clearLocalEditOverlay}
         onDeleteAsset={onDeleteAsset}
         onDownloadAsset={onDownloadAsset}
-        onEditAsset={onEditAsset}
         onGenerate={onGenerate}
+        onLocalEditRadiusChange={setLocalEditMarkerRadius}
         onRemoveBackgroundAsset={onRemoveBackgroundAsset}
         onRevertAsset={onRevertAsset}
         onRetryTask={onRetryTask}
         onSelectAsset={selectAsset}
+        onSubmitLocalEdit={submitLocalEdit}
         onUpscaleAsset={onUpscaleAsset}
-        onUploadMask={onUploadMask}
         onUploadSourceAsset={onUploadSourceAsset}
         onVariationAsset={onVariationAsset}
         previousVersion={previousVersion}

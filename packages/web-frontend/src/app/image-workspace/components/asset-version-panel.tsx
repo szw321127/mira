@@ -2,12 +2,8 @@
 
 import {
   FormEvent,
-  type CSSProperties,
-  type PointerEvent,
   type ReactNode,
-  useEffect,
   useMemo,
-  useRef,
   useState
 } from "react";
 import {
@@ -23,6 +19,7 @@ import {
   Trash2,
   Wand2
 } from "lucide-react";
+import type { LocalEditOverlayState } from "../leafer-canvas-types";
 import type { ImageAsset, ImageVersion } from "../types";
 import {
   createImageAssetPreviewUrl,
@@ -30,20 +27,20 @@ import {
   createImageVersionPreviewUrl
 } from "../workspace-api";
 
-const MASK_PREVIEW_MAX_HEIGHT = 230;
-
 export function AssetVersionPanel({
   assets,
   currentVersion,
   disabled,
+  localEditOverlayState,
+  onClearLocalEditOverlay,
   onDelete,
   onDownload,
-  onEdit,
+  onLocalEditRadiusChange,
   onRemoveBackground,
   onRevert,
   onSelectAsset,
+  onSubmitLocalEdit,
   onUpscale,
-  onUploadMask,
   onVariation,
   previousVersion,
   selectedAsset,
@@ -51,43 +48,39 @@ export function AssetVersionPanel({
   assets: ImageAsset[];
   currentVersion: ImageVersion | null;
   disabled: boolean;
+  localEditOverlayState: LocalEditOverlayState;
+  onClearLocalEditOverlay: () => void;
   onDelete: (assetId: string) => Promise<void> | void;
   onDownload: (assetId: string, versionId?: string) => Promise<void> | void;
-  onEdit: (
-    assetId: string,
-    prompt: string,
-    maskId?: string,
-  ) => Promise<void> | void;
+  onLocalEditRadiusChange: (radius: number) => void;
   onRemoveBackground: (assetId: string) => Promise<void> | void;
   onRevert: (assetId: string, versionId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
-  onUpscale: (assetId: string) => Promise<void> | void;
-  onUploadMask: (
+  onSubmitLocalEdit: (
     assetId: string,
-    dataUrl: string,
-  ) => Promise<{ maskId: string; sizeBytes: number }>;
+    version: ImageVersion,
+    prompt: string,
+  ) => Promise<void> | void;
+  onUpscale: (assetId: string) => Promise<void> | void;
   onVariation: (assetId: string) => Promise<void> | void;
   previousVersion: ImageVersion | null;
   selectedAsset: ImageAsset | null;
 }) {
   const [compareOpen, setCompareOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState("");
-  const [maskDirty, setMaskDirty] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const lastMaskPointRef = useRef<{ x: number; y: number } | null>(null);
-  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const maskDrawingRef = useRef(false);
   const canAct = Boolean(selectedAsset && currentVersion && !disabled);
-  const maskCanvasWidth = Math.max(1, currentVersion?.width || 512);
-  const maskCanvasHeight = Math.max(1, currentVersion?.height || 512);
-  const maskFrameStyle = useMemo<CSSProperties>(
-    () => ({
-      aspectRatio: `${maskCanvasWidth} / ${maskCanvasHeight}`,
-      maxHeight: MASK_PREVIEW_MAX_HEIGHT,
-      maxWidth: `${(maskCanvasWidth / maskCanvasHeight) * MASK_PREVIEW_MAX_HEIGHT}px`,
-    }),
-    [maskCanvasHeight, maskCanvasWidth],
+  const localEditReady = Boolean(
+    selectedAsset &&
+      localEditOverlayState.dirty &&
+      localEditOverlayState.assetId === selectedAsset.id,
   );
+  const localEditLabel =
+    localEditReady && localEditOverlayState.source === "marker"
+      ? "已标记局部"
+      : localEditReady && localEditOverlayState.source === "mask"
+        ? "已绘制蒙版"
+        : "未选择区域";
   const currentDownloadUrl =
     selectedAsset && currentVersion
       ? createImageVersionDownloadUrl(selectedAsset.id, currentVersion.id)
@@ -99,31 +92,22 @@ export function AssetVersionPanel({
     });
   }, [selectedAsset]);
 
-  useEffect(() => {
-    clearMaskCanvas();
-  }, [currentVersion?.id, selectedAsset?.id]);
-
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedAsset) return;
+    if (!selectedAsset || !currentVersion) return;
     const prompt = editPrompt.trim();
     if (!prompt) {
       setLocalError("请输入图片编辑提示词");
       return;
     }
+    if (!localEditReady) {
+      setLocalError("请先在画布中绘制蒙版或标记局部区域");
+      return;
+    }
     setLocalError(null);
     try {
-      const maskId =
-        maskDirty && maskCanvasRef.current
-          ? (await onUploadMask(
-              selectedAsset.id,
-              createEditableMaskDataUrl(maskCanvasRef.current),
-            )).maskId
-          : undefined;
-
-      await onEdit(selectedAsset.id, prompt, maskId);
+      await onSubmitLocalEdit(selectedAsset.id, currentVersion, prompt);
       setEditPrompt("");
-      clearMaskCanvas();
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "图片操作失败");
     }
@@ -136,63 +120,6 @@ export function AssetVersionPanel({
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "图片操作失败");
     }
-  }
-
-  function clearMaskCanvas() {
-    const canvas = maskCanvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    lastMaskPointRef.current = null;
-    maskDrawingRef.current = false;
-    setMaskDirty(false);
-  }
-
-  function startMaskStroke(event: PointerEvent<HTMLCanvasElement>) {
-    if (!canAct) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    maskDrawingRef.current = true;
-    lastMaskPointRef.current = null;
-    drawMaskStroke(event);
-  }
-
-  function drawMaskStroke(event: PointerEvent<HTMLCanvasElement>) {
-    if (!maskDrawingRef.current || !canAct) return;
-
-    const canvas = event.currentTarget;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    const point = getCanvasPoint(canvas, event);
-    const previous = lastMaskPointRef.current;
-    context.strokeStyle = "rgba(225, 29, 72, 0.68)";
-    context.fillStyle = "rgba(225, 29, 72, 0.68)";
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.lineWidth = 34;
-
-    if (previous) {
-      context.beginPath();
-      context.moveTo(previous.x, previous.y);
-      context.lineTo(point.x, point.y);
-      context.stroke();
-    } else {
-      context.beginPath();
-      context.arc(point.x, point.y, 17, 0, Math.PI * 2);
-      context.fill();
-    }
-
-    lastMaskPointRef.current = point;
-    setMaskDirty(true);
-  }
-
-  function finishMaskStroke(event: PointerEvent<HTMLCanvasElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    maskDrawingRef.current = false;
-    lastMaskPointRef.current = null;
   }
 
   return (
@@ -242,46 +169,49 @@ export function AssetVersionPanel({
             <VersionStat label="上一版本" version={previousVersion} />
           </div>
 
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-2">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1 text-[11px] font-[700] text-[var(--muted)]">
-                <Brush aria-hidden="true" size={13} />
-                蒙版
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[12px] font-[700]">
+                <Brush aria-hidden="true" size={14} />
+                局部重绘
               </div>
               <button
                 className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={!maskDirty || disabled}
-                onClick={clearMaskCanvas}
+                disabled={!localEditReady || disabled}
+                onClick={onClearLocalEditOverlay}
                 type="button"
               >
                 <Eraser aria-hidden="true" size={12} />
                 清除
               </button>
             </div>
-            <div
-              className="flex h-[230px] w-full items-center justify-center overflow-hidden rounded-[6px] border border-[var(--border)] bg-[var(--surface-muted)]"
-            >
-              <div className="relative max-h-full w-full" style={maskFrameStyle}>
-                <img
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-contain"
-                  draggable={false}
-                  src={createImageVersionPreviewUrl(selectedAsset.id, currentVersion.id)}
-                />
-                <canvas
-                  aria-label="绘制蒙版"
-                  className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
-                  height={maskCanvasHeight}
-                  onPointerCancel={finishMaskStroke}
-                  onPointerDown={startMaskStroke}
-                  onPointerLeave={finishMaskStroke}
-                  onPointerMove={drawMaskStroke}
-                  onPointerUp={finishMaskStroke}
-                  ref={maskCanvasRef}
-                  width={maskCanvasWidth}
-                />
-              </div>
+            <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px]">
+              <span className="font-[650] text-[var(--muted-strong)]">
+                {localEditLabel}
+              </span>
+              {localEditReady && localEditOverlayState.source === "marker" ? (
+                <span className="shrink-0 text-[var(--muted)]">
+                  范围 {Math.round(localEditOverlayState.markerRadius)}
+                </span>
+              ) : null}
             </div>
+            {localEditReady && localEditOverlayState.source === "marker" ? (
+              <label className="mt-2 grid gap-1.5 text-[11px] font-[650] text-[var(--muted-strong)]">
+                <span>标记范围</span>
+                <input
+                  className="h-7 w-full accent-[var(--accent)]"
+                  disabled={disabled}
+                  max={260}
+                  min={24}
+                  onChange={(event) =>
+                    onLocalEditRadiusChange(Number(event.target.value))
+                  }
+                  step={4}
+                  type="range"
+                  value={localEditOverlayState.markerRadius}
+                />
+              </label>
+            ) : null}
           </div>
 
           {compareOpen && previousVersion ? (
@@ -369,16 +299,16 @@ export function AssetVersionPanel({
             <textarea
               className="min-h-[84px] w-full resize-none rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-3 text-xs leading-relaxed placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none"
               onChange={(event) => setEditPrompt(event.target.value)}
-              placeholder="描述要局部调整的内容"
+              placeholder="描述要重绘的局部内容"
               value={editPrompt}
             />
             <button
               className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--ink)] px-3 text-xs font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
-              disabled={!canAct || !editPrompt.trim()}
+              disabled={!canAct || !localEditReady || !editPrompt.trim()}
               type="submit"
             >
               <Wand2 aria-hidden="true" size={14} />
-              创建编辑任务
+              提交局部重绘
             </button>
           </form>
 
@@ -486,48 +416,6 @@ function CompareVersion({
       </div>
     </div>
   );
-}
-
-function getCanvasPoint(
-  canvas: HTMLCanvasElement,
-  event: PointerEvent<HTMLCanvasElement>,
-) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: ((event.clientX - rect.left) / rect.width) * canvas.width,
-    y: ((event.clientY - rect.top) / rect.height) * canvas.height,
-  };
-}
-
-function createEditableMaskDataUrl(canvas: HTMLCanvasElement) {
-  const sourceContext = canvas.getContext("2d", { willReadFrequently: true });
-  const outputCanvas = document.createElement("canvas");
-  outputCanvas.width = canvas.width;
-  outputCanvas.height = canvas.height;
-  const outputContext = outputCanvas.getContext("2d");
-  if (!sourceContext || !outputContext) {
-    return canvas.toDataURL("image/png");
-  }
-
-  outputContext.fillStyle = "rgba(0, 0, 0, 1)";
-  outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
-
-  const sourcePixels = sourceContext.getImageData(0, 0, canvas.width, canvas.height);
-  const outputPixels = outputContext.getImageData(
-    0,
-    0,
-    outputCanvas.width,
-    outputCanvas.height,
-  );
-
-  for (let index = 3; index < sourcePixels.data.length; index += 4) {
-    if (sourcePixels.data[index] > 0) {
-      outputPixels.data[index] = 0;
-    }
-  }
-
-  outputContext.putImageData(outputPixels, 0, 0);
-  return outputCanvas.toDataURL("image/png");
 }
 
 function formatImageSize(version: ImageVersion) {

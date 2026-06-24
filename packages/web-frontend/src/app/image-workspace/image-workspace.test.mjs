@@ -218,6 +218,26 @@ test("image canvas exposes a focused Mira toolbar for common canvas actions", ()
   assert.doesNotMatch(toolbarSource, /from "tldraw"/);
 });
 
+test("image canvas controller supports Leafer mask and marker tools", () => {
+  const typesSource = readImageWorkspaceFile("leafer-canvas-types.ts");
+  const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(typesSource, /"mask"/);
+  assert.match(typesSource, /"marker"/);
+  assert.match(typesSource, /exportLocalEditMask/);
+  assert.match(typesSource, /clearLocalEditOverlay/);
+  assert.match(typesSource, /setLocalEditMarkerRadius/);
+  assert.match(typesSource, /markerRadius/);
+  assert.match(toolbarSource, /Brush/);
+  assert.match(toolbarSource, /MapPin/);
+  assert.match(toolbarSource, /controller\.setTool\("mask"\)/);
+  assert.match(toolbarSource, /controller\.setTool\("marker"\)/);
+  assert.match(adapterSource, /maskLayer/);
+  assert.match(adapterSource, /markerLayer/);
+  assert.match(adapterSource, /setLocalEditMarkerRadius/);
+});
+
 test("image workspace shell exposes rail, canvas, prompt, task, and mobile panels", () => {
   const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
   const componentSource = [
@@ -465,36 +485,39 @@ test("asset version panel supports drawing and uploading an edit mask", () => {
   const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
   const apiSource = readImageWorkspaceFile("workspace-api.ts");
 
-  assert.match(panelSource, /maskCanvasRef/);
-  assert.match(panelSource, /onPointerDown/);
-  assert.match(panelSource, /onPointerMove/);
-  assert.match(panelSource, /toDataURL\("image\/png"\)/);
-  assert.match(panelSource, /onUploadMask\(\s*selectedAsset\.id/);
-  assert.match(panelSource, /onEdit\(selectedAsset\.id,\s*prompt,\s*maskId/);
-  assert.match(panelSource, /\.maskId/);
+  assert.match(panelSource, /局部重绘/);
+  assert.match(panelSource, /onSubmitLocalEdit/);
+  assert.match(panelSource, /localEditOverlayState/);
+  assert.match(panelSource, /标记范围/);
+  assert.match(panelSource, /onLocalEditRadiusChange/);
+  assert.match(shellSource, /canvasControllerRef/);
+  assert.match(shellSource, /exportLocalEditMask/);
+  assert.match(shellSource, /setLocalEditMarkerRadius/);
+  assert.match(shellSource, /onUploadMask\(/);
+  assert.match(shellSource, /onEditAsset\(/);
+  assert.match(shellSource, /clearLocalEditOverlay/);
+  assert.match(inspectorSource, /onSubmitLocalEdit/);
+  assert.doesNotMatch(panelSource, /maskCanvasRef/);
+  assert.doesNotMatch(panelSource, /aria-label="绘制蒙版"/);
   assert.doesNotMatch(panelSource, /maskKey/);
   assert.doesNotMatch(apiSource, /maskKey\?: string/);
-  assert.match(inspectorSource, /onUploadMask/);
   assert.match(shellSource, /onUploadMask/);
 });
 
-test("asset version mask preview shows the full source image at source resolution", () => {
+test("asset version panel delegates local edit overlays to the Leafer canvas", () => {
   const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
-  const maskSource = panelSource.slice(
-    panelSource.indexOf("aria-label=\"绘制蒙版\"") - 700,
-    panelSource.indexOf("aria-label=\"绘制蒙版\"") + 700,
-  );
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
 
-  assert.match(maskSource, /object-contain/);
-  assert.doesNotMatch(maskSource, /object-cover/);
-  assert.match(panelSource, /MASK_PREVIEW_MAX_HEIGHT/);
-  assert.match(panelSource, /maskFrameStyle/);
-  assert.match(panelSource, /maxWidth/);
-  assert.match(maskSource, /items-center justify-center/);
-  assert.match(panelSource, /height=\{maskCanvasHeight\}/);
-  assert.match(panelSource, /width=\{maskCanvasWidth\}/);
-  assert.doesNotMatch(maskSource, /height=\{512\}/);
-  assert.doesNotMatch(maskSource, /width=\{512\}/);
+  assert.match(adapterSource, /exportLocalEditMask/);
+  assert.match(adapterSource, /createEditableMaskDataUrl/);
+  assert.match(adapterSource, /drawMaskStrokes/);
+  assert.match(adapterSource, /drawMarkerMask/);
+  assert.match(panelSource, /type="range"/);
+  assert.doesNotMatch(panelSource, /MASK_PREVIEW_MAX_HEIGHT/);
+  assert.doesNotMatch(panelSource, /maskFrameStyle/);
+  assert.doesNotMatch(panelSource, /getCanvasPoint/);
+  assert.doesNotMatch(panelSource, /createEditableMaskDataUrl/);
+  assert.doesNotMatch(panelSource, /onPointerDown=\{startMaskStroke\}/);
 });
 
 test("image workspace has a focused asset version panel component", () => {
@@ -504,7 +527,7 @@ test("image workspace has a focused asset version panel component", () => {
   const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
 
   assert.match(panelSource, /AssetVersionPanel/);
-  assert.match(panelSource, /onEdit/);
+  assert.match(panelSource, /onSubmitLocalEdit/);
   assert.match(panelSource, /onVariation/);
   assert.match(panelSource, /onUpscale/);
   assert.match(panelSource, /onRemoveBackground/);

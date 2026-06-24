@@ -3,6 +3,7 @@ import type {
   CanvasController,
   CanvasControllerEvents,
   CanvasTool,
+  LocalEditMaskExportInput,
 } from "./leafer-canvas-types";
 import type {
   CanvasObject,
@@ -44,12 +45,36 @@ type ControllerOptions = {
 
 type PointerLike = {
   current?: { x?: number; y?: number };
+  getInnerPoint?: (relative?: unknown) => { x?: number; y?: number };
+  getLocalPoint?: (relative?: unknown) => { x?: number; y?: number };
   x?: number;
   y?: number;
 };
 
+type LocalEditPoint = {
+  x: number;
+  y: number;
+};
+
+type LocalEditStroke = {
+  assetId: string;
+  points: LocalEditPoint[];
+  versionId: string;
+};
+
+type LocalEditMarker = {
+  assetId: string;
+  center: LocalEditPoint;
+  radius: number;
+  versionId: string;
+};
+
 const DEFAULT_OBJECT_SIZE = 320;
 const DEFAULT_VIEWPORT: CanvasViewport = { x: 0, y: 0, zoom: 1 };
+const DEFAULT_MARKER_RADIUS = 96;
+const MASK_BRUSH_RADIUS = 17;
+const MAX_MARKER_RADIUS = 260;
+const MIN_MARKER_RADIUS = 24;
 const MIN_ZOOM = 0.18;
 const MAX_ZOOM = 4;
 
@@ -64,7 +89,7 @@ async function createLoadedLeaferCanvasController({
   container,
   events,
 }: ControllerOptions): Promise<CanvasController> {
-  const [{ App, Group, Image, PointerEvent }] = await Promise.all([
+  const [{ App, Ellipse, Group, Image, PointerEvent }] = await Promise.all([
     import("leafer-ui"),
     import("leafer-editor"),
   ]);
@@ -73,6 +98,12 @@ async function createLoadedLeaferCanvasController({
   let destroyed = false;
   let viewport: CanvasViewport = { ...DEFAULT_VIEWPORT };
   let selectedAssetId: string | null = null;
+  let activeMaskAssetId: string | null = null;
+  let activeMaskVersionId: string | null = null;
+  let currentMaskStroke: LocalEditPoint[] | null = null;
+  let marker: LocalEditMarker | null = null;
+  let markerRadius = DEFAULT_MARKER_RADIUS;
+  let maskStrokes: LocalEditStroke[] = [];
   let isPanning = false;
   let panStart: { pointer: { x: number; y: number }; viewport: CanvasViewport } | null =
     null;
@@ -85,9 +116,25 @@ async function createLoadedLeaferCanvasController({
     width: Math.max(1, container.clientWidth),
   }) as LeaferAppWithEditor;
   const imageLayer = new Group({ x: 0, y: 0 }) as IGroup;
+  const maskLayer = new Group({
+    hitChildren: false,
+    hitSelf: false,
+    hittable: false,
+    x: 0,
+    y: 0,
+  }) as IGroup;
+  const markerLayer = new Group({
+    hitChildren: false,
+    hitSelf: false,
+    hittable: false,
+    x: 0,
+    y: 0,
+  }) as IGroup;
   const editor = app.editor as LeaferEditor;
 
   app.tree.add(imageLayer);
+  app.tree.add(maskLayer);
+  app.tree.add(markerLayer);
 
   const resizeObserver = new ResizeObserver(() => {
     safeCall(() => {
@@ -126,6 +173,14 @@ async function createLoadedLeaferCanvasController({
     imageLayer.y = viewport.y;
     imageLayer.scaleX = viewport.zoom;
     imageLayer.scaleY = viewport.zoom;
+    maskLayer.x = viewport.x;
+    maskLayer.y = viewport.y;
+    maskLayer.scaleX = viewport.zoom;
+    maskLayer.scaleY = viewport.zoom;
+    markerLayer.x = viewport.x;
+    markerLayer.y = viewport.y;
+    markerLayer.scaleX = viewport.zoom;
+    markerLayer.scaleY = viewport.zoom;
     if (shouldEmit) emitChange();
   };
 
@@ -145,9 +200,141 @@ async function createLoadedLeaferCanvasController({
     return toMiraImageNode(target);
   };
 
+  const clearLocalEditOverlay = (shouldEmit = true) => {
+    activeMaskAssetId = null;
+    activeMaskVersionId = null;
+    currentMaskStroke = null;
+    marker = null;
+    maskStrokes = [];
+    maskLayer.removeAll();
+    markerLayer.removeAll();
+    if (shouldEmit) emitChange();
+  };
+
+  const getLocalEditOverlayState = () => {
+    const maskDirty = Boolean(maskStrokes.length || currentMaskStroke?.length);
+    const activeOverlayAssetId = marker?.assetId ?? activeMaskAssetId;
+    const source = marker ? "marker" : maskDirty ? "mask" : null;
+
+    return {
+      assetId: activeOverlayAssetId ?? null,
+      dirty: Boolean(source),
+      markerRadius,
+      source,
+    } as const;
+  };
+
+  const clearLocalEditIfNodeChanged = (node: MiraImageNode | null) => {
+    const activeOverlayAssetId =
+      marker?.assetId ?? activeMaskAssetId ?? maskStrokes[0]?.assetId ?? null;
+    const activeOverlayVersionId =
+      marker?.versionId ?? activeMaskVersionId ?? maskStrokes[0]?.versionId ?? null;
+    if (
+      activeOverlayAssetId &&
+      (
+        !node ||
+        node.__mira?.miraAssetId !== activeOverlayAssetId ||
+        (activeOverlayVersionId &&
+          node.__mira?.miraVersionId !== activeOverlayVersionId)
+      )
+    ) {
+      clearLocalEditOverlay(false);
+    }
+  };
+
   const selectNode = (node: MiraImageNode | null) => {
     applySelectionToEditor(node);
+    clearLocalEditIfNodeChanged(node);
     emitSelection(node?.__mira?.miraAssetId ?? null);
+  };
+
+  const resolveLocalEditNode = (event: unknown) => {
+    const selectedNode = readSelectedNode();
+    const targetNode = toMiraImageNode((event as { target?: unknown }).target);
+    if (targetNode && targetNode !== selectedNode) {
+      selectNode(targetNode);
+      return targetNode;
+    }
+    return selectedNode ?? targetNode;
+  };
+
+  const renderMaskOverlay = () => {
+    maskLayer.removeAll();
+    const selectedNode = readSelectedNode();
+    const assetId = selectedNode?.__mira?.miraAssetId;
+    const versionId = selectedNode?.__mira?.miraVersionId;
+    if (!selectedNode || !assetId || !versionId) return;
+
+    const strokes = [
+      ...maskStrokes.filter((stroke) => {
+        return stroke.assetId === assetId && stroke.versionId === versionId;
+      }),
+      ...(currentMaskStroke?.length &&
+      activeMaskAssetId === assetId &&
+      activeMaskVersionId === versionId
+        ? [{ points: currentMaskStroke }]
+        : []),
+    ];
+
+    for (const stroke of strokes) {
+      for (const point of stroke.points) {
+        maskLayer.add(
+          new Ellipse({
+            fill: "rgba(225, 29, 72, 0.42)",
+            height: MASK_BRUSH_RADIUS * 2,
+            hitChildren: false,
+            hitSelf: false,
+            hittable: false,
+            stroke: "rgba(225, 29, 72, 0.75)",
+            strokeWidth: 1,
+            width: MASK_BRUSH_RADIUS * 2,
+            x: normalizeFiniteNumber(selectedNode.x, 0) + point.x - MASK_BRUSH_RADIUS,
+            y: normalizeFiniteNumber(selectedNode.y, 0) + point.y - MASK_BRUSH_RADIUS,
+          }),
+        );
+      }
+    }
+  };
+
+  const renderMarkerOverlay = () => {
+    markerLayer.removeAll();
+    const selectedNode = readSelectedNode();
+    if (
+      !marker ||
+      !selectedNode ||
+      selectedNode.__mira?.miraAssetId !== marker.assetId ||
+      selectedNode.__mira?.miraVersionId !== marker.versionId
+    ) {
+      return;
+    }
+
+    const radius = clamp(marker.radius, MIN_MARKER_RADIUS, MAX_MARKER_RADIUS);
+    markerLayer.add(
+      new Ellipse({
+        fill: "rgba(14, 165, 233, 0.18)",
+        height: radius * 2,
+        hitChildren: false,
+        hitSelf: false,
+        hittable: false,
+        stroke: "rgba(2, 132, 199, 0.88)",
+        strokeWidth: 2,
+        width: radius * 2,
+        x: normalizeFiniteNumber(selectedNode.x, 0) + marker.center.x - radius,
+        y: normalizeFiniteNumber(selectedNode.y, 0) + marker.center.y - radius,
+      }),
+    );
+    markerLayer.add(
+      new Ellipse({
+        fill: "rgba(2, 132, 199, 0.95)",
+        height: 8,
+        hitChildren: false,
+        hitSelf: false,
+        hittable: false,
+        width: 8,
+        x: normalizeFiniteNumber(selectedNode.x, 0) + marker.center.x - 4,
+        y: normalizeFiniteNumber(selectedNode.y, 0) + marker.center.y - 4,
+      }),
+    );
   };
 
   const handlePointerTap = (event: unknown) => {
@@ -158,6 +345,50 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerDown = (event: unknown) => {
+    if (activeTool === "mask") {
+      const selectedNode = resolveLocalEditNode(event);
+      const point = selectedNode
+        ? toImageLocalPoint(selectedNode, event, imageLayer, viewport)
+        : null;
+      const assetId = selectedNode?.__mira?.miraAssetId;
+      const versionId = selectedNode?.__mira?.miraVersionId;
+      if (!selectedNode || !point || !assetId || !versionId) return;
+
+      marker = null;
+      markerLayer.removeAll();
+      activeMaskAssetId = assetId;
+      activeMaskVersionId = versionId;
+      currentMaskStroke = [point];
+      renderMaskOverlay();
+      emitChange();
+      return;
+    }
+
+    if (activeTool === "marker") {
+      const selectedNode = resolveLocalEditNode(event);
+      const point = selectedNode
+        ? toImageLocalPoint(selectedNode, event, imageLayer, viewport)
+        : null;
+      const assetId = selectedNode?.__mira?.miraAssetId;
+      const versionId = selectedNode?.__mira?.miraVersionId;
+      if (!selectedNode || !point || !assetId || !versionId) return;
+
+      activeMaskAssetId = null;
+      activeMaskVersionId = null;
+      currentMaskStroke = null;
+      maskStrokes = [];
+      maskLayer.removeAll();
+      marker = {
+        assetId,
+        center: point,
+        radius: markerRadius,
+        versionId,
+      };
+      renderMarkerOverlay();
+      emitChange();
+      return;
+    }
+
     if (activeTool !== "pan") return;
     const pointer = readPointer(event);
     if (!pointer) return;
@@ -167,6 +398,18 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerMove = (event: unknown) => {
+    if (activeTool === "mask" && currentMaskStroke) {
+      const selectedNode = readSelectedNode();
+      const point = selectedNode
+        ? toImageLocalPoint(selectedNode, event, imageLayer, viewport)
+        : null;
+      if (!selectedNode || !point) return;
+
+      currentMaskStroke = [...currentMaskStroke, point];
+      renderMaskOverlay();
+      return;
+    }
+
     if (!isPanning || !panStart) return;
     const pointer = readPointer(event);
     if (!pointer) return;
@@ -181,6 +424,21 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerUp = () => {
+    if (currentMaskStroke && activeMaskAssetId && activeMaskVersionId) {
+      maskStrokes = [
+        ...maskStrokes,
+        {
+          assetId: activeMaskAssetId,
+          points: currentMaskStroke,
+          versionId: activeMaskVersionId,
+        },
+      ];
+      currentMaskStroke = null;
+      renderMaskOverlay();
+      emitChange();
+      return;
+    }
+
     if (!isPanning) return;
     isPanning = false;
     panStart = null;
@@ -199,13 +457,16 @@ async function createLoadedLeaferCanvasController({
   window.requestAnimationFrame(notifyReady);
 
   const controller: CanvasController = {
+    clearLocalEditOverlay: () => clearLocalEditOverlay(),
     clearSelection: () => {
+      clearLocalEditOverlay(false);
       applySelectionToEditor(null);
       emitSelection(null);
     },
     deleteSelection: () => {
       const selectedNode = readSelectedNode();
       if (!selectedNode) return;
+      clearLocalEditOverlay(false);
       selectedNode.remove();
       applySelectionToEditor(null);
       emitSelection(null);
@@ -245,12 +506,14 @@ async function createLoadedLeaferCanvasController({
     getActiveTool: () => activeTool,
     getCanRedo: () => false,
     getCanUndo: () => false,
+    getLocalEditOverlayState,
     hydrateWorkspace: (workspace) => {
       if (!workspace) {
         removeStaleMiraImageNodes(imageLayer, new Set());
         applySelectionToEditor(null);
         emitSelection(null);
         setViewport(DEFAULT_VIEWPORT);
+        clearLocalEditOverlay(false);
         return;
       }
 
@@ -315,11 +578,15 @@ async function createLoadedLeaferCanvasController({
         ? findMiraImageNodeByAssetId(imageLayer, selectedAssetId)
         : null;
       if (selectedAssetId && selectedNode) {
+        clearLocalEditIfNodeChanged(selectedNode);
         applySelectionToEditor(selectedNode);
+        renderMaskOverlay();
+        renderMarkerOverlay();
       }
       if (selectedAssetId && !selectedNode) {
         applySelectionToEditor(null);
         emitSelection(null);
+        clearLocalEditOverlay(false);
       }
       emitChange();
     },
@@ -333,9 +600,68 @@ async function createLoadedLeaferCanvasController({
       selectNode(findMiraImageNodeByAssetId(imageLayer, assetId));
     },
     serializeSnapshot: () => serializeSnapshot(imageLayer, viewport),
+    exportLocalEditMask: (input) => {
+      const selectedNode = findMiraImageNodeByAssetId(imageLayer, input.assetId);
+      if (!selectedNode) return { dataUrl: null, source: null };
+      if (
+        marker &&
+        marker.assetId === input.assetId &&
+        marker.versionId === input.versionId
+      ) {
+        return {
+          dataUrl: createEditableMaskDataUrl(input, selectedNode, {
+            marker,
+            strokes: [],
+          }),
+          source: "marker",
+        };
+      }
+
+      const committedStrokes = maskStrokes.filter((stroke) => {
+        return stroke.assetId === input.assetId && stroke.versionId === input.versionId;
+      });
+      const pendingStroke =
+        activeMaskAssetId === input.assetId &&
+        activeMaskVersionId === input.versionId &&
+        currentMaskStroke?.length
+          ? [
+              {
+                assetId: input.assetId,
+                points: currentMaskStroke,
+                versionId: input.versionId,
+              },
+            ]
+          : [];
+      const strokes = [...committedStrokes, ...pendingStroke];
+      if (!strokes.length) return { dataUrl: null, source: null };
+
+      return {
+        dataUrl: createEditableMaskDataUrl(input, selectedNode, {
+          marker: null,
+          strokes,
+        }),
+        source: "mask",
+      };
+    },
+    setLocalEditMarkerRadius: (radius) => {
+      markerRadius = clamp(
+        normalizeFiniteNumber(radius, DEFAULT_MARKER_RADIUS),
+        MIN_MARKER_RADIUS,
+        MAX_MARKER_RADIUS,
+      );
+      if (marker) {
+        marker = {
+          ...marker,
+          radius: markerRadius,
+        };
+        renderMarkerOverlay();
+      }
+      emitChange();
+    },
     setTool: (tool) => {
       activeTool = tool;
-      container.style.cursor = tool === "pan" ? "grab" : "";
+      container.style.cursor =
+        tool === "pan" ? "grab" : tool === "mask" || tool === "marker" ? "crosshair" : "";
       if (tool === "pan") applySelectionToEditor(null);
       emitChange();
     },
@@ -481,6 +807,159 @@ function readPointer(event: unknown) {
   const y = pointerEvent.current?.y ?? pointerEvent.y;
   if (typeof x !== "number" || typeof y !== "number") return null;
   return { x, y };
+}
+
+function readContentPointer(
+  event: unknown,
+  imageLayer: IGroup,
+  viewport: CanvasViewport,
+) {
+  const pointerEvent = event as PointerLike;
+  const innerPoint = pointerEvent.getInnerPoint?.(imageLayer);
+  if (
+    innerPoint &&
+    typeof innerPoint.x === "number" &&
+    typeof innerPoint.y === "number"
+  ) {
+    return { x: innerPoint.x, y: innerPoint.y };
+  }
+
+  const localPoint = pointerEvent.getLocalPoint?.(imageLayer);
+  if (
+    localPoint &&
+    typeof localPoint.x === "number" &&
+    typeof localPoint.y === "number"
+  ) {
+    return { x: localPoint.x, y: localPoint.y };
+  }
+
+  const pointer = readPointer(event);
+  if (!pointer) return null;
+
+  return {
+    x: (pointer.x - viewport.x) / viewport.zoom,
+    y: (pointer.y - viewport.y) / viewport.zoom,
+  };
+}
+
+function toImageLocalPoint(
+  node: MiraImageNode,
+  event: unknown,
+  imageLayer: IGroup,
+  viewport: CanvasViewport,
+) {
+  const point = readContentPointer(event, imageLayer, viewport);
+  if (!point) return null;
+
+  const width = normalizeFiniteNumber(node.width, DEFAULT_OBJECT_SIZE);
+  const height = normalizeFiniteNumber(node.height, DEFAULT_OBJECT_SIZE);
+  const x = point.x - normalizeFiniteNumber(node.x, 0);
+  const y = point.y - normalizeFiniteNumber(node.y, 0);
+
+  return {
+    x: clamp(x, 0, width),
+    y: clamp(y, 0, height),
+  };
+}
+
+function createEditableMaskDataUrl(
+  input: LocalEditMaskExportInput,
+  node: MiraImageNode,
+  overlay: {
+    marker: LocalEditMarker | null;
+    strokes: LocalEditStroke[];
+  },
+) {
+  const outputCanvas = document.createElement("canvas");
+  outputCanvas.width = Math.max(1, Math.round(input.width));
+  outputCanvas.height = Math.max(1, Math.round(input.height));
+
+  const outputContext = outputCanvas.getContext("2d");
+  if (!outputContext) return null;
+
+  outputContext.fillStyle = "rgba(0, 0, 0, 1)";
+  outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+  outputContext.globalCompositeOperation = "destination-out";
+  outputContext.fillStyle = "rgba(0, 0, 0, 1)";
+  outputContext.strokeStyle = "rgba(0, 0, 0, 1)";
+  outputContext.lineCap = "round";
+  outputContext.lineJoin = "round";
+
+  if (overlay.marker) {
+    drawMarkerMask(outputContext, outputCanvas, node, overlay.marker);
+  } else {
+    drawMaskStrokes(outputContext, outputCanvas, node, overlay.strokes);
+  }
+
+  return outputCanvas.toDataURL("image/png");
+}
+
+function drawMaskStrokes(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  node: MiraImageNode,
+  strokes: LocalEditStroke[],
+) {
+  const scale = getSourceScale(canvas, node);
+  context.lineWidth = MASK_BRUSH_RADIUS * 2 * Math.max(scale.x, scale.y);
+
+  for (const stroke of strokes) {
+    if (!stroke.points.length) continue;
+    const firstPoint = toSourcePoint(stroke.points[0], scale);
+    context.beginPath();
+    context.arc(
+      firstPoint.x,
+      firstPoint.y,
+      (MASK_BRUSH_RADIUS * Math.max(scale.x, scale.y)),
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+
+    if (stroke.points.length < 2) continue;
+    context.beginPath();
+    context.moveTo(firstPoint.x, firstPoint.y);
+    for (const point of stroke.points.slice(1)) {
+      const nextPoint = toSourcePoint(point, scale);
+      context.lineTo(nextPoint.x, nextPoint.y);
+    }
+    context.stroke();
+  }
+}
+
+function drawMarkerMask(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  node: MiraImageNode,
+  marker: LocalEditMarker,
+) {
+  const scale = getSourceScale(canvas, node);
+  const center = toSourcePoint(marker.center, scale);
+  context.beginPath();
+  context.ellipse(
+    center.x,
+    center.y,
+    marker.radius * scale.x,
+    marker.radius * scale.y,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+}
+
+function getSourceScale(canvas: HTMLCanvasElement, node: MiraImageNode) {
+  return {
+    x: canvas.width / Math.max(1, normalizeFiniteNumber(node.width, DEFAULT_OBJECT_SIZE)),
+    y: canvas.height / Math.max(1, normalizeFiniteNumber(node.height, DEFAULT_OBJECT_SIZE)),
+  };
+}
+
+function toSourcePoint(point: LocalEditPoint, scale: { x: number; y: number }) {
+  return {
+    x: point.x * scale.x,
+    y: point.y * scale.y,
+  };
 }
 
 function normalizeFiniteNumber(value: unknown, fallback: number) {

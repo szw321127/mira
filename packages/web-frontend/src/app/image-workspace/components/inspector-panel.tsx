@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { ChevronLeft, Sparkles, X } from "lucide-react";
 import type {
+  LocalEditOverlayState,
+} from "../leafer-canvas-types";
+import type {
   ImageAsset,
   ImageGenerationSettings,
   ImageVersion,
@@ -17,19 +20,21 @@ export function InspectorPanel({
   creatingTask,
   currentVersion,
   error,
+  localEditOverlayState,
   mobileOpen,
   onCancelTask,
+  onClearLocalEditOverlay,
   onCloseMobile,
   onDeleteAsset,
   onDownloadAsset,
-  onEditAsset,
   onGenerate,
+  onLocalEditRadiusChange,
   onRemoveBackgroundAsset,
   onRevertAsset,
   onRetryTask,
   onSelectAsset,
+  onSubmitLocalEdit,
   onUpscaleAsset,
-  onUploadMask,
   onUploadSourceAsset,
   onVariationAsset,
   previousVersion,
@@ -39,26 +44,25 @@ export function InspectorPanel({
   creatingTask: boolean;
   currentVersion: ImageVersion | null;
   error: string | null;
+  localEditOverlayState: LocalEditOverlayState;
   mobileOpen: boolean;
   onCancelTask: (taskId: string) => Promise<void> | void;
+  onClearLocalEditOverlay: () => void;
   onCloseMobile: () => void;
   onDeleteAsset: (assetId: string) => Promise<void> | void;
   onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
-  onEditAsset: (
-    assetId: string,
-    prompt: string,
-    maskId?: string,
-  ) => Promise<void> | void;
   onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
+  onLocalEditRadiusChange: (radius: number) => void;
   onRemoveBackgroundAsset: (assetId: string) => Promise<void> | void;
   onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
-  onUpscaleAsset: (assetId: string) => Promise<void> | void;
-  onUploadMask: (
+  onSubmitLocalEdit: (
     assetId: string,
-    dataUrl: string,
-  ) => Promise<{ maskId: string; sizeBytes: number }>;
+    version: ImageVersion,
+    prompt: string,
+  ) => Promise<void> | void;
+  onUpscaleAsset: (assetId: string) => Promise<void> | void;
   onUploadSourceAsset: (file: File) => Promise<void> | void;
   onVariationAsset: (assetId: string) => Promise<void> | void;
   previousVersion: ImageVersion | null;
@@ -105,14 +109,16 @@ export function InspectorPanel({
           assets={activeWorkspace?.assets ?? []}
           currentVersion={currentVersion}
           disabled={creatingTask}
+          localEditOverlayState={localEditOverlayState}
+          onClearLocalEditOverlay={onClearLocalEditOverlay}
           onDelete={onDeleteAsset}
           onDownload={onDownloadAsset}
-          onEdit={onEditAsset}
+          onLocalEditRadiusChange={onLocalEditRadiusChange}
           onRemoveBackground={onRemoveBackgroundAsset}
           onRevert={onRevertAsset}
           onSelectAsset={onSelectAsset}
+          onSubmitLocalEdit={onSubmitLocalEdit}
           onUpscale={onUpscaleAsset}
-          onUploadMask={onUploadMask}
           onVariation={onVariationAsset}
           previousVersion={previousVersion}
           selectedAsset={selectedAsset}

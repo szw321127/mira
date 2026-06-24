@@ -9,12 +9,14 @@ import { useCanvasPersistence } from "./use-canvas-persistence";
 
 export function ImageCanvas({
   loading,
+  onControllerReady,
   onPersistCanvas,
   onSelectAsset,
   selectedAssetId,
   workspace,
 }: {
   loading: boolean;
+  onControllerReady?: (controller: CanvasController | null) => void;
   onPersistCanvas: (snapshot: CanvasSnapshot) => Promise<void> | void;
   onSelectAsset: (assetId: string | null) => void;
   selectedAssetId: string | null;
@@ -79,6 +81,7 @@ export function ImageCanvas({
         mountedController = nextController;
         controllerRef.current = nextController;
         setController(nextController);
+        onControllerReady?.(nextController);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -92,9 +95,12 @@ export function ImageCanvas({
       if (controllerRef.current === mountedController) {
         controllerRef.current = null;
       }
+      if (mountedController) {
+        onControllerReady?.(null);
+      }
       setController((current) => (current === mountedController ? null : current));
     };
-  }, [canvasReady, onSelectAsset, persistenceKey]);
+  }, [canvasReady, onControllerReady, onSelectAsset, persistenceKey]);
 
   useEffect(() => {
     if (!controller || !canvasReady) return;
@@ -116,12 +122,20 @@ export function ImageCanvas({
 
       if (event.key === "Escape") {
         event.preventDefault();
+        if (currentController.getLocalEditOverlayState().dirty) {
+          currentController.clearLocalEditOverlay();
+          return;
+        }
         currentController.clearSelection();
         return;
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
+        if (currentController.getLocalEditOverlayState().dirty) {
+          currentController.clearLocalEditOverlay();
+          return;
+        }
         currentController.deleteSelection();
         return;
       }
