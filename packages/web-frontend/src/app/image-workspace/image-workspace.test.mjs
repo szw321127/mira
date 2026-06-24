@@ -331,8 +331,8 @@ test("leafer canvas adapter renders a viewport-synced local expansion layer", ()
   assert.match(adapterSource, /expandLayer\.scaleX = viewport\.zoom/);
   assert.match(adapterSource, /expandLayer\.scaleY = viewport\.zoom/);
   assert.match(adapterSource, /renderExpandOverlay/);
-  assert.match(adapterSource, /calculateRatioExpandPadding/);
-  assert.match(adapterSource, /calculateDirectionalExpandPadding/);
+  assert.match(adapterSource, /export function calculateRatioExpandPadding/);
+  assert.match(adapterSource, /export function calculateDirectionalExpandPadding/);
   assert.match(adapterSource, /dragExpandHandle/);
   assert.match(adapterSource, /dashPattern/);
   assert.match(adapterSource, /rgba\(225,\s*29,\s*72,\s*0\.12\)/);
@@ -349,8 +349,55 @@ test("leafer local expansion export returns prompt defaults and mode-specific fi
   assert.match(adapterSource, /localExpandState\.mode === "direction"[\s\S]*direction:\s*localExpandState\.direction/);
   assert.match(adapterSource, /localExpandState\.mode === "direction"[\s\S]*percent:\s*localExpandState\.percent/);
   assert.match(adapterSource, /padding:\s*normalizedPadding/);
-  assert.match(adapterSource, /target:\s*\{\s*width:\s*input\.width \+ normalizedPadding\.left \+ normalizedPadding\.right/);
-  assert.match(adapterSource, /height:\s*input\.height \+ normalizedPadding\.top \+ normalizedPadding\.bottom/);
+  assert.match(adapterSource, /target:\s*\{\s*width:\s*sourceSize\.width \+ normalizedPadding\.left \+ normalizedPadding\.right/);
+  assert.match(adapterSource, /height:\s*sourceSize\.height \+ normalizedPadding\.top \+ normalizedPadding\.bottom/);
+});
+
+test("leafer local expansion direction percent uses backend fraction contract", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /const DEFAULT_EXPAND_PERCENT = 0\.25/);
+  assert.match(adapterSource, /const MIN_EXPAND_PERCENT = 0\.1/);
+  assert.match(adapterSource, /const MAX_EXPAND_PERCENT = 1/);
+  assert.match(adapterSource, /function normalizeExpandPercent/);
+  assert.match(adapterSource, /setLocalExpandPercent[\s\S]*percent:\s*normalizeExpandPercent\(percent\)/);
+  assert.match(adapterSource, /calculateDirectionalExpandPadding[\s\S]*const normalizedPercent = normalizeExpandPercent\(percent\)/);
+  assert.match(adapterSource, /percent:\s*localExpandState\.percent/);
+  assert.doesNotMatch(adapterSource, /DEFAULT_EXPAND_PERCENT = 20/);
+  assert.doesNotMatch(adapterSource, /MAX_EXPAND_PERCENT = 300/);
+  assert.doesNotMatch(adapterSource, /\/ 100/);
+});
+
+test("leafer local expansion ratio padding uses exact integer ratio targets", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /type ParsedExpandAspectRatio = \{ width: number; height: number \}/);
+  assert.match(adapterSource, /const ratio = parseAspectRatio\(aspectRatio\)/);
+  assert.match(adapterSource, /const ratioScale = Math\.ceil\(\s*Math\.max\(\s*sourceWidth \/ ratio\.width,\s*sourceHeight \/ ratio\.height/);
+  assert.match(adapterSource, /const targetWidth = ratio\.width \* ratioScale/);
+  assert.match(adapterSource, /const targetHeight = ratio\.height \* ratioScale/);
+  assert.match(adapterSource, /parseAspectRatio[\s\S]*return \{\s*width: normalizePositiveNumber\(width, 1\),\s*height: normalizePositiveNumber\(height, 1\),\s*\}/);
+  assert.doesNotMatch(adapterSource, /sourceHeight \* ratio/);
+  assert.doesNotMatch(adapterSource, /sourceWidth \/ ratio[,\s)]/);
+});
+
+test("leafer local expansion export rejects no-op free expansions and normalizes source target", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /function hasExpandPadding/);
+  assert.match(adapterSource, /localExpandState\.mode === "free" && !hasExpandPadding\(normalizedPadding\)/);
+  assert.match(adapterSource, /throw new Error\("请先设置图片扩展范围"\)/);
+  assert.match(adapterSource, /target:\s*\{\s*width:\s*sourceSize\.width \+ normalizedPadding\.left \+ normalizedPadding\.right/);
+  assert.match(adapterSource, /height:\s*sourceSize\.height \+ normalizedPadding\.top \+ normalizedPadding\.bottom/);
+  assert.doesNotMatch(adapterSource, /target:\s*\{\s*width:\s*input\.width \+ normalizedPadding\.left \+ normalizedPadding\.right/);
+});
+
+test("leafer local expansion handles are gated to select tool", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /if \(activeTool !== "select"\) \{\s*clearLocalExpandOverlay\(false\);/);
+  assert.match(adapterSource, /const expandHandle = activeTool === "select"\s*\?\s*readExpandHandle/);
+  assert.match(adapterSource, /if \(tool !== "select"\) applySelectionToEditor\(null\)/);
 });
 
 test("leafer toolbar tools are mutually exclusive and disable other tool behavior", () => {

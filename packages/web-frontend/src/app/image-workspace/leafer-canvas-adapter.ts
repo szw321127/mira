@@ -99,6 +99,8 @@ type LocalExpandDrag = {
   startPointer: LocalEditPoint;
 };
 
+type ParsedExpandAspectRatio = { width: number; height: number };
+
 type LocalEditOverlaySnapshot = {
   activeMaskAssetId: string | null;
   activeMaskVersionId: string | null;
@@ -110,14 +112,15 @@ type LocalEditOverlaySnapshot = {
 
 const DEFAULT_OBJECT_SIZE = 320;
 const DEFAULT_VIEWPORT: CanvasViewport = { x: 0, y: 0, zoom: 1 };
-const DEFAULT_EXPAND_PERCENT = 20;
+const DEFAULT_EXPAND_PERCENT = 0.25;
 const EXPAND_HANDLE_SIZE = 10;
 const EXPAND_PROMPT_DEFAULTS = "自然扩展图片画面，保持原图主体、风格和光照一致";
 const DEFAULT_MARKER_RADIUS = 96;
 const MASK_BRUSH_RADIUS = 17;
 const MAX_MARKER_RADIUS = 260;
 const MAX_EXPAND_PADDING = 8192;
-const MAX_EXPAND_PERCENT = 300;
+const MIN_EXPAND_PERCENT = 0.1;
+const MAX_EXPAND_PERCENT = 1;
 const MIN_MARKER_RADIUS = 24;
 const MIN_ZOOM = 0.18;
 const MAX_ZOOM = 4;
@@ -647,7 +650,9 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerDown = (event: unknown) => {
-    const expandHandle = readExpandHandle((event as { target?: unknown }).target);
+    const expandHandle = activeTool === "select"
+      ? readExpandHandle((event as { target?: unknown }).target)
+      : null;
     if (expandHandle && localExpandState.active && localExpandState.mode === "free") {
       const pointer = readContentPointer(event, imageLayer, viewport);
       if (!pointer) return;
@@ -851,9 +856,12 @@ async function createLoadedLeaferCanvasController({
       const padding = getModeExpandPadding(localExpandState, sourceSize);
       const normalizedPadding = normalizeExpandPadding(padding);
       const target = {
-        width: input.width + normalizedPadding.left + normalizedPadding.right,
-        height: input.height + normalizedPadding.top + normalizedPadding.bottom,
+        width: sourceSize.width + normalizedPadding.left + normalizedPadding.right,
+        height: sourceSize.height + normalizedPadding.top + normalizedPadding.bottom,
       };
+      if (localExpandState.mode === "free" && !hasExpandPadding(normalizedPadding)) {
+        throw new Error("请先设置图片扩展范围");
+      }
       localExpandState = {
         ...localExpandState,
         active: true,
@@ -879,8 +887,8 @@ async function createLoadedLeaferCanvasController({
           : {}),
         padding: normalizedPadding,
         target: {
-          width: input.width + normalizedPadding.left + normalizedPadding.right,
-          height: input.height + normalizedPadding.top + normalizedPadding.bottom,
+          width: sourceSize.width + normalizedPadding.left + normalizedPadding.right,
+          height: sourceSize.height + normalizedPadding.top + normalizedPadding.bottom,
         },
       };
     },
@@ -1178,11 +1186,7 @@ async function createLoadedLeaferCanvasController({
       localExpandState = {
         ...localExpandState,
         mode: "direction",
-        percent: clamp(
-          normalizeFiniteNumber(percent, DEFAULT_EXPAND_PERCENT),
-          0,
-          MAX_EXPAND_PERCENT,
-        ),
+        percent: normalizeExpandPercent(percent),
       };
       activateLocalExpandOverlay(readSelectedNode());
       emitChange();
@@ -1212,6 +1216,9 @@ async function createLoadedLeaferCanvasController({
       isPanning = false;
       panStart = null;
       currentMaskStroke = null;
+      if (activeTool !== "select") {
+        clearLocalExpandOverlay(false);
+      }
       container.style.cursor =
         tool === "pan" ? "grab" : tool === "mask" || tool === "marker" ? "crosshair" : "";
       applyToolInteractionState();
@@ -1321,6 +1328,18 @@ function normalizeExpandPaddingValue(value: unknown) {
   );
 }
 
+function hasExpandPadding(padding: LocalExpandPadding) {
+  return padding.left > 0 || padding.right > 0 || padding.top > 0 || padding.bottom > 0;
+}
+
+function normalizeExpandPercent(value: unknown) {
+  return clamp(
+    normalizeFiniteNumber(value, DEFAULT_EXPAND_PERCENT),
+    MIN_EXPAND_PERCENT,
+    MAX_EXPAND_PERCENT,
+  );
+}
+
 function calculateExpandTarget(
   sourceSize: { width: number; height: number },
   padding: LocalExpandPadding,
@@ -1332,7 +1351,7 @@ function calculateExpandTarget(
   };
 }
 
-function calculateRatioExpandPadding(
+export function calculateRatioExpandPadding(
   width: number,
   height: number,
   aspectRatio: LocalExpandOverlayState["aspectRatio"],
@@ -1340,8 +1359,14 @@ function calculateRatioExpandPadding(
   const sourceWidth = normalizePositiveNumber(width, DEFAULT_OBJECT_SIZE);
   const sourceHeight = normalizePositiveNumber(height, DEFAULT_OBJECT_SIZE);
   const ratio = parseAspectRatio(aspectRatio);
-  const targetWidth = Math.max(sourceWidth, sourceHeight * ratio);
-  const targetHeight = Math.max(sourceHeight, sourceWidth / ratio);
+  const ratioScale = Math.ceil(
+    Math.max(
+      sourceWidth / ratio.width,
+      sourceHeight / ratio.height,
+    ),
+  );
+  const targetWidth = ratio.width * ratioScale;
+  const targetHeight = ratio.height * ratioScale;
   const horizontal = Math.round(targetWidth - sourceWidth);
   const vertical = Math.round(targetHeight - sourceHeight);
 
@@ -1353,7 +1378,7 @@ function calculateRatioExpandPadding(
   });
 }
 
-function calculateDirectionalExpandPadding(
+export function calculateDirectionalExpandPadding(
   width: number,
   height: number,
   direction: LocalExpandDirection,
@@ -1361,11 +1386,7 @@ function calculateDirectionalExpandPadding(
 ): LocalExpandPadding {
   const sourceWidth = normalizePositiveNumber(width, DEFAULT_OBJECT_SIZE);
   const sourceHeight = normalizePositiveNumber(height, DEFAULT_OBJECT_SIZE);
-  const normalizedPercent = clamp(
-    normalizeFiniteNumber(percent, DEFAULT_EXPAND_PERCENT),
-    0,
-    MAX_EXPAND_PERCENT,
-  ) / 100;
+  const normalizedPercent = normalizeExpandPercent(percent);
   const horizontal = Math.round(sourceWidth * normalizedPercent);
   const vertical = Math.round(sourceHeight * normalizedPercent);
 
@@ -1383,9 +1404,12 @@ function calculateDirectionalExpandPadding(
 
 function parseAspectRatio(
   aspectRatio: LocalExpandOverlayState["aspectRatio"],
-) {
+): ParsedExpandAspectRatio {
   const [width = 1, height = 1] = aspectRatio.split(":").map(Number);
-  return normalizePositiveNumber(width, 1) / normalizePositiveNumber(height, 1);
+  return {
+    width: normalizePositiveNumber(width, 1),
+    height: normalizePositiveNumber(height, 1),
+  };
 }
 
 function createExpandHandles(x: number, y: number, width: number, height: number) {
