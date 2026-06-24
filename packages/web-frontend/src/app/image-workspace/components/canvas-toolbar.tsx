@@ -97,10 +97,19 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
       onClick: () => controller.fitView(),
     },
   ];
+  const activeToolButton =
+    toolButtons.find((button) => button.tool === activeTool) ?? toolButtons[0];
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4 max-md:bottom-3">
       <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
+        <div
+          aria-live="polite"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-[7px] border border-[color-mix(in_oklch,var(--accent)_70%,var(--border))] bg-[var(--accent-subtle)] px-2 text-xs font-[700] whitespace-nowrap text-[var(--accent-strong)]"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+          <span>当前工具：{activeToolButton.label}</span>
+        </div>
         {toolButtons.map((button) => {
           const Icon = button.icon;
           const active = activeTool === button.tool;
@@ -110,9 +119,10 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
               aria-pressed={active}
               className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border text-[var(--muted-strong)] transition-colors ${
                 active
-                  ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-strong)] shadow-[inset_0_0_0_1px_var(--accent)]"
+                  ? "border-[color-mix(in_oklch,var(--accent)_70%,var(--border))] bg-[var(--accent)] text-white ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--surface)] shadow-sm"
                   : "border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]"
               }`}
+              data-active-tool={active}
               key={button.tool}
               onClick={() => controller.setTool(button.tool)}
               title={button.label}

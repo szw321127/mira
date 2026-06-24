@@ -293,6 +293,17 @@ test("leafer toolbar tools are mutually exclusive and disable other tool behavio
   assert.match(canvasSource, /deleteSelection\(\)/);
 });
 
+test("leafer toolbar makes the active tool mode obvious", () => {
+  const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
+
+  assert.match(toolbarSource, /activeToolButton/);
+  assert.match(toolbarSource, /当前工具/);
+  assert.match(toolbarSource, /activeToolButton\.label/);
+  assert.match(toolbarSource, /data-active-tool=\{active\}/);
+  assert.match(toolbarSource, /ring-2 ring-\[var\(--accent\)\]/);
+  assert.match(toolbarSource, /border-\[color-mix\(in_oklch,var\(--accent\)_70%,var\(--border\)\)\]/);
+});
+
 test("image workspace shell exposes rail, canvas, prompt, task, and mobile panels", () => {
   const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
   const componentSource = [
