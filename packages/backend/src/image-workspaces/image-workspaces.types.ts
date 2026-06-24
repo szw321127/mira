@@ -41,13 +41,14 @@ export type ImageExpandTarget = {
   height: number;
 };
 
-export type ImageTaskRequest = {
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
+export type ImageTaskPlacementTarget = {
+  x: number;
+  y: number;
+};
+
+export type ImageBaseTaskRequest = {
   prompt: string;
-  target?: {
-    x: number;
-    y: number;
-  } | ImageExpandTarget;
+  target?: ImageTaskPlacementTarget;
   assetId?: string;
   versionId?: string;
   maskKey?: string;
@@ -55,12 +56,22 @@ export type ImageTaskRequest = {
   size?: ImageGenerateSize;
   quality?: "low" | "medium" | "high" | "auto";
   background?: "transparent" | "opaque" | "auto";
+};
+
+export type ImageStandardTaskRequest = ImageBaseTaskRequest & {
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+};
+
+export type ImageExpandTaskRequest = Omit<ImageBaseTaskRequest, "target"> & {
+  type: "expand";
   mode?: ImageExpandMode;
   direction?: ImageExpandDirection;
   percent?: number;
   padding?: ImageExpandPadding;
   expandTarget?: ImageExpandTarget;
 };
+
+export type ImageTaskRequest = ImageStandardTaskRequest | ImageExpandTaskRequest;
 
 type CanvasObjectRecord = Omit<CanvasObjectInput, "props"> & {
   workspaceId: string;
@@ -193,7 +204,7 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
       ...(direction ? { direction } : {}),
       ...(percent !== null ? { percent } : {}),
       padding,
-      target,
+      expandTarget: target,
       ...(aspectRatio ? { aspectRatio } : {})
     };
   }

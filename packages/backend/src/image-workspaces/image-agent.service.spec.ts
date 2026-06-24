@@ -59,6 +59,35 @@ describe("ImageAgentService", () => {
     });
   });
 
+  it("prepares durable image expand task input", () => {
+    const service = new ImageAgentService();
+
+    expect(
+      service.prepareTaskInput({
+        type: "expand",
+        prompt: "  extend the street  ",
+        assetId: "asset-1",
+        versionId: "version-1",
+        mode: "direction",
+        direction: "right",
+        percent: 0.25,
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        expandTarget: { width: 1280, height: 1024 },
+        aspectRatio: "16:9"
+      })
+    ).toEqual({
+      prompt: "extend the street",
+      assetId: "asset-1",
+      versionId: "version-1",
+      mode: "direction",
+      direction: "right",
+      percent: 0.25,
+      padding: { left: 0, right: 256, top: 0, bottom: 0 },
+      expandTarget: { width: 1280, height: 1024 },
+      aspectRatio: "16:9"
+    });
+  });
+
   it("rebuilds retry requests from previous task input", () => {
     const service = new ImageAgentService();
 

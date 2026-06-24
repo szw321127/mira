@@ -104,7 +104,7 @@ describe("image workspace parsers", () => {
       direction: "right",
       percent: 0.25,
       padding: { left: 0, right: 256, top: 0, bottom: 0 },
-      target: { width: 1280, height: 1024 },
+      expandTarget: { width: 1280, height: 1024 },
       aspectRatio: "16:9"
     });
   });

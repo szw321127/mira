@@ -4,6 +4,20 @@ import type { ImageTaskRequest } from "./image-workspaces.types.js";
 @Injectable()
 export class ImageAgentService {
   prepareTaskInput(request: ImageTaskRequest) {
+    if (request.type === "expand") {
+      return {
+        prompt: request.prompt.trim(),
+        ...(request.assetId ? { assetId: request.assetId } : {}),
+        ...(request.versionId ? { versionId: request.versionId } : {}),
+        ...(request.aspectRatio ? { aspectRatio: request.aspectRatio } : {}),
+        ...(request.mode ? { mode: request.mode } : {}),
+        ...(request.direction ? { direction: request.direction } : {}),
+        ...(request.percent !== undefined ? { percent: request.percent } : {}),
+        ...(request.padding ? { padding: request.padding } : {}),
+        ...(request.expandTarget ? { expandTarget: request.expandTarget } : {})
+      };
+    }
+
     return {
       prompt: request.prompt.trim(),
       ...(request.target ? { target: request.target } : {}),
