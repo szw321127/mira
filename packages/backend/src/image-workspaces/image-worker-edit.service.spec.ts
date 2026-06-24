@@ -6,6 +6,215 @@ import type { ImageStorageService } from "./image-storage.types.js";
 import { ImageWorkerService } from "./image-worker.service.js";
 
 describe("ImageWorkerService edit and variation tasks", () => {
+  it("runs an expand task with expanded inline source and mask images", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene with more sky",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "direction",
+        direction: "top",
+        percent: 25,
+        padding: {
+          left: 0,
+          right: 0,
+          top: 256,
+          bottom: 0
+        },
+        expandTarget: {
+          width: 1024,
+          height: 1280
+        }
+      }
+    });
+    const queue = createQueue();
+    const provider = createProvider();
+    const storage = createStorage();
+    const worker = new ImageWorkerService(prisma, queue, provider, storage);
+
+    await worker.processTask("task-1");
+
+    expect(storage.getImage).toHaveBeenCalledWith({
+      storageKey: "local/user/workspace/source.png",
+      mimeType: "image/png",
+      width: 1024,
+      height: 1024,
+      sizeBytes: 128
+    });
+    expect(provider.edit).toHaveBeenCalledWith({
+      prompt: expect.stringContaining("extend the scene with more sky"),
+      image: expect.objectContaining({
+        mimeType: "image/png",
+        width: 1024,
+        height: 1280,
+        bytes: expect.any(Buffer)
+      }),
+      mask: expect.objectContaining({
+        mimeType: "image/png",
+        width: 1024,
+        height: 1280,
+        bytes: expect.any(Buffer)
+      }),
+      size: "1024x1536"
+    });
+    expect(prisma.imageVersion.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        assetId: "asset-1",
+        parentId: "version-source",
+        editPrompt: "extend the scene with more sky",
+        metadata: expect.objectContaining({
+          operation: "expand",
+          mode: "direction",
+          direction: "top",
+          percent: 25,
+          padding: {
+            left: 0,
+            right: 0,
+            top: 256,
+            bottom: 0
+          },
+          target: {
+            width: 1024,
+            height: 1280
+          },
+          model: "gpt-image-1"
+        })
+      })
+    });
+    expect(prisma.imageTask.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({
+          status: "complete",
+          output: {
+            assetId: "asset-1",
+            versionId: "version-edited"
+          },
+          cost: expect.objectContaining({
+            provider: "openai",
+            model: "gpt-image-1",
+            size: "1024x1536"
+          })
+        })
+      })
+    );
+  });
+
+  it("uses expand-specific progress and failure copy", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "free",
+        padding: {
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16
+        },
+        expandTarget: {
+          width: 1056,
+          height: 1056
+        }
+      }
+    });
+    const queue = createQueue();
+    const provider = createProvider();
+    provider.edit.mockRejectedValueOnce(new Error("raw provider sk-live-secret"));
+    const worker = new ImageWorkerService(
+      prisma,
+      queue,
+      provider,
+      createStorage()
+    );
+
+    await worker.processTask("task-1");
+
+    expect(queue.emitEvent).toHaveBeenCalledWith("task-1", {
+      type: "task-progress",
+      taskId: "task-1",
+      status: "running",
+      message: "正在扩展图片"
+    });
+    expect(prisma.imageTask.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({
+          status: "failed",
+          error: "图片扩展失败，请稍后再试"
+        })
+      })
+    );
+    expect(queue.emitEvent).toHaveBeenCalledWith("task-1", {
+      type: "error",
+      taskId: "task-1",
+      message: "图片扩展失败，请稍后再试"
+    });
+  });
+
+  it("updates matching canvas image objects to the expanded bounds and new version", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "free",
+        padding: {
+          left: 120,
+          right: 80,
+          top: 40,
+          bottom: 200
+        },
+        expandTarget: {
+          width: 1224,
+          height: 1264
+        }
+      }
+    });
+    const worker = new ImageWorkerService(
+      prisma,
+      createQueue(),
+      createProvider(),
+      createStorage()
+    );
+
+    await worker.processTask("task-1");
+
+    expect(prisma.canvasObject.findMany).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "workspace-1",
+        assetId: "asset-1",
+        type: "image"
+      },
+      select: {
+        id: true,
+        x: true,
+        y: true,
+        props: true
+      }
+    });
+    expect(prisma.canvasObject.update).toHaveBeenCalledWith({
+      where: { id: "object-1" },
+      data: {
+        x: 200,
+        y: 280,
+        width: 1224,
+        height: 1264,
+        props: {
+          source: "upload",
+          versionId: "version-edited"
+        }
+      }
+    });
+  });
+
   it("runs an edit task by creating a child version and updating the asset current version", async () => {
     const prisma = createPrisma({
       type: "edit",
@@ -348,7 +557,7 @@ describe("ImageWorkerService edit and variation tasks", () => {
   });
 });
 
-type TaskType = "edit" | "variation" | "upscale" | "background_removal";
+type TaskType = "edit" | "variation" | "upscale" | "background_removal" | "expand";
 
 function createPrisma(taskInput: {
   type: TaskType;
@@ -441,6 +650,22 @@ function createPrisma(taskInput: {
         })
       )
     },
+    canvasObject: {
+      findMany: jest.fn(() =>
+        Promise.resolve([
+          {
+            id: "object-1",
+            x: 320,
+            y: 320,
+            props: {
+              source: "upload",
+              versionId: "version-source"
+            }
+          }
+        ])
+      ),
+      update: jest.fn(() => Promise.resolve({ id: "object-1" }))
+    },
     $transaction: jest.fn(async (callback) => callback(prisma))
   };
   return prisma as unknown as PrismaService;
@@ -455,7 +680,7 @@ function createQueue() {
 function createProvider() {
   return {
     generate: jest.fn(),
-    edit: jest.fn(() =>
+    edit: jest.fn((input) =>
       Promise.resolve({
         bytes: Buffer.from("edited"),
         mimeType: "image/png",
@@ -465,7 +690,7 @@ function createProvider() {
         providerJob: "job-edit",
         metadata: {
           model: "gpt-image-1",
-          size: "auto",
+          size: input.size,
           quality: null,
           estimatedCostUsd: null,
           revisedPrompt: "safe edited prompt"
@@ -486,8 +711,15 @@ function createStorage() {
         sizeBytes: 6
       })
     ),
-    getImage: jest.fn(),
+    getImage: jest.fn(() => Promise.resolve(tinyPng())),
     createSignedPreviewUrl: jest.fn(),
     deleteImage: jest.fn()
   } as jest.Mocked<ImageStorageService>;
+}
+
+function tinyPng(): Buffer {
+  return Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64"
+  );
 }

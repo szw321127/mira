@@ -85,14 +85,16 @@ describe("image provider contracts", () => {
           mimeType: "image/png",
           width: 1024,
           height: 1024,
-          sizeBytes: 128
+          sizeBytes: 128,
+          bytes: Buffer.from("inline-source")
         },
         mask: {
           storageKey: "users/user-1/mask.png",
           mimeType: "image/png",
           width: 1024,
           height: 1024,
-          sizeBytes: 64
+          sizeBytes: 64,
+          bytes: Buffer.from("inline-mask")
         },
         size: "1024x1536"
       })
@@ -112,7 +114,14 @@ describe("image provider contracts", () => {
       }),
       expect.objectContaining({
         prompt: "add a softer background",
-        image: expect.objectContaining({ storageKey: "users/user-1/source.png" })
+        image: expect.objectContaining({
+          bytes: Buffer.from("inline-source"),
+          storageKey: "users/user-1/source.png"
+        }),
+        mask: expect.objectContaining({
+          bytes: Buffer.from("inline-mask"),
+          storageKey: "users/user-1/mask.png"
+        })
       })
     ]);
   });

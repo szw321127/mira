@@ -413,6 +413,51 @@ describe("OpenAIImageProviderService", () => {
     );
   });
 
+  it("uses inline image and mask bytes without reading them from storage", async () => {
+    const { calls, fetchMock } = createFetch(responseJson());
+    const getImageMock = jest.fn(() => Promise.resolve(Buffer.from("unexpected")));
+    const storage: ImageStorageService = {
+      ...createStorage(),
+      getImage: getImageMock as ImageStorageService["getImage"]
+    };
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(imageConfig()),
+      storage,
+      { fetch: fetchMock }
+    );
+
+    await service.edit({
+      prompt: "expand the image",
+      image: {
+        storageKey: "local/user-1/expanded-source.png",
+        mimeType: "image/png",
+        width: 1536,
+        height: 1024,
+        sizeBytes: 19,
+        bytes: Buffer.from("inline-expanded")
+      },
+      mask: {
+        storageKey: "local/user-1/expand-mask.png",
+        mimeType: "image/png",
+        width: 1536,
+        height: 1024,
+        sizeBytes: 11,
+        bytes: Buffer.from("inline-mask")
+      },
+      size: "1536x1024"
+    });
+
+    expect(getImageMock).not.toHaveBeenCalled();
+    const form = calls[0]?.init?.body as FormData;
+    const imageFile = form.getAll("image")[0];
+    expect(imageFile).toBeInstanceOf(File);
+    await expect((imageFile as File).text()).resolves.toBe("inline-expanded");
+
+    const maskFile = form.get("mask");
+    expect(maskFile).toBeInstanceOf(File);
+    await expect((maskFile as File).text()).resolves.toBe("inline-mask");
+  });
+
   it("wraps OpenAI failures as short safe user errors without leaking the API key", async () => {
     const loggerSpy = jest
       .spyOn(Logger.prototype, "warn")

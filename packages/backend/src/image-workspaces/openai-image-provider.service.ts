@@ -19,6 +19,7 @@ import {
   imageGenerateSizeForAspectRatio,
   type ImageAspectRatio,
   type ImageEditInput,
+  type ImageEditSource,
   type ImageGenerateInput,
   type ImageGenerateSize,
   type ImageProviderAdapter,
@@ -110,9 +111,9 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
 
   async edit(input: ImageEditInput): Promise<ImageProviderResult> {
     const config = await this.requireOpenAIConfig();
-    const imageBytes = await this.imageStorage.getImage(input.image);
+    const imageBytes = await this.resolveEditSourceBytes(input.image);
     const maskBytes = input.mask
-      ? await this.imageStorage.getImage(input.mask)
+      ? await this.resolveEditSourceBytes(input.mask)
       : undefined;
     const result = await this.callImageSdk({
       config,
@@ -135,6 +136,10 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
       quality: null,
       size: input.size
     });
+  }
+
+  private async resolveEditSourceBytes(source: ImageEditSource): Promise<Buffer> {
+    return source.bytes ?? this.imageStorage.getImage(source);
   }
 
   private async requireOpenAIConfig(): Promise<RuntimeImageConfig> {

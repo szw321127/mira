@@ -12,6 +12,7 @@ import {
   type ImageGenerateSize,
   type ImageProviderAdapter
 } from "./image-provider.types.js";
+import { buildImageExpandEditInput } from "./image-expand-canvas.js";
 import { ImageQueueService } from "./image-queue.service.js";
 import {
   IMAGE_STORAGE,
@@ -40,6 +41,22 @@ type ImageVersionRow = {
   sizeBytes: number;
   prompt: string | null;
 };
+
+type CanvasImageObjectRow = {
+  id: string;
+  x: number;
+  y: number;
+  props: unknown;
+};
+
+type ImageVersionLookupInput = {
+  assetId: string;
+  versionId: string;
+};
+
+type ImageWorkerTransaction = Parameters<
+  Parameters<PrismaService["$transaction"]>[0]
+>[0];
 
 @Injectable()
 export class ImageWorkerService {
@@ -73,6 +90,11 @@ export class ImageWorkerService {
 
       if (task.type === "generate") {
         await this.processGenerateTask(task);
+        return;
+      }
+
+      if (task.type === "expand") {
+        await this.processImageExpandTask(task);
         return;
       }
 
@@ -188,6 +210,77 @@ export class ImageWorkerService {
     await this.emitUsageEvent(task, generated, {
       quality: null,
       size: input.size
+    });
+    await this.queue.emitEvent(task.id, {
+      type: "task-progress",
+      taskId: task.id,
+      status: "complete",
+      message: getImageTaskProgressCopy(task.type).complete
+    });
+  }
+
+  private async processImageExpandTask(task: ImageTaskRow): Promise<void> {
+    const input = parseExpandTaskInput(task.input);
+    const sourceVersion = await this.findTaskVersion(task, input);
+    validateExpandTargetMatchesSource(input, sourceVersion);
+    const sourceRef = toStoredImageRef(sourceVersion);
+    const sourceBytes = await this.storage.getImage(sourceRef);
+    const editInput = await buildImageExpandEditInput({
+      source: sourceRef,
+      sourceBytes,
+      padding: input.padding,
+      target: input.expandTarget
+    });
+    const size = imageGenerateSizeForTarget(input.expandTarget);
+    const generated = await this.provider.edit({
+      prompt: expandPrompt(input.prompt),
+      image: editInput.image,
+      mask: editInput.mask,
+      size
+    });
+    if (await this.isTaskCanceled(task.id)) return;
+
+    const stored = await this.storage.putImage({
+      userId: task.userId,
+      workspaceId: task.workspaceId,
+      taskId: task.id,
+      filename: `${task.id}.png`,
+      bytes: generated.bytes,
+      mimeType: generated.mimeType
+    });
+    if (await this.cleanupStoredImageIfCanceled(task.id, stored)) return;
+
+    const version = await this.createExpandedVersion(
+      task,
+      input,
+      sourceVersion,
+      generated,
+      stored,
+      size
+    );
+
+    await this.queue.emitEvent(task.id, {
+      type: "asset-version-created",
+      taskId: task.id,
+      assetId: input.assetId,
+      versionId: version.versionId
+    });
+    await this.queue.emitEvent(task.id, {
+      type: "asset-updated",
+      taskId: task.id,
+      assetId: input.assetId,
+      versionId: version.versionId
+    });
+    if (version.objectIds.length > 0) {
+      await this.queue.emitEvent(task.id, {
+        type: "canvas-updated",
+        workspaceId: task.workspaceId,
+        objectIds: version.objectIds
+      });
+    }
+    await this.emitUsageEvent(task, generated, {
+      quality: null,
+      size
     });
     await this.queue.emitEvent(task.id, {
       type: "task-progress",
@@ -396,7 +489,7 @@ export class ImageWorkerService {
 
   private async findTaskVersion(
     task: ImageTaskRow,
-    input: EditTaskInput
+    input: ImageVersionLookupInput
   ): Promise<ImageVersionRow> {
     const version = (await this.prisma.imageVersion.findFirst({
       where: {
@@ -495,6 +588,115 @@ export class ImageWorkerService {
       };
     });
   }
+
+  private async createExpandedVersion(
+    task: ImageTaskRow,
+    input: ExpandTaskInput,
+    sourceVersion: ImageVersionRow,
+    generated: {
+      metadata: Record<string, unknown>;
+      provider: string;
+      providerJob: string | null;
+      width: number;
+      height: number;
+    },
+    stored: {
+      height: number;
+      mimeType: string;
+      sizeBytes: number;
+      storageKey: string;
+      width: number;
+    },
+    size: ImageGenerateSize
+  ): Promise<{ objectIds: string[]; versionId: string }> {
+    return this.prisma.$transaction(async (tx) => {
+      const width = stored.width || generated.width;
+      const height = stored.height || generated.height;
+      const version = await tx.imageVersion.create({
+        data: {
+          assetId: input.assetId,
+          parentId: sourceVersion.id,
+          storageKey: stored.storageKey,
+          mimeType: stored.mimeType,
+          width,
+          height,
+          sizeBytes: stored.sizeBytes,
+          prompt: sourceVersion.prompt,
+          editPrompt: input.prompt,
+          maskKey: null,
+          provider: generated.provider,
+          providerJob: generated.providerJob,
+          metadata: toInputJson(expandVersionMetadata(input, generated.metadata))
+        }
+      });
+      await tx.imageAsset.update({
+        where: { id: input.assetId },
+        data: {
+          currentVersionId: version.id
+        }
+      });
+      const objectIds = await this.updateExpandedCanvasObjects(tx, task, input, version.id);
+      await tx.imageTask.update({
+        where: { id: task.id },
+        data: {
+          status: "complete",
+          output: toInputJson({
+            assetId: input.assetId,
+            versionId: version.id
+          }),
+          cost: toInputJson(createImageTaskCost(generated, {
+            quality: null,
+            size
+          })),
+          finishedAt: new Date()
+        }
+      });
+
+      return {
+        versionId: version.id,
+        objectIds
+      };
+    });
+  }
+
+  private async updateExpandedCanvasObjects(
+    tx: ImageWorkerTransaction,
+    task: ImageTaskRow,
+    input: ExpandTaskInput,
+    versionId: string
+  ): Promise<string[]> {
+    const objects = (await tx.canvasObject.findMany({
+      where: {
+        workspaceId: task.workspaceId,
+        assetId: input.assetId,
+        type: "image"
+      },
+      select: {
+        id: true,
+        x: true,
+        y: true,
+        props: true
+      }
+    })) as CanvasImageObjectRow[];
+
+    for (const object of objects) {
+      await tx.canvasObject.update({
+        where: { id: object.id },
+        data: {
+          x: object.x - input.padding.left,
+          y: object.y - input.padding.top,
+          width: input.expandTarget.width,
+          height: input.expandTarget.height,
+          props: toInputJson({
+            ...(isRecord(object.props) ? object.props : {}),
+            versionId
+          })
+        }
+      });
+    }
+
+    return objects.map((object) => object.id);
+  }
 }
 
 type GenerateTaskInput = {
@@ -515,6 +717,26 @@ type EditTaskInput = {
   versionId: string;
   maskKey?: string;
   size: ImageGenerateSize;
+};
+
+type ExpandTaskInput = {
+  prompt: string;
+  assetId: string;
+  versionId: string;
+  mode: "free" | "ratio" | "direction";
+  direction?: "left" | "right" | "top" | "bottom" | "around";
+  percent?: number;
+  aspectRatio?: ImageAspectRatio;
+  padding: {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  };
+  expandTarget: {
+    width: number;
+    height: number;
+  };
 };
 
 function parseGenerateTaskInput(input: unknown): GenerateTaskInput {
@@ -554,6 +776,39 @@ function parseEditTaskInput(input: unknown): EditTaskInput {
       : {}),
     size: isImageGenerateSize(record.size) ? record.size : "auto"
   };
+}
+
+function parseExpandTaskInput(input: unknown): ExpandTaskInput {
+  const record = isRecord(input) ? input : {};
+  const target = parseExpandTarget(record.expandTarget ?? record.target);
+  const padding = parseExpandPadding(record.padding);
+  const mode = parseExpandMode(record.mode);
+  const direction = parseExpandDirection(record.direction);
+  const aspectRatio = isImageAspectRatio(record.aspectRatio)
+    ? record.aspectRatio
+    : undefined;
+  const percent = parseOptionalPositiveNumber(record.percent);
+  const parsed: ExpandTaskInput = {
+    prompt: typeof record.prompt === "string" && record.prompt.trim()
+      ? record.prompt.trim()
+      : "自然扩展图片画面，保持原图主体、风格和光照一致",
+    assetId: typeof record.assetId === "string" && record.assetId.trim()
+      ? record.assetId.trim()
+      : "",
+    versionId: typeof record.versionId === "string" && record.versionId.trim()
+      ? record.versionId.trim()
+      : "",
+    mode,
+    ...(direction ? { direction } : {}),
+    ...(percent === null ? {} : { percent }),
+    ...(aspectRatio ? { aspectRatio } : {}),
+    padding,
+    expandTarget: target
+  };
+  if (!parsed.assetId || !parsed.versionId) {
+    throw new Error("Invalid expand source");
+  }
+  return parsed;
 }
 
 function toStoredImageRef(version: ImageVersionRow): StoredImageRef {
@@ -596,6 +851,55 @@ function createImageTaskCost(
   };
 }
 
+function expandVersionMetadata(
+  input: ExpandTaskInput,
+  providerMetadata: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    ...providerMetadata,
+    operation: "expand",
+    mode: input.mode,
+    padding: input.padding,
+    target: input.expandTarget,
+    ...(input.direction ? { direction: input.direction } : {}),
+    ...(input.percent === undefined ? {} : { percent: input.percent }),
+    ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {})
+  };
+}
+
+function validateExpandTargetMatchesSource(
+  input: ExpandTaskInput,
+  sourceVersion: ImageVersionRow
+): void {
+  const expectedWidth =
+    sourceVersion.width + input.padding.left + input.padding.right;
+  const expectedHeight =
+    sourceVersion.height + input.padding.top + input.padding.bottom;
+  if (
+    input.expandTarget.width !== expectedWidth ||
+    input.expandTarget.height !== expectedHeight
+  ) {
+    throw new Error("Invalid expand target dimensions");
+  }
+}
+
+function expandPrompt(prompt: string): string {
+  return [
+    "请自然扩展图片画面，保持原图主体、风格、透视和光照一致。",
+    "只补全透明扩展区域，不要改变原始图片区域。",
+    `用户要求：${prompt}`
+  ].join("\n");
+}
+
+function imageGenerateSizeForTarget(target: {
+  width: number;
+  height: number;
+}): ImageGenerateSize {
+  if (target.width > target.height) return "1536x1024";
+  if (target.height > target.width) return "1024x1536";
+  return "1024x1024";
+}
+
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -634,6 +938,12 @@ function getImageTaskProgressCopy(type: ImageTaskRow["type"]): {
         complete: "背景已移除",
         failed: "背景移除失败，请稍后再试"
       };
+    case "expand":
+      return {
+        running: "正在扩展图片",
+        complete: "图片扩展已完成",
+        failed: "图片扩展失败，请稍后再试"
+      };
     case "generate":
     default:
       return {
@@ -662,6 +972,66 @@ function parseTarget(value: unknown): { x: number; y: number } {
     x: typeof value.x === "number" && Number.isFinite(value.x) ? value.x : 0,
     y: typeof value.y === "number" && Number.isFinite(value.y) ? value.y : 0
   };
+}
+
+function parseExpandMode(value: unknown): ExpandTaskInput["mode"] {
+  if (value === "ratio" || value === "direction") return value;
+  return "free";
+}
+
+function parseExpandDirection(
+  value: unknown
+): ExpandTaskInput["direction"] | undefined {
+  if (
+    value === "left" ||
+    value === "right" ||
+    value === "top" ||
+    value === "bottom" ||
+    value === "around"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function parseExpandPadding(value: unknown): ExpandTaskInput["padding"] {
+  if (!isRecord(value)) throw new Error("Invalid expand padding");
+  return {
+    left: parseNonNegativeInteger(value.left, "left"),
+    right: parseNonNegativeInteger(value.right, "right"),
+    top: parseNonNegativeInteger(value.top, "top"),
+    bottom: parseNonNegativeInteger(value.bottom, "bottom")
+  };
+}
+
+function parseExpandTarget(value: unknown): ExpandTaskInput["expandTarget"] {
+  if (!isRecord(value)) throw new Error("Invalid expand target");
+  return {
+    width: parsePositiveInteger(value.width, "width"),
+    height: parsePositiveInteger(value.height, "height")
+  };
+}
+
+function parseOptionalPositiveNumber(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  throw new Error("Invalid expand percent");
+}
+
+function parseNonNegativeInteger(value: unknown, name: string): number {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+  throw new Error(`Invalid expand padding ${name}`);
+}
+
+function parsePositiveInteger(value: unknown, name: string): number {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return value;
+  }
+  throw new Error(`Invalid expand target ${name}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

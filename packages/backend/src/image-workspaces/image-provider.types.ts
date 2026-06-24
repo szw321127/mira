@@ -37,10 +37,14 @@ export type ImageGenerateInput = {
   background: ImageBackground;
 };
 
+export type ImageEditSource = StoredImageRef & {
+  bytes?: Buffer;
+};
+
 export type ImageEditInput = {
   prompt: string;
-  image: StoredImageRef;
-  mask?: StoredImageRef;
+  image: ImageEditSource;
+  mask?: ImageEditSource;
   size: ImageGenerateInput["size"];
 };
 
