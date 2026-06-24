@@ -12,13 +12,20 @@ import {
   GitCompare,
   Image as ImageIcon,
   Maximize2,
+  PanelTopOpen,
   RotateCcw,
   Scissors,
   Shuffle,
   Trash2,
   Wand2
 } from "lucide-react";
-import type { LocalEditOverlayState } from "../leafer-canvas-types";
+import type {
+  LocalEditOverlayState,
+  LocalExpandDirection,
+  LocalExpandMode,
+  LocalExpandOverlayState,
+  LocalExpandPadding,
+} from "../leafer-canvas-types";
 import type { ImageAsset, ImageVersion } from "../types";
 import {
   createImageAssetPreviewUrl,
@@ -26,18 +33,62 @@ import {
   createImageVersionPreviewUrl
 } from "../workspace-api";
 
+const EXPAND_MODE_OPTIONS: Array<{ value: LocalExpandMode; label: string }> = [
+  { value: "free", label: "自由" },
+  { value: "ratio", label: "比例" },
+  { value: "direction", label: "方向" },
+];
+
+const EXPAND_RATIO_OPTIONS: Array<LocalExpandOverlayState["aspectRatio"]> = [
+  "1:1",
+  "2:1",
+  "4:3",
+  "16:9",
+  "1:2",
+  "3:4",
+  "9:16",
+];
+
+const EXPAND_DIRECTION_OPTIONS: Array<{
+  value: LocalExpandDirection;
+  label: string;
+}> = [
+  { value: "left", label: "左" },
+  { value: "right", label: "右" },
+  { value: "top", label: "上" },
+  { value: "bottom", label: "下" },
+  { value: "around", label: "四周" },
+];
+
+const EXPAND_PADDING_FIELDS: Array<{
+  key: keyof LocalExpandPadding;
+  label: string;
+}> = [
+  { key: "left", label: "左" },
+  { key: "right", label: "右" },
+  { key: "top", label: "上" },
+  { key: "bottom", label: "下" },
+];
+
 export function AssetVersionPanel({
   assets,
   currentVersion,
   disabled,
   localEditOverlayState,
+  localExpandOverlayState,
   onDelete,
   onDownload,
   onLocalEditRadiusChange,
+  onLocalExpandAspectRatioChange,
+  onLocalExpandDirectionChange,
+  onLocalExpandModeChange,
+  onLocalExpandPaddingChange,
+  onLocalExpandPercentChange,
   onRemoveBackground,
   onRevert,
   onSelectAsset,
   onSelectVersion,
+  onSubmitExpand,
   onSubmitLocalEdit,
   onUpscale,
   onVariation,
@@ -48,13 +99,26 @@ export function AssetVersionPanel({
   currentVersion: ImageVersion | null;
   disabled: boolean;
   localEditOverlayState: LocalEditOverlayState;
+  localExpandOverlayState: LocalExpandOverlayState;
   onDelete: (assetId: string) => Promise<void> | void;
   onDownload: (assetId: string, versionId?: string) => Promise<void> | void;
   onLocalEditRadiusChange: (radius: number) => void;
+  onLocalExpandAspectRatioChange: (
+    aspectRatio: LocalExpandOverlayState["aspectRatio"],
+  ) => void;
+  onLocalExpandDirectionChange: (direction: LocalExpandDirection) => void;
+  onLocalExpandModeChange: (mode: LocalExpandMode) => void;
+  onLocalExpandPaddingChange: (padding: Partial<LocalExpandPadding>) => void;
+  onLocalExpandPercentChange: (percent: number) => void;
   onRemoveBackground: (assetId: string) => Promise<void> | void;
   onRevert: (assetId: string, versionId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
   onSelectVersion: (versionId: string) => void;
+  onSubmitExpand: (
+    assetId: string,
+    version: ImageVersion,
+    prompt: string,
+  ) => Promise<void> | void;
   onSubmitLocalEdit: (
     assetId: string,
     version: ImageVersion,
@@ -66,9 +130,13 @@ export function AssetVersionPanel({
   selectedAsset: ImageAsset | null;
 }) {
   const [compareOpen, setCompareOpen] = useState(false);
+  const [expandOpen, setExpandOpen] = useState(false);
+  const [expandPrompt, setExpandPrompt] = useState("");
   const [editPrompt, setEditPrompt] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const canAct = Boolean(selectedAsset && currentVersion && !disabled);
+  const expandMode = localExpandOverlayState.mode;
+  const expandPercent = Math.round(localExpandOverlayState.percent * 100);
   const localEditReady = Boolean(
     selectedAsset &&
       localEditOverlayState.dirty &&
@@ -90,6 +158,15 @@ export function AssetVersionPanel({
       return Date.parse(right.createdAt) - Date.parse(left.createdAt);
     });
   }, [selectedAsset]);
+
+  async function submitExpand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAsset || !currentVersion) return;
+    await runAction(async () => {
+      await onSubmitExpand(selectedAsset.id, currentVersion, expandPrompt);
+      setExpandPrompt("");
+    });
+  }
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -245,6 +322,19 @@ export function AssetVersionPanel({
             </IconButton>
             <IconButton
               disabled={!canAct}
+              label="扩展图片"
+              onClick={() => {
+                setExpandOpen((value) => {
+                  const nextValue = !value;
+                  if (nextValue) onLocalExpandModeChange(expandMode);
+                  return nextValue;
+                });
+              }}
+            >
+              <PanelTopOpen aria-hidden="true" size={15} />
+            </IconButton>
+            <IconButton
+              disabled={!canAct}
               label="移除背景"
               onClick={() => runAction(() => onRemoveBackground(selectedAsset.id))}
             >
@@ -286,6 +376,186 @@ export function AssetVersionPanel({
               <Trash2 aria-hidden="true" size={15} />
             </IconButton>
           </div>
+
+          {expandOpen ? (
+            <form
+              className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-3"
+              onSubmit={submitExpand}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[12px] font-[700]">
+                  <PanelTopOpen aria-hidden="true" size={14} />
+                  扩展图片
+                </div>
+                <div className="text-[11px] font-[650] text-[var(--muted-strong)]">
+                  {localExpandOverlayState.target
+                    ? `${localExpandOverlayState.target.width}x${localExpandOverlayState.target.height}`
+                    : "未设置"}
+                </div>
+              </div>
+
+              <div className="mt-2 grid grid-cols-3 gap-1 rounded-[8px] bg-[var(--surface-muted)] p-1">
+                {EXPAND_MODE_OPTIONS.map((option) => (
+                  <button
+                    aria-pressed={expandMode === option.value}
+                    className={`h-7 rounded-[6px] text-[11px] font-[700] transition-colors ${
+                      expandMode === option.value
+                        ? "bg-[var(--surface)] text-[var(--accent-strong)]"
+                        : "text-[var(--muted-strong)] hover:bg-[var(--surface)]"
+                    }`}
+                    disabled={disabled}
+                    key={option.value}
+                    onClick={() => onLocalExpandModeChange(option.value)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              {expandMode === "ratio" ? (
+                <div className="mt-2 grid grid-cols-4 gap-1">
+                  {EXPAND_RATIO_OPTIONS.map((ratio) => (
+                    <button
+                      aria-pressed={localExpandOverlayState.aspectRatio === ratio}
+                      className={`h-7 rounded-[6px] border px-2 text-[11px] font-[650] transition-colors ${
+                        localExpandOverlayState.aspectRatio === ratio
+                          ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-strong)]"
+                          : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]"
+                      }`}
+                      disabled={disabled}
+                      key={ratio}
+                      onClick={() => onLocalExpandAspectRatioChange(ratio)}
+                      type="button"
+                    >
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {expandMode === "direction" ? (
+                <div className="mt-2 space-y-2">
+                  <div className="grid grid-cols-5 gap-1">
+                    {EXPAND_DIRECTION_OPTIONS.map((direction) => (
+                      <button
+                        aria-pressed={
+                          localExpandOverlayState.direction === direction.value
+                        }
+                        className={`h-7 rounded-[6px] border px-1 text-[11px] font-[650] transition-colors ${
+                          localExpandOverlayState.direction === direction.value
+                            ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-strong)]"
+                            : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]"
+                        }`}
+                        disabled={disabled}
+                        key={direction.value}
+                        onClick={() =>
+                          onLocalExpandDirectionChange(direction.value)
+                        }
+                        type="button"
+                      >
+                        {direction.label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="grid gap-1.5 text-[11px] font-[650] text-[var(--muted-strong)]">
+                    <span className="flex items-center justify-between">
+                      <span>扩展比例</span>
+                      <input
+                        aria-label="扩展比例百分比"
+                        className="h-7 w-16 rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-2 text-right text-[11px] text-[var(--ink)] focus:border-[var(--accent)]"
+                        disabled={disabled}
+                        max={100}
+                        min={10}
+                        onChange={(event) =>
+                          onLocalExpandPercentChange(Number(event.target.value) / 100)
+                        }
+                        step={1}
+                        type="number"
+                        value={expandPercent}
+                      />
+                    </span>
+                    <input
+                      aria-label="扩展比例"
+                      className="h-7 w-full accent-[var(--accent)]"
+                      disabled={disabled}
+                      max={100}
+                      min={10}
+                      onChange={(event) =>
+                        onLocalExpandPercentChange(Number(event.target.value) / 100)
+                      }
+                      step={1}
+                      type="range"
+                      value={expandPercent}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              {expandMode === "free" ? (
+                <div className="mt-2 grid grid-cols-4 gap-1">
+                  {EXPAND_PADDING_FIELDS.map((field) => (
+                    <label
+                      className="grid gap-1 text-[11px] font-[650] text-[var(--muted-strong)]"
+                      key={field.key}
+                    >
+                      <span>{field.label}</span>
+                      <input
+                        aria-label={`扩展留白${field.label}`}
+                        className="h-7 min-w-0 rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-1.5 text-right text-[11px] text-[var(--ink)] focus:border-[var(--accent)]"
+                        disabled={disabled}
+                        min={0}
+                        onChange={(event) =>
+                          onLocalExpandPaddingChange({
+                            [field.key]: Number(event.target.value),
+                          })
+                        }
+                        step={1}
+                        type="number"
+                        value={localExpandOverlayState.padding[field.key]}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="mt-2 grid gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px] text-[var(--muted-strong)]">
+                <div className="flex justify-between gap-2">
+                  <span>留白</span>
+                  <span className="font-[650] text-[var(--ink)]">
+                    左 {localExpandOverlayState.padding.left} / 右{" "}
+                    {localExpandOverlayState.padding.right} / 上{" "}
+                    {localExpandOverlayState.padding.top} / 下{" "}
+                    {localExpandOverlayState.padding.bottom}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>目标</span>
+                  <span className="font-[650] text-[var(--ink)]">
+                    {localExpandOverlayState.target
+                      ? `${localExpandOverlayState.target.width}x${localExpandOverlayState.target.height}`
+                      : "--"}
+                  </span>
+                </div>
+              </div>
+
+              <textarea
+                className="mt-2 min-h-[72px] w-full resize-none rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs leading-relaxed placeholder:text-[var(--muted-strong)] focus:border-[var(--accent)] focus:outline-none focus-visible:outline-none"
+                disabled={disabled}
+                onChange={(event) => setExpandPrompt(event.target.value)}
+                placeholder="留空使用默认扩展提示词"
+                value={expandPrompt}
+              />
+              <button
+                className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[8px] bg-[var(--ink)] px-3 text-xs font-[700] text-white transition-colors hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-55"
+                disabled={!canAct}
+                type="submit"
+              >
+                <PanelTopOpen aria-hidden="true" size={14} />
+                提交扩展图片
+              </button>
+            </form>
+          ) : null}
 
           <form className="space-y-2" onSubmit={submitEdit}>
             <textarea

@@ -4,6 +4,10 @@ import Link from "next/link";
 import { ChevronLeft, Sparkles, X } from "lucide-react";
 import type {
   LocalEditOverlayState,
+  LocalExpandDirection,
+  LocalExpandMode,
+  LocalExpandOverlayState,
+  LocalExpandPadding,
 } from "../leafer-canvas-types";
 import type {
   ImageAsset,
@@ -23,6 +27,7 @@ export function InspectorPanel({
   currentVersion,
   error,
   localEditOverlayState,
+  localExpandOverlayState,
   mobileOpen,
   onCancelTask,
   onCloseMobile,
@@ -31,11 +36,17 @@ export function InspectorPanel({
   onDownloadAsset,
   onGenerate,
   onLocalEditRadiusChange,
+  onLocalExpandAspectRatioChange,
+  onLocalExpandDirectionChange,
+  onLocalExpandModeChange,
+  onLocalExpandPaddingChange,
+  onLocalExpandPercentChange,
   onRemoveBackgroundAsset,
   onRevertAsset,
   onRetryTask,
   onSelectAsset,
   onSelectVersion,
+  onSubmitExpand,
   onSubmitLocalEdit,
   onUpscaleAsset,
   onUploadSourceAsset,
@@ -49,6 +60,7 @@ export function InspectorPanel({
   currentVersion: ImageVersion | null;
   error: string | null;
   localEditOverlayState: LocalEditOverlayState;
+  localExpandOverlayState: LocalExpandOverlayState;
   mobileOpen: boolean;
   onCancelTask: (taskId: string) => Promise<void> | void;
   onCloseMobile: () => void;
@@ -57,11 +69,23 @@ export function InspectorPanel({
   onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
   onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
   onLocalEditRadiusChange: (radius: number) => void;
+  onLocalExpandAspectRatioChange: (
+    aspectRatio: LocalExpandOverlayState["aspectRatio"],
+  ) => void;
+  onLocalExpandDirectionChange: (direction: LocalExpandDirection) => void;
+  onLocalExpandModeChange: (mode: LocalExpandMode) => void;
+  onLocalExpandPaddingChange: (padding: Partial<LocalExpandPadding>) => void;
+  onLocalExpandPercentChange: (percent: number) => void;
   onRemoveBackgroundAsset: (assetId: string) => Promise<void> | void;
   onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
   onSelectVersion: (versionId: string) => void;
+  onSubmitExpand: (
+    assetId: string,
+    version: ImageVersion,
+    prompt: string,
+  ) => Promise<void> | void;
   onSubmitLocalEdit: (
     assetId: string,
     version: ImageVersion,
@@ -117,13 +141,20 @@ export function InspectorPanel({
           currentVersion={currentVersion}
           disabled={creatingTask}
           localEditOverlayState={localEditOverlayState}
+          localExpandOverlayState={localExpandOverlayState}
           onDelete={onDeleteAsset}
           onDownload={onDownloadAsset}
           onLocalEditRadiusChange={onLocalEditRadiusChange}
+          onLocalExpandAspectRatioChange={onLocalExpandAspectRatioChange}
+          onLocalExpandDirectionChange={onLocalExpandDirectionChange}
+          onLocalExpandModeChange={onLocalExpandModeChange}
+          onLocalExpandPaddingChange={onLocalExpandPaddingChange}
+          onLocalExpandPercentChange={onLocalExpandPercentChange}
           onRemoveBackground={onRemoveBackgroundAsset}
           onRevert={onRevertAsset}
           onSelectAsset={onSelectAsset}
           onSelectVersion={onSelectVersion}
+          onSubmitExpand={onSubmitExpand}
           onSubmitLocalEdit={onSubmitLocalEdit}
           onUpscale={onUpscaleAsset}
           onVariation={onVariationAsset}

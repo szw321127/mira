@@ -11,6 +11,10 @@ import { ImageCanvas } from "./image-canvas";
 import type {
   CanvasController,
   LocalEditOverlayState,
+  LocalExpandDirection,
+  LocalExpandMode,
+  LocalExpandOverlayState,
+  LocalExpandPadding,
 } from "./leafer-canvas-types";
 import type {
   ImageExpandRequest,
@@ -29,6 +33,18 @@ const EMPTY_LOCAL_EDIT_OVERLAY_STATE: LocalEditOverlayState = {
   dirty: false,
   markerRadius: 96,
   source: null,
+};
+
+const EMPTY_LOCAL_EXPAND_OVERLAY_STATE: LocalExpandOverlayState = {
+  active: false,
+  assetId: null,
+  versionId: null,
+  mode: "free",
+  aspectRatio: "1:1",
+  direction: "around",
+  percent: 0.25,
+  padding: { left: 0, right: 0, top: 0, bottom: 0 },
+  target: null,
 };
 
 type ImageWorkspaceShellProps = {
@@ -77,6 +93,7 @@ export function ImageWorkspaceShell({
   onDeleteWorkspace,
   onDownloadAsset,
   onEditAsset,
+  onExpandAsset,
   onGenerate,
   onPersistCanvas,
   onRemoveBackgroundAsset,
@@ -95,6 +112,8 @@ export function ImageWorkspaceShell({
     useState<CanvasController | null>(null);
   const [localEditOverlayState, setLocalEditOverlayState] =
     useState<LocalEditOverlayState>(EMPTY_LOCAL_EDIT_OVERLAY_STATE);
+  const [localExpandState, setLocalExpandState] =
+    useState<LocalExpandOverlayState>(EMPTY_LOCAL_EXPAND_OVERLAY_STATE);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const {
@@ -117,6 +136,7 @@ export function ImageWorkspaceShell({
 
     const syncOverlayState = () => {
       setLocalEditOverlayState(canvasController.getLocalEditOverlayState());
+      setLocalExpandState(canvasController.getLocalExpandState());
     };
     syncOverlayState();
     return canvasController.subscribeChange(syncOverlayState);
@@ -128,6 +148,7 @@ export function ImageWorkspaceShell({
       setCanvasController(controller);
       if (!controller) {
         setLocalEditOverlayState(EMPTY_LOCAL_EDIT_OVERLAY_STATE);
+        setLocalExpandState(EMPTY_LOCAL_EXPAND_OVERLAY_STATE);
       }
     },
     [],
@@ -135,6 +156,35 @@ export function ImageWorkspaceShell({
 
   const setLocalEditMarkerRadius = useCallback((radius: number) => {
     canvasControllerRef.current?.setLocalEditMarkerRadius(radius);
+  }, []);
+
+  const setLocalExpandMode = useCallback((mode: LocalExpandMode) => {
+    canvasControllerRef.current?.setLocalExpandMode(mode);
+  }, []);
+
+  const setLocalExpandAspectRatio = useCallback(
+    (aspectRatio: LocalExpandOverlayState["aspectRatio"]) => {
+      canvasControllerRef.current?.setLocalExpandAspectRatio(aspectRatio);
+    },
+    [],
+  );
+
+  const setLocalExpandDirection = useCallback(
+    (direction: LocalExpandDirection) => {
+      canvasControllerRef.current?.setLocalExpandDirection(direction);
+    },
+    [],
+  );
+
+  const setLocalExpandPadding = useCallback(
+    (padding: Partial<LocalExpandPadding>) => {
+      canvasControllerRef.current?.setLocalExpandPadding(padding);
+    },
+    [],
+  );
+
+  const setLocalExpandPercent = useCallback((percent: number) => {
+    canvasControllerRef.current?.setLocalExpandPercent(percent);
   }, []);
 
   const handleSelectVersion = useCallback(
@@ -167,6 +217,32 @@ export function ImageWorkspaceShell({
       controller.clearLocalEditOverlay();
     },
     [onEditAsset, onUploadMask],
+  );
+
+  const submitExpand = useCallback(
+    async (assetId: string, version: ImageVersion, prompt: string) => {
+      const controller = canvasControllerRef.current;
+      if (!controller) {
+        throw new Error("图像画布还在加载，请稍后再试");
+      }
+
+      const expand = controller.exportLocalExpandInput({
+        assetId,
+        versionId: version.id,
+        width: version.width,
+        height: version.height,
+      });
+      if (!expand) {
+        throw new Error("请先设置图片扩展范围");
+      }
+
+      await onExpandAsset(assetId, {
+        ...expand,
+        prompt: prompt.trim() || expand.promptDefaults,
+      });
+      controller.clearLocalExpandOverlay();
+    },
+    [onExpandAsset],
   );
 
   function selectWorkspace(id: string) {
@@ -229,16 +305,23 @@ export function ImageWorkspaceShell({
         onCloseMobile={() => setMobileInspectorOpen(false)}
         onCancelTask={onCancelTask}
         localEditOverlayState={localEditOverlayState}
+        localExpandOverlayState={localExpandState}
         onDeleteAsset={onDeleteAsset}
         onDeleteTask={onDeleteTask}
         onDownloadAsset={onDownloadAsset}
         onGenerate={onGenerate}
         onLocalEditRadiusChange={setLocalEditMarkerRadius}
+        onLocalExpandAspectRatioChange={setLocalExpandAspectRatio}
+        onLocalExpandDirectionChange={setLocalExpandDirection}
+        onLocalExpandModeChange={setLocalExpandMode}
+        onLocalExpandPaddingChange={setLocalExpandPadding}
+        onLocalExpandPercentChange={setLocalExpandPercent}
         onRemoveBackgroundAsset={onRemoveBackgroundAsset}
         onRevertAsset={onRevertAsset}
         onRetryTask={onRetryTask}
         onSelectAsset={selectAsset}
         onSelectVersion={handleSelectVersion}
+        onSubmitExpand={submitExpand}
         onSubmitLocalEdit={submitLocalEdit}
         onUpscaleAsset={onUpscaleAsset}
         onUploadSourceAsset={onUploadSourceAsset}

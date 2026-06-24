@@ -799,6 +799,70 @@ test("image workspace page and shell thread image expansion props", () => {
   );
 });
 
+test("asset version panel exposes compact image expansion controls", () => {
+  const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
+
+  assert.match(panelSource, /扩展图片/);
+  assert.match(panelSource, /localExpandOverlayState/);
+  assert.match(panelSource, /onLocalExpandModeChange/);
+  assert.match(panelSource, /onLocalExpandAspectRatioChange/);
+  assert.match(panelSource, /onLocalExpandDirectionChange/);
+  assert.match(panelSource, /onLocalExpandPercentChange/);
+  assert.match(panelSource, /onLocalExpandPaddingChange/);
+  assert.match(panelSource, /onSubmitExpand/);
+  assert.match(panelSource, /expandMode/);
+  assert.match(panelSource, /自由/);
+  assert.match(panelSource, /比例/);
+  assert.match(panelSource, /方向/);
+  for (const ratio of ["1:1", "2:1", "4:3", "16:9", "1:2", "3:4", "9:16"]) {
+    assert.match(panelSource, new RegExp(`"${ratio}"`));
+  }
+  for (const direction of ["left", "right", "top", "bottom", "around"]) {
+    assert.match(panelSource, new RegExp(`value: "${direction}"`));
+  }
+  assert.match(panelSource, /type="range"/);
+  assert.match(panelSource, /Math\.round\(localExpandOverlayState\.percent \* 100\)/);
+  assert.match(panelSource, /onLocalExpandPercentChange\(Number\(event\.target\.value\) \/ 100\)/);
+  assert.match(panelSource, /localExpandOverlayState\.padding/);
+  assert.match(panelSource, /localExpandOverlayState\.target/);
+});
+
+test("inspector panel passes image expansion props to the asset version panel", () => {
+  const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
+
+  for (const propName of [
+    "localExpandOverlayState",
+    "onLocalExpandModeChange",
+    "onLocalExpandAspectRatioChange",
+    "onLocalExpandDirectionChange",
+    "onLocalExpandPercentChange",
+    "onLocalExpandPaddingChange",
+    "onSubmitExpand",
+  ]) {
+    assert.match(inspectorSource, new RegExp(`${propName}`));
+    assert.match(inspectorSource, new RegExp(`${propName}=\\{${propName}\\}`));
+  }
+});
+
+test("image workspace shell wires local image expansion overlay state and submit", () => {
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+
+  assert.match(shellSource, /EMPTY_LOCAL_EXPAND_OVERLAY_STATE/);
+  assert.match(shellSource, /localExpandState/);
+  assert.match(shellSource, /setLocalExpandState\(canvasController\.getLocalExpandState\(\)\)/);
+  assert.match(shellSource, /setLocalExpandMode/);
+  assert.match(shellSource, /setLocalExpandAspectRatio/);
+  assert.match(shellSource, /setLocalExpandDirection/);
+  assert.match(shellSource, /setLocalExpandPercent/);
+  assert.match(shellSource, /setLocalExpandPadding/);
+  assert.match(shellSource, /submitExpand/);
+  assert.match(shellSource, /controller\.exportLocalExpandInput\(\{\s*assetId,\s*versionId:\s*version\.id,\s*width:\s*version\.width,\s*height:\s*version\.height/s);
+  assert.match(shellSource, /onExpandAsset\(assetId,\s*\{\s*\.\.\.expand,\s*prompt:\s*prompt\.trim\(\) \|\| expand\.promptDefaults/s);
+  assert.match(shellSource, /controller\.clearLocalExpandOverlay\(\)/);
+  assert.match(shellSource, /localExpandOverlayState=\{localExpandState\}/);
+  assert.match(shellSource, /onSubmitExpand=\{submitExpand\}/);
+});
+
 test("image workspace uploads local source images into the active canvas", () => {
   const apiSource = readImageWorkspaceFile("workspace-api.ts");
   const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
