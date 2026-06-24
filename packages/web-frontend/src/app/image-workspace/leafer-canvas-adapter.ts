@@ -1,4 +1,3 @@
-import type { Editor as LeaferEditorBase } from "leafer-editor";
 import type { IApp, IGroup, IImage, IUI } from "leafer-ui";
 import type {
   CanvasController,
@@ -27,16 +26,14 @@ type MiraImageNode = IImage & {
   remove: () => void;
 };
 
-type LeaferEditor = LeaferEditorBase & {
+type LeaferEditor = {
   cancel: () => void;
   select: (target: IUI | IUI[]) => void;
   target?: IUI | IUI[];
 };
 
-type LeaferAppWithOverlay = IApp & {
-  sky: {
-    add: (target: IUI) => void;
-  };
+type LeaferAppWithEditor = IApp & {
+  editor: LeaferEditor;
 };
 
 type ControllerOptions = {
@@ -66,7 +63,7 @@ async function createLoadedLeaferCanvasController({
   container,
   events,
 }: ControllerOptions): Promise<CanvasController> {
-  const [{ App, Group, Image, PointerEvent }, { Editor }] = await Promise.all([
+  const [{ App, Group, Image, PointerEvent }] = await Promise.all([
     import("leafer-ui"),
     import("leafer-editor"),
   ]);
@@ -81,15 +78,15 @@ async function createLoadedLeaferCanvasController({
   const changeListeners = new Set<() => void>();
 
   const app = new App({
+    editor: {},
     height: Math.max(1, container.clientHeight),
     view: container,
     width: Math.max(1, container.clientWidth),
-  }) as LeaferAppWithOverlay;
+  }) as LeaferAppWithEditor;
   const imageLayer = new Group({ x: 0, y: 0 }) as IGroup;
-  const editor = new Editor() as LeaferEditor;
+  const editor = app.editor as LeaferEditor;
 
   app.add(imageLayer);
-  app.sky.add(editor);
 
   const resizeObserver = new ResizeObserver(() => {
     safeCall(() => {

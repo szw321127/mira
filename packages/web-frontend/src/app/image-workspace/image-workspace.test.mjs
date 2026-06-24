@@ -108,12 +108,15 @@ test("image canvas loads Leafer only after the browser host is ready", () => {
   assert.match(canvasSource, /nextController\.destroy\(\)/);
 });
 
-test("image canvas mounts the Leafer editor on the overlay layer", () => {
+test("image canvas lets Leafer create the editor layer", () => {
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
 
-  assert.match(adapterSource, /type\s+LeaferAppWithOverlay/);
-  assert.match(adapterSource, /app\.sky\.add\(editor\)/);
+  assert.match(adapterSource, /type\s+LeaferAppWithEditor/);
+  assert.match(adapterSource, /editor:\s*\{\}/);
+  assert.match(adapterSource, /app\.editor\s+as\s+LeaferEditor/);
   assert.doesNotMatch(adapterSource, /app\.add\(editor\)/);
+  assert.doesNotMatch(adapterSource, /app\.sky\.add\(editor\)/);
+  assert.doesNotMatch(adapterSource, /new Editor\(\)/);
 });
 
 test("image canvas removes stale Mira image nodes after backend asset deletion", () => {
