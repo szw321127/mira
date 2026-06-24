@@ -34,9 +34,16 @@ export function ImageCanvas({
   const [controller, setController] = useState<CanvasController | null>(null);
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<CanvasController | null>(null);
+  const eventsRef = useRef({ onSelectAsset });
   const lastSelectedAssetRef = useRef<string>("");
+  const readyCallbackRef = useRef(onControllerReady);
   const persistenceKey = workspace ? `mira-image-workspace:${workspace.id}` : null;
   const canvasReady = Boolean(persistenceKey && readyCanvasKey === persistenceKey);
+
+  useEffect(() => {
+    eventsRef.current.onSelectAsset = onSelectAsset;
+    readyCallbackRef.current = onControllerReady;
+  }, [onControllerReady, onSelectAsset]);
 
   useEffect(() => {
     if (!persistenceKey) return;
@@ -77,7 +84,7 @@ export function ImageCanvas({
           if (lastSelectedAssetRef.current === selectionKey) return;
 
           lastSelectedAssetRef.current = selectionKey;
-          onSelectAsset(selection);
+          eventsRef.current.onSelectAsset(selection);
         },
       },
     })
@@ -89,7 +96,7 @@ export function ImageCanvas({
         mountedController = nextController;
         controllerRef.current = nextController;
         setController(nextController);
-        onControllerReady?.(nextController);
+        readyCallbackRef.current?.(nextController);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -104,11 +111,11 @@ export function ImageCanvas({
         controllerRef.current = null;
       }
       if (mountedController) {
-        onControllerReady?.(null);
+        readyCallbackRef.current?.(null);
       }
       setController((current) => (current === mountedController ? null : current));
     };
-  }, [canvasReady, onControllerReady, onSelectAsset, persistenceKey]);
+  }, [canvasReady, persistenceKey]);
 
   useEffect(() => {
     if (!controller || !canvasReady) return;

@@ -108,6 +108,21 @@ test("image canvas loads Leafer only after the browser host is ready", () => {
   assert.match(canvasSource, /nextController\.destroy\(\)/);
 });
 
+test("image canvas keeps a stable Leafer controller across parent rerenders", () => {
+  const canvasSource = readImageWorkspaceFile("image-canvas.tsx");
+
+  assert.match(canvasSource, /eventsRef/);
+  assert.match(canvasSource, /readyCallbackRef/);
+  assert.match(canvasSource, /eventsRef\.current\.onSelectAsset\(selection\)/);
+  assert.match(canvasSource, /readyCallbackRef\.current\?\.\(nextController\)/);
+  assert.match(canvasSource, /readyCallbackRef\.current\?\.\(null\)/);
+  assert.doesNotMatch(
+    canvasSource,
+    /\}, \[canvasReady, onControllerReady, onSelectAsset, persistenceKey\]\)/,
+  );
+  assert.match(canvasSource, /\}, \[canvasReady, persistenceKey\]\)/);
+});
+
 test("image canvas lets Leafer create the editor layer", () => {
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
 
@@ -130,6 +145,20 @@ test("image canvas removes stale Mira image nodes after backend asset deletion",
   assert.match(adapterSource, /miraObjectId/);
   assert.match(adapterSource, /validObjectIds/);
   assert.match(adapterSource, /hydrateWorkspace[\s\S]*removeStaleMiraImageNodes/);
+});
+
+test("image canvas clears stale selection before hydrating a different workspace", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /selectionBelongsToWorkspace/);
+  assert.match(adapterSource, /const workspaceAssetIds = new Set/);
+  assert.match(adapterSource, /const selectionStillValid = selectionBelongsToWorkspace/);
+  assert.match(adapterSource, /if \(!selectionStillValid\)/);
+  assert.match(adapterSource, /selectedAssetId = null/);
+  assert.match(adapterSource, /selectedObjectId = null/);
+  assert.match(adapterSource, /selectedVersionId = null/);
+  assert.match(adapterSource, /clearLocalEditOverlay\(false\)/);
+  assert.match(adapterSource, /applySelectionToEditor\(null\)/);
 });
 
 test("image canvas selection updates the selected Mira asset", () => {

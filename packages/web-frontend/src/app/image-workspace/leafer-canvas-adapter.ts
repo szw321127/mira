@@ -564,6 +564,32 @@ async function createLoadedLeaferCanvasController({
       setViewport(nextViewport, false);
 
       const assetsById = new Map(workspace.assets.map((asset) => [asset.id, asset]));
+      const workspaceAssetIds = new Set(assetsById.keys());
+      const workspaceObjectIds = new Set(workspace.objects.map((object) => object.id));
+      const workspaceVersionIds = new Set(
+        workspace.assets.flatMap((asset) =>
+          asset.versions.map((version) => version.id),
+        ),
+      );
+      const selectionStillValid = selectionBelongsToWorkspace(
+        {
+          assetId: selectedAssetId,
+          objectId: selectedObjectId,
+          selectedVersionId,
+        },
+        {
+          assetIds: workspaceAssetIds,
+          objectIds: workspaceObjectIds,
+          versionIds: workspaceVersionIds,
+        },
+      );
+      if (!selectionStillValid) {
+        selectedAssetId = null;
+        selectedObjectId = null;
+        selectedVersionId = null;
+        clearLocalEditOverlay(false);
+        applySelectionToEditor(null);
+      }
       latestAssetsById = assetsById;
       const validObjectIds = new Set<string>();
       const imageObjects = workspace.objects
@@ -884,6 +910,29 @@ function normalizeSelectionInput(
     };
   }
   return selection;
+}
+
+function selectionBelongsToWorkspace(
+  selection: CanvasAssetSelection,
+  workspaceIds: {
+    assetIds: Set<string>;
+    objectIds: Set<string>;
+    versionIds: Set<string>;
+  },
+) {
+  if (selection.assetId && !workspaceIds.assetIds.has(selection.assetId)) {
+    return false;
+  }
+  if (selection.objectId && !workspaceIds.objectIds.has(selection.objectId)) {
+    return false;
+  }
+  if (
+    selection.selectedVersionId &&
+    !workspaceIds.versionIds.has(selection.selectedVersionId)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function parseViewport(value: ImageWorkspace["viewport"]): CanvasViewport {
