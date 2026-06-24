@@ -446,20 +446,35 @@ test("image generation panel exposes compact provider settings", () => {
   const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
 
   assert.match(panelSource, /ImageGenerationSettings/);
-  assert.match(panelSource, /size:\s*"1024x1024"/);
+  assert.match(panelSource, /aspectRatio:\s*"1:1"/);
   assert.match(panelSource, /quality:\s*"auto"/);
   assert.match(panelSource, /background:\s*"auto"/);
   assert.match(panelSource, /画幅/);
   assert.match(panelSource, /质量/);
   assert.match(panelSource, /背景/);
   assert.match(panelSource, /onGenerate\(prompt,\s*settings\)/);
-  assert.match(apiSource, /size\?:\s*ImageGenerationSettings\["size"\]/);
+  assert.match(apiSource, /aspectRatio\?:\s*ImageGenerationSettings\["aspectRatio"\]/);
   assert.match(apiSource, /quality\?:\s*ImageGenerationSettings\["quality"\]/);
   assert.match(apiSource, /background\?:\s*ImageGenerationSettings\["background"\]/);
   assert.match(hookSource, /generateImage\(prompt: string,\s*settings: ImageGenerationSettings/);
   assert.match(hookSource, /\.\.\.settings/);
   assert.match(shellSource, /onGenerate:\s*\(prompt: string,\s*settings: ImageGenerationSettings\)/);
   assert.match(inspectorSource, /onGenerate:\s*\(prompt: string,\s*settings: ImageGenerationSettings\)/);
+});
+
+test("image generation panel supports common aspect ratios", () => {
+  const panelSource = readImageWorkspaceFile("components/prompt-panel.tsx");
+  const typesSource = readImageWorkspaceFile("types.ts");
+  const apiSource = readImageWorkspaceFile("workspace-api.ts");
+
+  for (const ratio of ["1:1", "2:1", "4:3", "16:9", "1:2", "3:4", "9:16"]) {
+    assert.match(panelSource, new RegExp(`value: "${ratio}"`));
+    assert.match(typesSource, new RegExp(`"${ratio}"`));
+  }
+  assert.match(panelSource, /ASPECT_RATIO_OPTIONS/);
+  assert.match(panelSource, /grid-cols-4/);
+  assert.doesNotMatch(panelSource, /SIZE_OPTIONS/);
+  assert.doesNotMatch(apiSource, /size\?:\s*ImageGenerationSettings\["size"\]/);
 });
 
 test("image workspace exposes queued task cancellation controls", () => {

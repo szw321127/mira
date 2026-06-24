@@ -16,8 +16,11 @@ import {
 } from "../admin/runtime-secrets.service.js";
 import {
   assertImageProviderResult,
+  imageGenerateSizeForAspectRatio,
+  type ImageAspectRatio,
   type ImageEditInput,
   type ImageGenerateInput,
+  type ImageGenerateSize,
   type ImageProviderAdapter,
   type ImageProviderResult
 } from "./image-provider.types.js";
@@ -78,10 +81,13 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
 
   async generate(input: ImageGenerateInput): Promise<ImageProviderResult> {
     const config = await this.requireOpenAIConfig();
+    const size = input.aspectRatio
+      ? imageGenerateSizeForAspectRatio(input.aspectRatio)
+      : input.size;
     const result = await this.callImageSdk({
       config,
-      prompt: input.prompt,
-      size: input.size,
+      prompt: promptWithAspectRatioInstruction(input.prompt, input.aspectRatio),
+      size,
       providerOptions: {
         openai: {
           outputFormat: "png",
@@ -94,10 +100,11 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
     });
 
     return this.toProviderResult(result, {
+      aspectRatio: input.aspectRatio ?? null,
       background: input.background,
       model: config.openaiModel,
       quality: input.quality,
-      size: input.size
+      size
     });
   }
 
@@ -123,6 +130,7 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
     });
 
     return this.toProviderResult(result, {
+      aspectRatio: null,
       model: config.openaiModel,
       quality: null,
       size: input.size
@@ -144,7 +152,7 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
     config: RuntimeImageConfig;
     prompt: Parameters<typeof generateImage>[0]["prompt"];
     providerOptions: Parameters<typeof generateImage>[0]["providerOptions"];
-    size: ImageGenerateInput["size"];
+    size: ImageGenerateSize;
   }): Promise<GenerateImageResult> {
     try {
       const openai = createOpenAI({
@@ -180,10 +188,11 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
   private toProviderResult(
     value: GenerateImageResult,
     request: {
+      aspectRatio: ImageAspectRatio | null;
       background?: ImageGenerateInput["background"];
       model: string;
       quality: ImageGenerateInput["quality"] | null;
-      size: ImageGenerateInput["size"];
+      size: ImageGenerateSize;
     }
   ): ImageProviderResult {
     const image = value.image;
@@ -197,6 +206,7 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
       providerJob: firstResponseRequestId(value),
       metadata: {
         model: request.model,
+        ...(request.aspectRatio ? { aspectRatio: request.aspectRatio } : {}),
         size: request.size,
         quality: request.quality,
         ...(request.background ? { background: request.background } : {}),
@@ -222,7 +232,15 @@ function imageProviderFailureMessage(summary: {
   return IMAGE_GENERATION_FAILED_MESSAGE;
 }
 
-function dimensionsForSize(size: ImageGenerateInput["size"]): [number, number] {
+function promptWithAspectRatioInstruction(
+  prompt: string,
+  aspectRatio: ImageAspectRatio | undefined
+): string {
+  if (!aspectRatio) return prompt;
+  return `画幅比例：${aspectRatio}。请严格按该比例进行构图。\n${prompt}`;
+}
+
+function dimensionsForSize(size: ImageGenerateSize): [number, number] {
   if (size === "1024x1536") return [1024, 1536];
   if (size === "1536x1024") return [1536, 1024];
   return [1024, 1024];
@@ -230,7 +248,7 @@ function dimensionsForSize(size: ImageGenerateInput["size"]): [number, number] {
 
 function estimateOpenAIImageCostUsd(
   model: string,
-  size: ImageGenerateInput["size"],
+  size: ImageGenerateSize,
   quality: ImageGenerateInput["quality"] | null,
   result: GenerateImageResult
 ): number | null {

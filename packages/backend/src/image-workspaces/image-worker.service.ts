@@ -3,9 +3,13 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../database/prisma.service.js";
 import {
   IMAGE_PROVIDER,
+  imageGenerateSizeForAspectRatio,
   isImageBackground,
+  isImageAspectRatio,
   isImageGenerateQuality,
   isImageGenerateSize,
+  type ImageAspectRatio,
+  type ImageGenerateSize,
   type ImageProviderAdapter
 } from "./image-provider.types.js";
 import { ImageQueueService } from "./image-queue.service.js";
@@ -93,6 +97,7 @@ export class ImageWorkerService {
     await this.emitAssetPlaceholder(task, input.target);
     const generated = await this.provider.generate({
       prompt: input.prompt,
+      ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
       size: input.size,
       quality: input.quality,
       background: input.background
@@ -124,6 +129,7 @@ export class ImageWorkerService {
       objectIds: [placement.objectId]
     });
     await this.emitUsageEvent(task, generated, {
+      aspectRatio: input.aspectRatio,
       quality: input.quality,
       size: input.size
     });
@@ -280,6 +286,7 @@ export class ImageWorkerService {
       provider: string;
     },
     input: {
+      aspectRatio?: GenerateTaskInput["aspectRatio"];
       quality: GenerateTaskInput["quality"] | null;
       size: GenerateTaskInput["size"];
     }
@@ -372,6 +379,7 @@ export class ImageWorkerService {
           }),
           cost: toInputJson(createImageTaskCost(generated, {
             quality: input.quality,
+            aspectRatio: input.aspectRatio,
             size: input.size
           })),
           finishedAt: new Date()
@@ -491,7 +499,8 @@ export class ImageWorkerService {
 
 type GenerateTaskInput = {
   prompt: string;
-  size: "1024x1024" | "1024x1536" | "1536x1024" | "auto";
+  aspectRatio: ImageAspectRatio | null;
+  size: ImageGenerateSize;
   quality: "low" | "medium" | "high" | "auto";
   background: "transparent" | "opaque" | "auto";
   target: {
@@ -505,16 +514,23 @@ type EditTaskInput = {
   assetId: string;
   versionId: string;
   maskKey?: string;
-  size: "1024x1024" | "1024x1536" | "1536x1024" | "auto";
+  size: ImageGenerateSize;
 };
 
 function parseGenerateTaskInput(input: unknown): GenerateTaskInput {
   const record = isRecord(input) ? input : {};
+  const aspectRatio = isImageAspectRatio(record.aspectRatio)
+    ? record.aspectRatio
+    : null;
+  const legacySize = isImageGenerateSize(record.size) ? record.size : null;
   return {
     prompt: typeof record.prompt === "string" && record.prompt.trim()
       ? record.prompt.trim()
       : "生成图像",
-    size: isImageGenerateSize(record.size) ? record.size : "1024x1024",
+    aspectRatio,
+    size: aspectRatio
+      ? imageGenerateSizeForAspectRatio(aspectRatio)
+      : legacySize ?? "1024x1024",
     quality: isImageGenerateQuality(record.quality) ? record.quality : "auto",
     background: isImageBackground(record.background) ? record.background : "auto",
     target: parseTarget(record.target)
@@ -556,19 +572,24 @@ function createImageTaskCost(
     provider: string;
   },
   input: {
+    aspectRatio?: GenerateTaskInput["aspectRatio"];
     quality: GenerateTaskInput["quality"] | null;
     size: GenerateTaskInput["size"];
   }
 ): {
+  aspectRatio?: string;
   estimatedCostUsd: number | null;
   model: string | null;
   provider: string;
   quality: string | null;
   size: string;
 } {
+  const aspectRatio =
+    readNonEmptyString(generated.metadata.aspectRatio) ?? input.aspectRatio;
   return {
     provider: generated.provider,
     model: readNonEmptyString(generated.metadata.model),
+    ...(aspectRatio ? { aspectRatio } : {}),
     size: readNonEmptyString(generated.metadata.size) ?? input.size,
     quality: readNonEmptyString(generated.metadata.quality) ?? input.quality,
     estimatedCostUsd: readFiniteNumber(generated.metadata.estimatedCostUsd)

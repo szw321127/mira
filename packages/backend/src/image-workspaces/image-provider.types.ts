@@ -11,15 +11,27 @@ export const IMAGE_GENERATE_SIZES = [
   "auto"
 ] as const;
 
+export const IMAGE_ASPECT_RATIOS = [
+  "1:1",
+  "2:1",
+  "4:3",
+  "16:9",
+  "1:2",
+  "3:4",
+  "9:16"
+] as const;
+
 export const IMAGE_GENERATE_QUALITIES = ["low", "medium", "high", "auto"] as const;
 export const IMAGE_BACKGROUNDS = ["transparent", "opaque", "auto"] as const;
 
 export type ImageGenerateSize = (typeof IMAGE_GENERATE_SIZES)[number];
+export type ImageAspectRatio = (typeof IMAGE_ASPECT_RATIOS)[number];
 export type ImageGenerateQuality = (typeof IMAGE_GENERATE_QUALITIES)[number];
 export type ImageBackground = (typeof IMAGE_BACKGROUNDS)[number];
 
 export type ImageGenerateInput = {
   prompt: string;
+  aspectRatio?: ImageAspectRatio;
   size: ImageGenerateSize;
   quality: ImageGenerateQuality;
   background: ImageBackground;
@@ -51,6 +63,28 @@ export const IMAGE_PROVIDER = Symbol("IMAGE_PROVIDER");
 
 export function isImageGenerateSize(value: unknown): value is ImageGenerateSize {
   return IMAGE_GENERATE_SIZES.includes(value as ImageGenerateSize);
+}
+
+export function isImageAspectRatio(value: unknown): value is ImageAspectRatio {
+  return IMAGE_ASPECT_RATIOS.includes(value as ImageAspectRatio);
+}
+
+export function imageGenerateSizeForAspectRatio(
+  aspectRatio: ImageAspectRatio
+): ImageGenerateSize {
+  switch (aspectRatio) {
+    case "1:2":
+    case "3:4":
+    case "9:16":
+      return "1024x1536";
+    case "2:1":
+    case "4:3":
+    case "16:9":
+      return "1536x1024";
+    case "1:1":
+    default:
+      return "1024x1024";
+  }
 }
 
 export function isImageGenerateQuality(value: unknown): value is ImageGenerateQuality {

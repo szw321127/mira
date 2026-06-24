@@ -32,7 +32,7 @@ describe("ImageAgentService", () => {
       type: "generate",
       prompt: "  make a launch poster  ",
       target: { x: 32, y: 48 },
-      size: "1536x1024",
+      aspectRatio: "16:9",
       quality: "high",
       background: "transparent"
     });
@@ -40,7 +40,7 @@ describe("ImageAgentService", () => {
     expect(input).toEqual({
       prompt: "make a launch poster",
       target: { x: 32, y: 48 },
-      size: "1536x1024",
+      aspectRatio: "16:9",
       quality: "high",
       background: "transparent"
     });
@@ -53,7 +53,7 @@ describe("ImageAgentService", () => {
       type: "generate",
       prompt: "make a launch poster",
       target: { x: 32, y: 48 },
-      size: "1536x1024",
+      aspectRatio: "16:9",
       quality: "high",
       background: "transparent"
     });

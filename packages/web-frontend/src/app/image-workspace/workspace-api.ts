@@ -105,7 +105,7 @@ export async function createImageTask(
     target?: { x: number; y: number };
     assetId?: string;
     versionId?: string;
-    size?: ImageGenerationSettings["size"];
+    aspectRatio?: ImageGenerationSettings["aspectRatio"];
     quality?: ImageGenerationSettings["quality"];
     background?: ImageGenerationSettings["background"];
   },

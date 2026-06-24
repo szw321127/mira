@@ -10,6 +10,7 @@ export class ImageAgentService {
       ...(request.assetId ? { assetId: request.assetId } : {}),
       ...(request.versionId ? { versionId: request.versionId } : {}),
       ...(request.maskKey ? { maskKey: request.maskKey } : {}),
+      ...(request.aspectRatio ? { aspectRatio: request.aspectRatio } : {}),
       ...(request.size ? { size: request.size } : {}),
       ...(request.quality ? { quality: request.quality } : {}),
       ...(request.background ? { background: request.background } : {})
@@ -41,6 +42,7 @@ export class ImageAgentService {
       ...readOptionalString(task.input, "assetId"),
       ...readOptionalString(task.input, "versionId"),
       ...readOptionalString(task.input, "maskKey"),
+      ...readOptionalString(task.input, "aspectRatio"),
       ...readOptionalString(task.input, "size"),
       ...readOptionalString(task.input, "quality"),
       ...readOptionalString(task.input, "background")
@@ -54,7 +56,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readOptionalString(
   value: Record<string, unknown>,
-  key: "assetId" | "versionId" | "maskKey" | "size" | "quality" | "background"
+  key:
+    | "assetId"
+    | "versionId"
+    | "maskKey"
+    | "aspectRatio"
+    | "size"
+    | "quality"
+    | "background"
 ) {
   const raw = value[key];
   return typeof raw === "string" && raw.trim() ? { [key]: raw.trim() } : {};

@@ -26,7 +26,8 @@ describe("ImageWorkerService", () => {
     );
     expect(provider.generate).toHaveBeenCalledWith({
       prompt: "a product hero image",
-      size: "1024x1024",
+      aspectRatio: "16:9",
+      size: "1536x1024",
       quality: "auto",
       background: "auto"
     });
@@ -84,7 +85,8 @@ describe("ImageWorkerService", () => {
           cost: {
             provider: "openai",
             model: "gpt-image-1",
-            size: "1024x1024",
+            aspectRatio: "16:9",
+            size: "1536x1024",
             quality: "auto",
             estimatedCostUsd: 0.042
           }
@@ -294,6 +296,7 @@ function createPrisma(
     status: overrides.status ?? "queued",
     input: {
       prompt: "a product hero image",
+      aspectRatio: "16:9",
       target: { x: 120, y: 160 }
     },
     output: null,
@@ -384,7 +387,8 @@ function createProvider() {
         providerJob: "job-1",
         metadata: {
           model: "gpt-image-1",
-          size: "1024x1024",
+          aspectRatio: "16:9",
+          size: "1536x1024",
           quality: "auto",
           estimatedCostUsd: 0.042,
           revisedPrompt: "safe prompt"

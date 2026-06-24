@@ -1,5 +1,7 @@
 import {
   assertImageProviderResult,
+  imageGenerateSizeForAspectRatio,
+  isImageAspectRatio,
   isImageGenerateSize,
   type ImageEditInput,
   type ImageGenerateInput,
@@ -14,6 +16,19 @@ describe("image provider contracts", () => {
     expect(isImageGenerateSize("auto")).toBe(true);
     expect(isImageGenerateSize("512x512")).toBe(false);
     expect(isImageGenerateSize("landscape")).toBe(false);
+  });
+
+  it("accepts common generation aspect ratios and maps them to provider sizes", () => {
+    for (const ratio of ["1:1", "2:1", "4:3", "16:9", "1:2", "3:4", "9:16"]) {
+      expect(isImageAspectRatio(ratio)).toBe(true);
+    }
+
+    expect(isImageAspectRatio("21:9")).toBe(false);
+    expect(isImageAspectRatio("landscape")).toBe(false);
+    expect(isImageAspectRatio("1024x1024")).toBe(false);
+    expect(imageGenerateSizeForAspectRatio("1:1")).toBe("1024x1024");
+    expect(imageGenerateSizeForAspectRatio("16:9")).toBe("1536x1024");
+    expect(imageGenerateSizeForAspectRatio("9:16")).toBe("1024x1536");
   });
 
   it("keeps generate and edit adapter inputs compatible with the provider interface", async () => {
@@ -48,6 +63,7 @@ describe("image provider contracts", () => {
     await expect(
       adapter.generate({
         prompt: "make a launch cover",
+        aspectRatio: "16:9",
         size: "1024x1024",
         quality: "high",
         background: "auto"
@@ -90,6 +106,7 @@ describe("image provider contracts", () => {
 
     expect(seen).toEqual([
       expect.objectContaining({
+        aspectRatio: "16:9",
         prompt: "make a launch cover",
         quality: "high"
       }),

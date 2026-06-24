@@ -67,7 +67,7 @@ describe("image workspace parsers", () => {
         type: "generate",
         prompt: "make a cover",
         target: { x: 100, y: 120 },
-        size: "1536x1024",
+        aspectRatio: "16:9",
         quality: "high",
         background: "transparent"
       })
@@ -75,7 +75,7 @@ describe("image workspace parsers", () => {
       type: "generate",
       prompt: "make a cover",
       target: { x: 100, y: 120 },
-      size: "1536x1024",
+      aspectRatio: "16:9",
       quality: "high",
       background: "transparent"
     });
@@ -87,6 +87,13 @@ describe("image workspace parsers", () => {
         type: "generate",
         prompt: "make a cover",
         size: "2048x2048"
+      })
+    ).toBeNull();
+    expect(
+      parseImageTaskRequest({
+        type: "generate",
+        prompt: "make a cover",
+        aspectRatio: "21:9"
       })
     ).toBeNull();
     expect(
@@ -246,6 +253,7 @@ describe("image workspace parsers", () => {
             maskKey: "local/user/workspace/masks/mask.png",
             storageKey: "local/user/workspace/source.png",
             providerJob: "job-input",
+            aspectRatio: "16:9",
             size: "1024x1024",
             quality: "high",
             background: "transparent"
@@ -273,6 +281,7 @@ describe("image workspace parsers", () => {
       prompt: "make a softer cover",
       assetId: "asset-1",
       versionId: "version-1",
+      aspectRatio: "16:9",
       size: "1024x1024",
       quality: "high",
       background: "transparent"

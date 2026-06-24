@@ -156,6 +156,7 @@ describe("OpenAIImageProviderService", () => {
     await expect(
       service.generate({
         prompt: "make a launch cover",
+        aspectRatio: "16:9",
         size: "1536x1024",
         quality: "high",
         background: "transparent"
@@ -167,11 +168,12 @@ describe("OpenAIImageProviderService", () => {
         width: 1536,
         height: 1024,
         provider: "openai",
-        providerJob: "req_img_1",
-        metadata: expect.objectContaining({
-          model: "gpt-image-1.5",
-          size: "1536x1024",
-          quality: "high",
+          providerJob: "req_img_1",
+          metadata: expect.objectContaining({
+            model: "gpt-image-1.5",
+            aspectRatio: "16:9",
+            size: "1536x1024",
+            quality: "high",
           background: "transparent",
           estimatedCostUsd: 0.1,
           revisedPrompt: "A clean product hero"
@@ -188,10 +190,12 @@ describe("OpenAIImageProviderService", () => {
       model: "gpt-image-1.5",
       n: 1,
       output_format: "png",
-      prompt: "make a launch cover",
+      prompt: expect.stringContaining("16:9"),
       quality: "high",
       size: "1536x1024"
     });
+    expect(readJsonRequestBody(calls[0])).not.toHaveProperty("aspectRatio");
+    expect(readJsonRequestBody(calls[0])).not.toHaveProperty("aspect_ratio");
   });
 
   it("uses the configured OpenAI-compatible image base URL for generation requests", async () => {

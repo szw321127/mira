@@ -1,4 +1,8 @@
 import type { Prisma } from "@prisma/client";
+import type {
+  ImageAspectRatio,
+  ImageGenerateSize
+} from "./image-provider.types.js";
 
 export type CanvasViewport = {
   x: number;
@@ -34,7 +38,8 @@ export type ImageTaskRequest = {
   assetId?: string;
   versionId?: string;
   maskKey?: string;
-  size?: "1024x1024" | "1024x1536" | "1536x1024" | "auto";
+  aspectRatio?: ImageAspectRatio;
+  size?: ImageGenerateSize;
   quality?: "low" | "medium" | "high" | "auto";
   background?: "transparent" | "opaque" | "auto";
 };
@@ -142,6 +147,8 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
 
   const target = parsePoint(value.target);
   if (value.target !== undefined && !target) return null;
+  const aspectRatio = parseImageAspectRatio(value.aspectRatio);
+  if (value.aspectRatio !== undefined && !aspectRatio) return null;
   const size = parseImageSize(value.size);
   if (value.size !== undefined && !size) return null;
   const quality = parseImageQuality(value.quality);
@@ -162,6 +169,7 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
     ...(typeof value.maskKey === "string" && value.maskKey.trim()
       ? { maskKey: value.maskKey.trim() }
       : {}),
+    ...(aspectRatio ? { aspectRatio } : {}),
     ...(size ? { size } : {}),
     ...(quality ? { quality } : {}),
     ...(background ? { background } : {})
@@ -258,6 +266,7 @@ function sanitizeImageTaskInput(input: unknown): Record<string, unknown> {
     "assetId",
     "versionId",
     "type",
+    "aspectRatio",
     "size",
     "quality",
     "background",
@@ -358,6 +367,23 @@ function parseImageSize(value: unknown): ImageTaskRequest["size"] | null {
     value === "1024x1536" ||
     value === "1536x1024" ||
     value === "auto"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function parseImageAspectRatio(
+  value: unknown
+): ImageTaskRequest["aspectRatio"] | null {
+  if (
+    value === "1:1" ||
+    value === "2:1" ||
+    value === "4:3" ||
+    value === "16:9" ||
+    value === "1:2" ||
+    value === "3:4" ||
+    value === "9:16"
   ) {
     return value;
   }

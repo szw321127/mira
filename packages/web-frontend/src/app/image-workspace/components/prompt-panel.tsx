@@ -8,13 +8,17 @@ import type {
   ImageWorkspace,
 } from "../types";
 
-const SIZE_OPTIONS: Array<{
+const ASPECT_RATIO_OPTIONS: Array<{
   label: string;
-  value: ImageGenerationSettings["size"];
+  value: ImageGenerationSettings["aspectRatio"];
 }> = [
-  { label: "方图", value: "1024x1024" },
-  { label: "竖图", value: "1024x1536" },
-  { label: "横图", value: "1536x1024" },
+  { label: "1:1", value: "1:1" },
+  { label: "2:1", value: "2:1" },
+  { label: "4:3", value: "4:3" },
+  { label: "16:9", value: "16:9" },
+  { label: "1:2", value: "1:2" },
+  { label: "3:4", value: "3:4" },
+  { label: "9:16", value: "9:16" },
 ];
 
 const QUALITY_OPTIONS: Array<{
@@ -55,7 +59,7 @@ export function PromptPanel({
 }) {
   const [prompt, setPrompt] = useState("");
   const [settings, setSettings] = useState<ImageGenerationSettings>({
-    size: "1024x1024",
+    aspectRatio: "1:1",
     quality: "auto",
     background: "auto",
   });
@@ -86,9 +90,11 @@ export function PromptPanel({
       <div className="mt-3 space-y-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] p-3">
         <GenerationOptionGroup
           label="画幅"
-          onChange={(size) => setSettings((current) => ({ ...current, size }))}
-          options={SIZE_OPTIONS}
-          value={settings.size}
+          onChange={(aspectRatio) =>
+            setSettings((current) => ({ ...current, aspectRatio }))
+          }
+          options={ASPECT_RATIO_OPTIONS}
+          value={settings.aspectRatio}
         />
         <GenerationOptionGroup
           label="质量"
@@ -161,7 +167,7 @@ function GenerationOptionGroup<Value extends string>({
   return (
     <div className="space-y-1.5">
       <div className="text-xs font-[700] text-[var(--muted-strong)]">{label}</div>
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-4 gap-1">
         {options.map((option) => {
           const selected = option.value === value;
           return (

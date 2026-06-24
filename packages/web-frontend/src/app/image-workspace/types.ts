@@ -65,7 +65,7 @@ export type ImageTask = {
 };
 
 export type ImageGenerationSettings = {
-  size: "1024x1024" | "1024x1536" | "1536x1024" | "auto";
+  aspectRatio: "1:1" | "2:1" | "4:3" | "16:9" | "1:2" | "3:4" | "9:16";
   quality: "low" | "medium" | "high" | "auto";
   background: "transparent" | "opaque" | "auto";
 };
