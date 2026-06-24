@@ -14,6 +14,7 @@ import type { Request, Response } from "express";
 import { readUserSessionToken } from "../auth/auth-session.js";
 import { UserSessionService } from "../auth/user-session.service.js";
 import {
+  type ImageAssetExpandRequest,
   type ImageAssetMaskUploadRequest,
   type ImageAssetEditRequest,
   type ImageAssetRevertRequest,
@@ -74,6 +75,21 @@ export class ImageAssetsController {
     return this.assets.createBackgroundRemovalTask(
       user.id,
       assetId,
+      readRequestIp(request)
+    );
+  }
+
+  @Post(":assetId/expand")
+  async expand(
+    @Req() request: Request,
+    @Param("assetId") assetId: string,
+    @Body() body: ImageAssetExpandRequest
+  ) {
+    const user = await this.requireUser(request);
+    return this.assets.createExpandTask(
+      user.id,
+      assetId,
+      body,
       readRequestIp(request)
     );
   }

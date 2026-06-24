@@ -7,7 +7,11 @@ import {
 } from "@nestjs/common";
 import { SOURCE_IMAGE_UPLOAD_BYTES } from "../config/request-body-limit.js";
 import { PrismaService } from "../database/prisma.service.js";
-import type { ImageGenerateSize } from "./image-provider.types.js";
+import {
+  isImageAspectRatio,
+  type ImageAspectRatio,
+  type ImageGenerateSize
+} from "./image-provider.types.js";
 import {
   IMAGE_TASK_HISTORY_LIMIT,
   pruneImageTaskHistory
@@ -59,6 +63,19 @@ type ImageVersionRecord = {
   createdAt: Date;
 };
 
+type ImageExpandMode = "free" | "ratio" | "direction";
+type ImageExpandDirection = "left" | "right" | "top" | "bottom" | "around";
+type ImageExpandPadding = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+type ImageExpandTarget = {
+  width: number;
+  height: number;
+};
+
 type ImageWorkspaceRecord = {
   id: string;
   userId: string;
@@ -103,6 +120,17 @@ type ImageWorkspaceRecord = {
 export type ImageAssetEditRequest = {
   maskId?: unknown;
   prompt?: unknown;
+};
+
+export type ImageAssetExpandRequest = {
+  prompt?: unknown;
+  versionId?: unknown;
+  mode?: unknown;
+  direction?: unknown;
+  percent?: unknown;
+  padding?: unknown;
+  target?: unknown;
+  aspectRatio?: unknown;
 };
 
 export type ImageSourceUploadRequest = {
@@ -154,6 +182,8 @@ const workspaceInclude = {
 
 const UPSCALE_PROMPT = "提升图片清晰度和细节，保持原始构图";
 const BACKGROUND_REMOVAL_PROMPT = "移除背景并保留主体，输出透明背景图片";
+const EXPAND_PROMPT = "自然扩展图片画面，保持原图主体、风格和光照一致";
+const EXPAND_MAX_DIMENSION = 4096;
 
 @Injectable()
 export class ImageAssetsService {
@@ -388,6 +418,64 @@ export class ImageAssetsService {
     );
   }
 
+  async createExpandTask(
+    userId: string,
+    assetId: string,
+    request: ImageAssetExpandRequest = {},
+    requestIp?: string
+  ) {
+    const asset = await this.findOwnedAsset(userId, assetId);
+    const sourceVersion = this.sourceVersionForRequest(asset, request.versionId);
+    if (!sourceVersion) {
+      throw new BadRequestException("当前图片没有可扩展的源版本");
+    }
+
+    const parsed = parseExpandRequest(request, sourceVersion);
+    const normalizedRequestIp = requestIp?.trim() || undefined;
+    const taskInput = {
+      prompt: parsed.prompt,
+      assetId: asset.id,
+      versionId: sourceVersion.id,
+      mode: parsed.mode,
+      ...(parsed.direction ? { direction: parsed.direction } : {}),
+      ...(parsed.percent !== null ? { percent: parsed.percent } : {}),
+      ...(parsed.aspectRatio ? { aspectRatio: parsed.aspectRatio } : {}),
+      padding: parsed.padding,
+      expandTarget: parsed.target
+    };
+    const usageRequest = {
+      type: "expand" as const,
+      ...taskInput
+    };
+
+    await this.usage?.assertCanCreateTask(userId, {
+      workspaceId: asset.workspaceId,
+      ...(normalizedRequestIp ? { requestIp: normalizedRequestIp } : {}),
+      request: usageRequest
+    });
+
+    const task = await this.prisma.imageTask.create({
+      data: {
+        workspaceId: asset.workspaceId,
+        userId,
+        type: "expand",
+        input: toInputJson(taskInput)
+      }
+    });
+    await pruneImageTaskHistory(this.prisma, asset.workspaceId);
+
+    await this.queue.enqueue({
+      taskId: task.id,
+      workspaceId: asset.workspaceId,
+      userId,
+      type: "expand"
+    });
+
+    return {
+      task: serializeImageTask(task)
+    };
+  }
+
   async uploadMask(
     userId: string,
     assetId: string,
@@ -586,6 +674,22 @@ export class ImageAssetsService {
     );
   }
 
+  private sourceVersionForRequest(
+    asset: ImageAssetRecord,
+    requestedVersionId: unknown
+  ) {
+    const versionId = parseOptionalString(requestedVersionId);
+    if (versionId) {
+      const version = (asset.versions ?? []).find((item) => item.id === versionId);
+      if (!version) {
+        throw new BadRequestException("图片版本不存在");
+      }
+      return version;
+    }
+
+    return this.currentVersion(asset);
+  }
+
   private async requireMaskInWorkspace(
     userId: string,
     workspaceId: string,
@@ -707,6 +811,143 @@ function parsePrompt(value: unknown): string {
     throw new BadRequestException("请输入图片编辑提示词");
   }
   return value.trim();
+}
+
+function parseExpandRequest(
+  request: ImageAssetExpandRequest,
+  sourceVersion: ImageVersionRecord
+): {
+  prompt: string;
+  mode: ImageExpandMode;
+  direction: ImageExpandDirection | null;
+  percent: number | null;
+  padding: ImageExpandPadding;
+  target: ImageExpandTarget;
+  aspectRatio: ImageAspectRatio | null;
+} {
+  const mode = parseExpandMode(request.mode);
+  const padding = parseExpandPadding(request.padding);
+  const target = parseExpandTarget(request.target);
+  if (target.width > EXPAND_MAX_DIMENSION || target.height > EXPAND_MAX_DIMENSION) {
+    throw new BadRequestException("扩展目标尺寸过大");
+  }
+  if (
+    target.width !== sourceVersion.width + padding.left + padding.right ||
+    target.height !== sourceVersion.height + padding.top + padding.bottom
+  ) {
+    throw new BadRequestException("扩展尺寸与源图尺寸不匹配");
+  }
+
+  const prompt = parseOptionalString(request.prompt) ?? EXPAND_PROMPT;
+  const direction =
+    request.direction === undefined || request.direction === null
+      ? null
+      : parseExpandDirection(request.direction);
+  const percent =
+    request.percent === undefined || request.percent === null
+      ? null
+      : parseExpandPercent(request.percent);
+  const aspectRatio =
+    request.aspectRatio === undefined || request.aspectRatio === null
+      ? null
+      : parseExpandAspectRatio(request.aspectRatio);
+
+  if (mode === "direction") {
+    if (!direction) throw new BadRequestException("请选择有效的扩展方向");
+    if (percent === null) throw new BadRequestException("请输入有效的扩展比例");
+  } else {
+    if (direction) throw new BadRequestException("当前扩展模式不支持方向参数");
+    if (percent !== null) throw new BadRequestException("当前扩展模式不支持扩展比例");
+  }
+
+  if (mode === "ratio") {
+    if (!aspectRatio) throw new BadRequestException("请选择有效的扩展画幅比例");
+  } else if (aspectRatio) {
+    throw new BadRequestException("当前扩展模式不支持画幅比例");
+  }
+
+  return {
+    prompt,
+    mode,
+    direction,
+    percent,
+    padding,
+    target,
+    aspectRatio
+  };
+}
+
+function parseExpandMode(value: unknown): ImageExpandMode {
+  if (value === "free" || value === "ratio" || value === "direction") {
+    return value;
+  }
+  throw new BadRequestException("请选择有效的扩展模式");
+}
+
+function parseExpandDirection(value: unknown): ImageExpandDirection {
+  if (
+    value === "left" ||
+    value === "right" ||
+    value === "top" ||
+    value === "bottom" ||
+    value === "around"
+  ) {
+    return value;
+  }
+  throw new BadRequestException("请选择有效的扩展方向");
+}
+
+function parseExpandPercent(value: unknown): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0.1 ||
+    value > 1
+  ) {
+    throw new BadRequestException("请输入有效的扩展比例");
+  }
+  return value;
+}
+
+function parseExpandPadding(value: unknown): ImageExpandPadding {
+  if (!isRecord(value)) throw new BadRequestException("请输入有效的扩展边距");
+  const left = parseNonNegativeSafeInteger(value.left);
+  const right = parseNonNegativeSafeInteger(value.right);
+  const top = parseNonNegativeSafeInteger(value.top);
+  const bottom = parseNonNegativeSafeInteger(value.bottom);
+  if (left + right + top + bottom <= 0) {
+    throw new BadRequestException("扩展边距至少需要包含一个方向");
+  }
+  return { left, right, top, bottom };
+}
+
+function parseExpandTarget(value: unknown): ImageExpandTarget {
+  if (!isRecord(value)) throw new BadRequestException("请输入有效的扩展目标尺寸");
+  return {
+    width: parsePositiveSafeInteger(value.width),
+    height: parsePositiveSafeInteger(value.height)
+  };
+}
+
+function parseExpandAspectRatio(value: unknown): ImageAspectRatio {
+  if (!isImageAspectRatio(value)) {
+    throw new BadRequestException("请选择有效的扩展画幅比例");
+  }
+  return value;
+}
+
+function parseNonNegativeSafeInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new BadRequestException("请输入有效的扩展边距");
+  }
+  return value;
+}
+
+function parsePositiveSafeInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new BadRequestException("请输入有效的扩展目标尺寸");
+  }
+  return value;
 }
 
 function parseOptionalString(value: unknown): string | null {

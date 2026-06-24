@@ -63,6 +63,35 @@ describe("ImageAssetsController", () => {
     );
   });
 
+  it("creates expand tasks for the authenticated user with request IP", async () => {
+    const assets = createAssetsService();
+    const sessions = createSessions();
+    const controller = new ImageAssetsController(assets, sessions);
+    const body = {
+      mode: "direction",
+      direction: "right",
+      percent: 0.25,
+      padding: { left: 0, right: 256, top: 0, bottom: 0 },
+      target: { width: 1280, height: 1024 }
+    };
+
+    await expect(
+      controller.expand(
+        createRequest({ "x-forwarded-for": " 203.0.113.13 , 10.0.0.2" }),
+        "asset-1",
+        body
+      )
+    ).resolves.toEqual({ task: { id: "task-expand" } });
+
+    expect(sessions.requireUser).toHaveBeenCalledWith("user-session-token");
+    expect(assets.createExpandTask).toHaveBeenCalledWith(
+      "user-1",
+      "asset-1",
+      body,
+      "203.0.113.13"
+    );
+  });
+
   it("uploads masks for the authenticated asset owner", async () => {
     const assets = createAssetsService();
     const controller = new ImageAssetsController(assets, createSessions());
@@ -186,6 +215,9 @@ function createAssetsService() {
     ),
     createBackgroundRemovalTask: jest.fn(() =>
       Promise.resolve({ task: { id: "task-background" } })
+    ),
+    createExpandTask: jest.fn(() =>
+      Promise.resolve({ task: { id: "task-expand" } })
     ),
     uploadMask: jest.fn(() =>
       Promise.resolve({

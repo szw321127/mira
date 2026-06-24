@@ -71,7 +71,7 @@ type ImageTaskRow = {
   id: string;
   workspaceId: string;
   userId: string;
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
   status: "queued" | "running" | "complete" | "failed" | "canceled";
   input: unknown;
   output: unknown;
@@ -1063,6 +1063,137 @@ describe("ImageAssetsService", () => {
       userId: "user-1",
       type: "background_removal"
     });
+  });
+
+  it("creates expand tasks from the requested image version", async () => {
+    const queue = createQueue();
+    const usage = createUsage();
+    const versions = [
+      createVersion("version-current", "asset-1"),
+      createVersion("version-source", "asset-1")
+    ];
+    const prisma = createPrisma([
+      createAsset("asset-1", "user-1", "workspace-1", versions)
+    ]);
+    const service = new ImageAssetsService(
+      prisma,
+      queue,
+      createStorage(),
+      usage
+    );
+
+    await expect(
+      service.createExpandTask(
+        "user-1",
+        "asset-1",
+        {
+          versionId: "version-source",
+          mode: "direction",
+          direction: "right",
+          percent: 0.25,
+          padding: { left: 0, right: 256, top: 0, bottom: 0 },
+          target: { width: 1280, height: 1024 }
+        },
+        "203.0.113.25"
+      )
+    ).resolves.toEqual({
+      task: expect.objectContaining({
+        id: "task-1",
+        type: "expand",
+        status: "queued",
+        input: {
+          prompt: "自然扩展图片画面，保持原图主体、风格和光照一致",
+          assetId: "asset-1",
+          versionId: "version-source",
+          mode: "direction",
+          direction: "right",
+          percent: 0.25,
+          padding: { left: 0, right: 256, top: 0, bottom: 0 },
+          expandTarget: { width: 1280, height: 1024 }
+        }
+      })
+    });
+    expect(usage.assertCanCreateTask).toHaveBeenCalledWith("user-1", {
+      workspaceId: "workspace-1",
+      requestIp: "203.0.113.25",
+      request: {
+        type: "expand",
+        prompt: "自然扩展图片画面，保持原图主体、风格和光照一致",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "direction",
+        direction: "right",
+        percent: 0.25,
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        expandTarget: { width: 1280, height: 1024 }
+      }
+    });
+    expect(prisma.imageTask.create).toHaveBeenCalledWith({
+      data: {
+        workspaceId: "workspace-1",
+        userId: "user-1",
+        type: "expand",
+        input: {
+          prompt: "自然扩展图片画面，保持原图主体、风格和光照一致",
+          assetId: "asset-1",
+          versionId: "version-source",
+          mode: "direction",
+          direction: "right",
+          percent: 0.25,
+          padding: { left: 0, right: 256, top: 0, bottom: 0 },
+          expandTarget: { width: 1280, height: 1024 }
+        }
+      }
+    });
+    expect(queue.enqueue).toHaveBeenCalledWith({
+      taskId: "task-1",
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      type: "expand"
+    });
+  });
+
+  it("rejects expand tasks when target dimensions do not match source plus padding", async () => {
+    const service = new ImageAssetsService(
+      createPrisma([createAsset("asset-1", "user-1", "workspace-1")]),
+      createQueue(),
+      createStorage(),
+      createUsage()
+    );
+
+    await expect(
+      service.createExpandTask("user-1", "asset-1", {
+        mode: "free",
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1200, height: 1024 }
+      })
+    ).rejects.toThrow("扩展尺寸与源图尺寸不匹配");
+  });
+
+  it("requires valid direction and percent for direction expand tasks", async () => {
+    const service = new ImageAssetsService(
+      createPrisma([createAsset("asset-1", "user-1", "workspace-1")]),
+      createQueue(),
+      createStorage(),
+      createUsage()
+    );
+
+    await expect(
+      service.createExpandTask("user-1", "asset-1", {
+        mode: "direction",
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 }
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createExpandTask("user-1", "asset-1", {
+        mode: "direction",
+        direction: "right",
+        percent: 1.5,
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 }
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("reverts only the asset current version", async () => {
