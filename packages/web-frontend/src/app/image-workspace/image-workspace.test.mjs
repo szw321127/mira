@@ -209,9 +209,11 @@ test("image canvas exposes a focused Mira toolbar for common canvas actions", ()
   assert.match(toolbarSource, /ZoomIn/);
   assert.match(toolbarSource, /ZoomOut/);
   assert.match(toolbarSource, /Maximize2/);
-  assert.match(toolbarSource, /aria-pressed=\{button\.active/);
-  assert.match(toolbarSource, /controller\.setTool\("select"\)/);
-  assert.match(toolbarSource, /controller\.setTool\("pan"\)/);
+  assert.match(toolbarSource, /toolButtons/);
+  assert.match(toolbarSource, /aria-pressed=\{active/);
+  assert.match(toolbarSource, /tool:\s*"select"/);
+  assert.match(toolbarSource, /tool:\s*"pan"/);
+  assert.match(toolbarSource, /controller\.setTool\(button\.tool\)/);
   assert.match(toolbarSource, /controller\.undo\(\)/);
   assert.match(toolbarSource, /controller\.redo\(\)/);
   assert.match(toolbarSource, /controller\.zoomIn\(\)/);
@@ -234,11 +236,32 @@ test("image canvas controller supports Leafer mask and marker tools", () => {
   assert.match(typesSource, /markerRadius/);
   assert.match(toolbarSource, /Brush/);
   assert.match(toolbarSource, /MapPin/);
-  assert.match(toolbarSource, /controller\.setTool\("mask"\)/);
-  assert.match(toolbarSource, /controller\.setTool\("marker"\)/);
+  assert.match(toolbarSource, /tool:\s*"mask"/);
+  assert.match(toolbarSource, /tool:\s*"marker"/);
   assert.match(adapterSource, /maskLayer/);
   assert.match(adapterSource, /markerLayer/);
   assert.match(adapterSource, /setLocalEditMarkerRadius/);
+});
+
+test("leafer toolbar tools are mutually exclusive and disable other tool behavior", () => {
+  const canvasSource = readImageWorkspaceFile("image-canvas.tsx");
+  const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(toolbarSource, /toolButtons/);
+  assert.match(toolbarSource, /activeTool === button\.tool/);
+  assert.match(toolbarSource, /aria-pressed=\{active\}/);
+  assert.match(toolbarSource, /controller\.setTool\(button\.tool\)/);
+  assert.match(adapterSource, /applyToolInteractionState/);
+  assert.match(adapterSource, /activeTool === "select"/);
+  assert.match(adapterSource, /node\.draggable = canEdit/);
+  assert.match(adapterSource, /node\.editable = canEdit/);
+  assert.match(adapterSource, /if \(tool !== "select"\) applySelectionToEditor\(null\)/);
+  assert.match(adapterSource, /activeTool === "pan" && isPanning/);
+  assert.match(adapterSource, /activeTool === "mask" && currentMaskStroke/);
+  assert.match(adapterSource, /if \(activeTool !== "select"\) return/);
+  assert.match(canvasSource, /getActiveTool\(\) !== "select"/);
+  assert.match(canvasSource, /deleteSelection\(\)/);
 });
 
 test("image workspace shell exposes rail, canvas, prompt, task, and mobile panels", () => {

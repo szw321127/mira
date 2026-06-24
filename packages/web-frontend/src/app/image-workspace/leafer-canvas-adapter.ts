@@ -213,8 +213,28 @@ async function createLoadedLeaferCanvasController({
 
   const readSelectedNode = () => {
     const target = editor.target;
-    if (Array.isArray(target)) return toMiraImageNode(target[0]);
-    return toMiraImageNode(target);
+    const editorNode = Array.isArray(target)
+      ? toMiraImageNode(target[0])
+      : toMiraImageNode(target);
+    if (editorNode) return editorNode;
+    return findMiraImageNodeBySelection(imageLayer, {
+      assetId: selectedAssetId,
+      objectId: selectedObjectId,
+      selectedVersionId,
+    });
+  };
+
+  const applyToolInteractionState = () => {
+    const canEdit = activeTool === "select";
+    for (const node of readMiraImageNodes(imageLayer)) {
+      node.draggable = canEdit;
+      node.editable = canEdit;
+    }
+    if (canEdit) {
+      applySelectionToEditor(readSelectedNode());
+      return;
+    }
+    applySelectionToEditor(null);
   };
 
   const clearLocalEditOverlay = (shouldEmit = true) => {
@@ -260,7 +280,7 @@ async function createLoadedLeaferCanvasController({
   };
 
   const selectNode = (node: MiraImageNode | null) => {
-    applySelectionToEditor(node);
+    applySelectionToEditor(activeTool === "select" ? node : null);
     clearLocalEditIfNodeChanged(node);
     emitSelection(selectionFromNode(node));
   };
@@ -427,7 +447,7 @@ async function createLoadedLeaferCanvasController({
       return;
     }
 
-    if (!isPanning || !panStart) return;
+    if (!(activeTool === "pan" && isPanning) || !panStart) return;
     const pointer = readPointer(event);
     if (!pointer) return;
     setViewport(
@@ -441,7 +461,12 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerUp = () => {
-    if (currentMaskStroke && activeMaskAssetId && activeMaskVersionId) {
+    if (
+      activeTool === "mask" &&
+      currentMaskStroke &&
+      activeMaskAssetId &&
+      activeMaskVersionId
+    ) {
       maskStrokes = [
         ...maskStrokes,
         {
@@ -456,7 +481,7 @@ async function createLoadedLeaferCanvasController({
       return;
     }
 
-    if (!isPanning) return;
+    if (!(activeTool === "pan" && isPanning)) return;
     isPanning = false;
     panStart = null;
     container.style.cursor = activeTool === "pan" ? "grab" : "";
@@ -568,6 +593,8 @@ async function createLoadedLeaferCanvasController({
             miraProps: normalizeCanvasObjectProps(object.props),
             miraVersionId: version.id,
           };
+          node.draggable = activeTool === "select";
+          node.editable = activeTool === "select";
           continue;
         }
 
@@ -590,6 +617,8 @@ async function createLoadedLeaferCanvasController({
           miraProps: normalizeCanvasObjectProps(object.props),
           miraVersionId: version.id,
         };
+        imageNode.draggable = activeTool === "select";
+        imageNode.editable = activeTool === "select";
         imageLayer.add(imageNode);
       }
 
@@ -710,9 +739,13 @@ async function createLoadedLeaferCanvasController({
     },
     setTool: (tool) => {
       activeTool = tool;
+      isPanning = false;
+      panStart = null;
+      currentMaskStroke = null;
       container.style.cursor =
         tool === "pan" ? "grab" : tool === "mask" || tool === "marker" ? "crosshair" : "";
-      if (tool === "pan") applySelectionToEditor(null);
+      applyToolInteractionState();
+      if (tool !== "select") applySelectionToEditor(null);
       emitChange();
     },
     subscribeChange: (listener) => {

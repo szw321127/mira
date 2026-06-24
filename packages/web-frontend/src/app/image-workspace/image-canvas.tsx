@@ -144,6 +144,7 @@ export function ImageCanvas({
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
+        if (currentController.getActiveTool() !== "select") return;
         event.preventDefault();
         if (currentController.getLocalEditOverlayState().dirty) {
           currentController.clearLocalEditOverlay();

@@ -13,17 +13,23 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type { CanvasController } from "../leafer-canvas-types";
+import type { CanvasTool } from "../leafer-canvas-types";
 
 type CanvasToolbarProps = {
   controller: CanvasController | null;
 };
 
 type ToolbarButton = {
-  active?: boolean;
   disabled?: boolean;
   icon: ComponentType<{ "aria-hidden": true; size: number }>;
   label: string;
   onClick: () => void;
+};
+
+type ToolButton = {
+  icon: ComponentType<{ "aria-hidden": true; size: number }>;
+  label: string;
+  tool: CanvasTool;
 };
 
 export function CanvasToolbar({ controller }: CanvasToolbarProps) {
@@ -39,31 +45,30 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
   if (!controller) return null;
 
   const activeTool = controller.getActiveTool();
-  const buttons: ToolbarButton[] = [
+  const toolButtons: ToolButton[] = [
     {
-      active: activeTool === "select",
       icon: MousePointer2,
       label: "选择",
-      onClick: () => controller.setTool("select"),
+      tool: "select",
     },
     {
-      active: activeTool === "pan",
       icon: Hand,
       label: "平移",
-      onClick: () => controller.setTool("pan"),
+      tool: "pan",
     },
     {
-      active: activeTool === "mask",
       icon: Brush,
       label: "蒙版",
-      onClick: () => controller.setTool("mask"),
+      tool: "mask",
     },
     {
-      active: activeTool === "marker",
       icon: MapPin,
       label: "标记局部",
-      onClick: () => controller.setTool("marker"),
+      tool: "marker",
     },
+  ];
+
+  const actionButtons: ToolbarButton[] = [
     {
       disabled: !controller.getCanUndo(),
       icon: Undo2,
@@ -96,17 +101,34 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4 max-md:bottom-3">
       <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
-        {buttons.map((button) => {
+        {toolButtons.map((button) => {
+          const Icon = button.icon;
+          const active = activeTool === button.tool;
+          return (
+            <button
+              aria-label={button.label}
+              aria-pressed={active}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border text-[var(--muted-strong)] transition-colors ${
+                active
+                  ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-strong)] shadow-[inset_0_0_0_1px_var(--accent)]"
+                  : "border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]"
+              }`}
+              key={button.tool}
+              onClick={() => controller.setTool(button.tool)}
+              title={button.label}
+              type="button"
+            >
+              <Icon aria-hidden={true} size={16} />
+            </button>
+          );
+        })}
+        <div className="mx-1 h-6 w-px shrink-0 bg-[var(--border)]" />
+        {actionButtons.map((button) => {
           const Icon = button.icon;
           return (
             <button
               aria-label={button.label}
-              aria-pressed={button.active}
-              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border text-[var(--muted-strong)] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                button.active
-                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                  : "border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-muted)]"
-              }`}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-transparent text-[var(--muted-strong)] transition-colors hover:border-[var(--border)] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-45"
               disabled={button.disabled}
               key={button.label}
               onClick={button.onClick}
