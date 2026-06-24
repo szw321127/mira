@@ -88,6 +88,54 @@ describe("ImageAgentService", () => {
     });
   });
 
+  it("rebuilds retry requests from previous expand task input", () => {
+    const service = new ImageAgentService();
+
+    expect(
+      service.createRetryRequest({
+        type: "expand",
+        input: {
+          prompt: "  extend the street  ",
+          assetId: "asset-1",
+          versionId: "version-1",
+          mode: "direction",
+          direction: "right",
+          percent: 0.25,
+          padding: { left: 0, right: 256, top: 0, bottom: 0 },
+          expandTarget: { width: 1280, height: 1024 }
+        }
+      })
+    ).toEqual({
+      type: "expand",
+      prompt: "extend the street",
+      assetId: "asset-1",
+      versionId: "version-1",
+      mode: "direction",
+      direction: "right",
+      percent: 0.25,
+      padding: { left: 0, right: 256, top: 0, bottom: 0 },
+      expandTarget: { width: 1280, height: 1024 }
+    });
+  });
+
+  it("rejects expand retries that cannot rebuild a valid request", () => {
+    const service = new ImageAgentService();
+
+    expect(() =>
+      service.createRetryRequest({
+        type: "expand",
+        input: {
+          prompt: "extend",
+          assetId: "asset-1",
+          versionId: "version-1",
+          mode: "direction",
+          padding: { left: 0, right: 256, top: 0, bottom: 0 },
+          expandTarget: { width: 1280, height: 1024 }
+        }
+      })
+    ).toThrow(BadRequestException);
+  });
+
   it("rebuilds retry requests from previous task input", () => {
     const service = new ImageAgentService();
 
