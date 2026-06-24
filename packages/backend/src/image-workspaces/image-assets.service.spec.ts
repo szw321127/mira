@@ -1102,6 +1102,7 @@ describe("ImageAssetsService", () => {
         type: "expand",
         status: "queued",
         input: {
+          type: "expand",
           prompt: "自然扩展图片画面，保持原图主体、风格和光照一致",
           assetId: "asset-1",
           versionId: "version-source",
@@ -1134,6 +1135,7 @@ describe("ImageAssetsService", () => {
         userId: "user-1",
         type: "expand",
         input: {
+          type: "expand",
           prompt: "自然扩展图片画面，保持原图主体、风格和光照一致",
           assetId: "asset-1",
           versionId: "version-source",
@@ -1151,6 +1153,51 @@ describe("ImageAssetsService", () => {
       userId: "user-1",
       type: "expand"
     });
+  });
+
+  it("rejects direction expand tasks when padding does not match the requested direction", async () => {
+    const queue = createQueue();
+    const prisma = createPrisma([createAsset("asset-1", "user-1", "workspace-1")]);
+    const service = new ImageAssetsService(
+      prisma,
+      queue,
+      createStorage(),
+      createUsage()
+    );
+
+    await expect(
+      service.createExpandTask("user-1", "asset-1", {
+        mode: "direction",
+        direction: "right",
+        percent: 0.25,
+        padding: { left: 256, right: 0, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 }
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.imageTask.create).not.toHaveBeenCalled();
+    expect(queue.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("rejects ratio expand tasks when target dimensions do not match the requested aspect ratio", async () => {
+    const queue = createQueue();
+    const prisma = createPrisma([createAsset("asset-1", "user-1", "workspace-1")]);
+    const service = new ImageAssetsService(
+      prisma,
+      queue,
+      createStorage(),
+      createUsage()
+    );
+
+    await expect(
+      service.createExpandTask("user-1", "asset-1", {
+        mode: "ratio",
+        aspectRatio: "16:9",
+        padding: { left: 128, right: 128, top: 128, bottom: 128 },
+        target: { width: 1280, height: 1280 }
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.imageTask.create).not.toHaveBeenCalled();
+    expect(queue.enqueue).not.toHaveBeenCalled();
   });
 
   it("rejects expand tasks when target dimensions do not match source plus padding", async () => {

@@ -433,6 +433,7 @@ export class ImageAssetsService {
     const parsed = parseExpandRequest(request, sourceVersion);
     const normalizedRequestIp = requestIp?.trim() || undefined;
     const taskInput = {
+      type: "expand" as const,
       prompt: parsed.prompt,
       assetId: asset.id,
       versionId: sourceVersion.id,
@@ -444,7 +445,6 @@ export class ImageAssetsService {
       expandTarget: parsed.target
     };
     const usageRequest = {
-      type: "expand" as const,
       ...taskInput
     };
 
@@ -855,6 +855,7 @@ function parseExpandRequest(
   if (mode === "direction") {
     if (!direction) throw new BadRequestException("请选择有效的扩展方向");
     if (percent === null) throw new BadRequestException("请输入有效的扩展比例");
+    validateDirectionPadding(direction, padding);
   } else {
     if (direction) throw new BadRequestException("当前扩展模式不支持方向参数");
     if (percent !== null) throw new BadRequestException("当前扩展模式不支持扩展比例");
@@ -862,6 +863,7 @@ function parseExpandRequest(
 
   if (mode === "ratio") {
     if (!aspectRatio) throw new BadRequestException("请选择有效的扩展画幅比例");
+    validateAspectRatioTarget(aspectRatio, target);
   } else if (aspectRatio) {
     throw new BadRequestException("当前扩展模式不支持画幅比例");
   }
@@ -875,6 +877,54 @@ function parseExpandRequest(
     target,
     aspectRatio
   };
+}
+
+function validateDirectionPadding(
+  direction: ImageExpandDirection,
+  padding: ImageExpandPadding
+): void {
+  if (direction === "around") {
+    const paddedSideCount = [
+      padding.left,
+      padding.right,
+      padding.top,
+      padding.bottom
+    ].filter((side) => side > 0).length;
+    if (paddedSideCount >= 2) return;
+    throw new BadRequestException("环绕扩展至少需要两个方向的边距");
+  }
+
+  const expected = {
+    left: direction === "left" ? padding.left : 0,
+    right: direction === "right" ? padding.right : 0,
+    top: direction === "top" ? padding.top : 0,
+    bottom: direction === "bottom" ? padding.bottom : 0
+  };
+  const matchesDirection =
+    (direction !== "left" || expected.left > 0) &&
+    (direction !== "right" || expected.right > 0) &&
+    (direction !== "top" || expected.top > 0) &&
+    (direction !== "bottom" || expected.bottom > 0) &&
+    padding.left === expected.left &&
+    padding.right === expected.right &&
+    padding.top === expected.top &&
+    padding.bottom === expected.bottom;
+
+  if (!matchesDirection) {
+    throw new BadRequestException("扩展边距与扩展方向不匹配");
+  }
+}
+
+function validateAspectRatioTarget(
+  aspectRatio: ImageAspectRatio,
+  target: ImageExpandTarget
+): void {
+  const [ratioWidth, ratioHeight] = aspectRatio
+    .split(":")
+    .map((part) => Number.parseInt(part, 10));
+  if (target.width * ratioHeight !== target.height * ratioWidth) {
+    throw new BadRequestException("扩展目标尺寸与画幅比例不匹配");
+  }
 }
 
 function parseExpandMode(value: unknown): ImageExpandMode {
