@@ -2,19 +2,18 @@
 
 import { type ComponentType, useEffect, useState } from "react";
 import {
-  Frame,
   Hand,
   Maximize2,
   MousePointer2,
   Redo2,
   Undo2,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
 } from "lucide-react";
-import type { Editor } from "tldraw";
+import type { CanvasController } from "../leafer-canvas-types";
 
 type CanvasToolbarProps = {
-  editor: Editor | null;
+  controller: CanvasController | null;
 };
 
 type ToolbarButton = {
@@ -25,66 +24,58 @@ type ToolbarButton = {
   onClick: () => void;
 };
 
-export function CanvasToolbar({ editor }: CanvasToolbarProps) {
+export function CanvasToolbar({ controller }: CanvasToolbarProps) {
   const [, setRevision] = useState(0);
 
   useEffect(() => {
-    if (!editor) return;
-    return editor.store.listen(() => {
+    if (!controller) return;
+    return controller.subscribeChange(() => {
       setRevision((revision) => revision + 1);
     });
-  }, [editor]);
+  }, [controller]);
 
-  if (!editor) return null;
+  if (!controller) return null;
 
-  const activeToolId = editor.getCurrentToolId();
-  const canUndo = editor.getCanUndo();
-  const canRedo = editor.getCanRedo();
+  const activeTool = controller.getActiveTool();
   const buttons: ToolbarButton[] = [
     {
-      active: activeToolId === "select",
+      active: activeTool === "select",
       icon: MousePointer2,
       label: "选择",
-      onClick: () => editor.setCurrentTool("select"),
+      onClick: () => controller.setTool("select"),
     },
     {
-      active: activeToolId === "hand",
+      active: activeTool === "pan",
       icon: Hand,
       label: "平移",
-      onClick: () => editor.setCurrentTool("hand"),
+      onClick: () => controller.setTool("pan"),
     },
     {
-      active: activeToolId === "frame",
-      icon: Frame,
-      label: "画框",
-      onClick: () => editor.setCurrentTool("frame"),
-    },
-    {
-      disabled: !canUndo,
+      disabled: !controller.getCanUndo(),
       icon: Undo2,
       label: "撤销",
-      onClick: () => editor.undo(),
+      onClick: () => controller.undo(),
     },
     {
-      disabled: !canRedo,
+      disabled: !controller.getCanRedo(),
       icon: Redo2,
       label: "重做",
-      onClick: () => editor.redo(),
+      onClick: () => controller.redo(),
     },
     {
       icon: ZoomOut,
       label: "缩小",
-      onClick: () => editor.zoomOut(),
+      onClick: () => controller.zoomOut(),
     },
     {
       icon: ZoomIn,
       label: "放大",
-      onClick: () => editor.zoomIn(),
+      onClick: () => controller.zoomIn(),
     },
     {
       icon: Maximize2,
       label: "适配视图",
-      onClick: () => fitCanvasToContent(editor),
+      onClick: () => controller.fitView(),
     },
   ];
 
@@ -96,6 +87,7 @@ export function CanvasToolbar({ editor }: CanvasToolbarProps) {
           return (
             <button
               aria-label={button.label}
+              aria-pressed={button.active}
               className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border text-[var(--muted-strong)] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                 button.active
                   ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
@@ -114,18 +106,4 @@ export function CanvasToolbar({ editor }: CanvasToolbarProps) {
       </div>
     </div>
   );
-}
-
-function fitCanvasToContent(editor: Editor) {
-  if (editor.getSelectedShapeIds().length > 0) {
-    editor.zoomToSelection({ animation: { duration: 220 } });
-    return;
-  }
-
-  const bounds = editor.getCurrentPageBounds();
-  if (!bounds) return;
-  editor.zoomToBounds(bounds, {
-    animation: { duration: 220 },
-    targetZoom: Math.min(1, editor.getZoomLevel()),
-  });
 }
