@@ -44,6 +44,12 @@ export type AdminImageUsageProvider = {
   estimatedCostUsd: number;
 };
 
+export type AdminImageUsageModel = {
+  model: string;
+  taskCount: number;
+  estimatedCostUsd: number;
+};
+
 export type AdminImageUsageType = {
   type: string;
   taskCount: number;
@@ -52,6 +58,7 @@ export type AdminImageUsageType = {
 
 export type AdminImageUsageResponse = {
   activeUsers: number;
+  byModel: AdminImageUsageModel[];
   byProvider: AdminImageUsageProvider[];
   byType: AdminImageUsageType[];
   estimatedCostUsd: number;

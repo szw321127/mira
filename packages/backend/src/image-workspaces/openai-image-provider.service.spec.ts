@@ -65,7 +65,18 @@ function createFetch(json: unknown, ok = true) {
   return { calls, fetchMock };
 }
 
-function responseJson(base64 = Buffer.from("image-bytes").toString("base64")) {
+function readJsonRequestBody(call: FetchCall | undefined): unknown {
+  const body = call?.init?.body;
+  if (typeof body !== "string") {
+    throw new Error("Expected a JSON request body");
+  }
+  return JSON.parse(body);
+}
+
+function responseJson(
+  base64 = Buffer.from("image-bytes").toString("base64"),
+  overrides: Record<string, unknown> = {}
+) {
   return {
     created: 1782196000,
     data: [
@@ -77,7 +88,8 @@ function responseJson(base64 = Buffer.from("image-bytes").toString("base64")) {
     size: "1536x1024",
     quality: "high",
     background: "transparent",
-    output_format: "png"
+    output_format: "png",
+    ...overrides
   };
 }
 
@@ -145,7 +157,7 @@ describe("OpenAIImageProviderService", () => {
     const generationHeaders = new Headers(calls[0]?.init?.headers);
     expect(generationHeaders.get("authorization")).toBe("Bearer sk-live-secret");
     expect(generationHeaders.get("content-type")).toBe("application/json");
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+    expect(readJsonRequestBody(calls[0])).toEqual({
       background: "transparent",
       model: "gpt-image-1.5",
       n: 1,
@@ -209,9 +221,61 @@ describe("OpenAIImageProviderService", () => {
     );
   });
 
+  it("estimates gpt-image-2 usage from token usage details", async () => {
+    const { fetchMock } = createFetch(
+      responseJson(Buffer.from("image-bytes").toString("base64"), {
+        usage: {
+          input_tokens: 500,
+          output_tokens: 1000,
+          total_tokens: 1500,
+          input_tokens_details: {
+            text_tokens: 100,
+            image_tokens: 400
+          }
+        }
+      })
+    );
+    const service = new OpenAIImageProviderService(
+      createRuntimeSecrets(
+        imageConfig({
+          openaiModel: "gpt-image-2"
+        })
+      ),
+      createStorage(),
+      { fetch: fetchMock }
+    );
+
+    await expect(
+      service.generate({
+        prompt: "make a launch cover",
+        size: "1024x1024",
+        quality: "high",
+        background: "auto"
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          model: "gpt-image-2",
+          inputTokens: 500,
+          textInputTokens: 100,
+          imageInputTokens: 400,
+          outputTokens: 1000,
+          totalTokens: 1500,
+          estimatedCostUsd: 0.0337
+        })
+      })
+    );
+  });
+
   it("uses the AI SDK image edit prompt for source image and optional mask data", async () => {
     const { calls, fetchMock } = createFetch(responseJson());
-    const storage = createStorage();
+    const getImageMock = jest.fn((ref: { storageKey: string }) =>
+      Promise.resolve(Buffer.from(`bytes:${ref.storageKey}`))
+    );
+    const storage: ImageStorageService = {
+      ...createStorage(),
+      getImage: getImageMock as ImageStorageService["getImage"]
+    };
     const service = new OpenAIImageProviderService(
       createRuntimeSecrets(imageConfig()),
       storage,
@@ -237,7 +301,7 @@ describe("OpenAIImageProviderService", () => {
       size: "1024x1536"
     });
 
-    expect(storage.getImage).toHaveBeenCalledTimes(2);
+    expect(getImageMock.mock.calls).toHaveLength(2);
     expect(calls[0]?.url).toBe("https://api.openai.com/v1/images/edits");
     const editHeaders = new Headers(calls[0]?.init?.headers);
     expect(editHeaders.get("authorization")).toBe("Bearer sk-live-secret");

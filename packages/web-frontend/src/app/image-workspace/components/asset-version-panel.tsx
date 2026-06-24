@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  type CSSProperties,
   type PointerEvent,
   type ReactNode,
   useEffect,
@@ -28,6 +29,8 @@ import {
   createImageVersionDownloadUrl,
   createImageVersionPreviewUrl
 } from "../workspace-api";
+
+const MASK_PREVIEW_MAX_HEIGHT = 230;
 
 export function AssetVersionPanel({
   assets,
@@ -75,6 +78,16 @@ export function AssetVersionPanel({
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskDrawingRef = useRef(false);
   const canAct = Boolean(selectedAsset && currentVersion && !disabled);
+  const maskCanvasWidth = Math.max(1, currentVersion?.width || 512);
+  const maskCanvasHeight = Math.max(1, currentVersion?.height || 512);
+  const maskFrameStyle = useMemo<CSSProperties>(
+    () => ({
+      aspectRatio: `${maskCanvasWidth} / ${maskCanvasHeight}`,
+      maxHeight: MASK_PREVIEW_MAX_HEIGHT,
+      maxWidth: `${(maskCanvasWidth / maskCanvasHeight) * MASK_PREVIEW_MAX_HEIGHT}px`,
+    }),
+    [maskCanvasHeight, maskCanvasWidth],
+  );
   const currentDownloadUrl =
     selectedAsset && currentVersion
       ? createImageVersionDownloadUrl(selectedAsset.id, currentVersion.id)
@@ -246,31 +259,28 @@ export function AssetVersionPanel({
               </button>
             </div>
             <div
-              className="relative max-h-[190px] w-full overflow-hidden rounded-[6px] border border-[var(--border)] bg-[var(--surface)]"
-              style={{
-                aspectRatio: `${currentVersion.width || 1} / ${
-                  currentVersion.height || 1
-                }`,
-              }}
+              className="flex h-[230px] w-full items-center justify-center overflow-hidden rounded-[6px] border border-[var(--border)] bg-[var(--surface-muted)]"
             >
-              <img
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                draggable={false}
-                src={createImageVersionPreviewUrl(selectedAsset.id, currentVersion.id)}
-              />
-              <canvas
-                aria-label="绘制蒙版"
-                className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
-                height={512}
-                onPointerCancel={finishMaskStroke}
-                onPointerDown={startMaskStroke}
-                onPointerLeave={finishMaskStroke}
-                onPointerMove={drawMaskStroke}
-                onPointerUp={finishMaskStroke}
-                ref={maskCanvasRef}
-                width={512}
-              />
+              <div className="relative max-h-full w-full" style={maskFrameStyle}>
+                <img
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-contain"
+                  draggable={false}
+                  src={createImageVersionPreviewUrl(selectedAsset.id, currentVersion.id)}
+                />
+                <canvas
+                  aria-label="绘制蒙版"
+                  className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
+                  height={maskCanvasHeight}
+                  onPointerCancel={finishMaskStroke}
+                  onPointerDown={startMaskStroke}
+                  onPointerLeave={finishMaskStroke}
+                  onPointerMove={drawMaskStroke}
+                  onPointerUp={finishMaskStroke}
+                  ref={maskCanvasRef}
+                  width={maskCanvasWidth}
+                />
+              </div>
             </div>
           </div>
 

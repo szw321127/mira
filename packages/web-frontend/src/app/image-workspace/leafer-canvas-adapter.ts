@@ -1,14 +1,5 @@
-import {
-  App,
-  Group,
-  Image,
-  PointerEvent,
-  type IApp,
-  type IGroup,
-  type IImage,
-  type IUI,
-} from "leafer-ui";
-import { Editor } from "leafer-editor";
+import type { Editor as LeaferEditorBase } from "leafer-editor";
+import type { IApp, IGroup, IImage, IUI } from "leafer-ui";
 import type {
   CanvasController,
   CanvasControllerEvents,
@@ -36,7 +27,7 @@ type MiraImageNode = IImage & {
   remove: () => void;
 };
 
-type LeaferEditor = Editor & {
+type LeaferEditor = LeaferEditorBase & {
   cancel: () => void;
   select: (target: IUI | IUI[]) => void;
   target?: IUI | IUI[];
@@ -61,7 +52,19 @@ const MAX_ZOOM = 4;
 export function createLeaferCanvasController({
   container,
   events,
-}: ControllerOptions): CanvasController {
+}: ControllerOptions): Promise<CanvasController> {
+  return createLoadedLeaferCanvasController({ container, events });
+}
+
+async function createLoadedLeaferCanvasController({
+  container,
+  events,
+}: ControllerOptions): Promise<CanvasController> {
+  const [{ App, Group, Image, PointerEvent }, { Editor }] = await Promise.all([
+    import("leafer-ui"),
+    import("leafer-editor"),
+  ]);
+
   let activeTool: CanvasTool = "select";
   let destroyed = false;
   let viewport: CanvasViewport = { ...DEFAULT_VIEWPORT };

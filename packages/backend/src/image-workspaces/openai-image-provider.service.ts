@@ -31,6 +31,14 @@ type OpenAIImageFetch = (
   init?: RequestInit
 ) => Promise<Response>;
 
+type ImageTokenUsage = {
+  imageInputTokens: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  textInputTokens: number | null;
+  totalTokens: number | null;
+};
+
 export type OpenAIImageProviderOptions = {
   fetch?: OpenAIImageFetch;
 };
@@ -178,8 +186,10 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
         estimatedCostUsd: estimateOpenAIImageCostUsd(
           request.model,
           request.size,
-          request.quality
+          request.quality,
+          value
         ),
+        ...readImageTokenUsage(value),
         revisedPrompt: firstOpenAIRevisedPrompt(value) ?? null
       }
     });
@@ -204,14 +214,70 @@ function dimensionsForSize(size: ImageGenerateInput["size"]): [number, number] {
 function estimateOpenAIImageCostUsd(
   model: string,
   size: ImageGenerateInput["size"],
-  quality: ImageGenerateInput["quality"] | null
+  quality: ImageGenerateInput["quality"] | null,
+  result: GenerateImageResult
 ): number | null {
+  const usageCost = estimateOpenAIImageUsageCostUsd(model, result);
+  if (usageCost !== null) return usageCost;
   if (!quality) return null;
   const normalizedQuality = quality === "auto" ? "medium" : quality;
   const normalizedSize =
     size === "1024x1536" || size === "1536x1024" ? "large" : "square";
   const prices = OPENAI_IMAGE_COST_BY_MODEL[model.trim().toLowerCase()];
   return prices?.[normalizedSize][normalizedQuality] ?? null;
+}
+
+function estimateOpenAIImageUsageCostUsd(
+  model: string,
+  result: GenerateImageResult
+): number | null {
+  const prices = OPENAI_IMAGE_TOKEN_PRICES_BY_MODEL[model.trim().toLowerCase()];
+  if (!prices) return null;
+
+  const usage = readImageTokenUsage(result);
+  const outputTokens = usage.outputTokens ?? 0;
+  const textInputTokens = usage.textInputTokens ?? 0;
+  const imageInputTokens = usage.imageInputTokens ?? 0;
+  const hasUsage =
+    outputTokens > 0 ||
+    textInputTokens > 0 ||
+    imageInputTokens > 0 ||
+    (usage.inputTokens ?? 0) > 0;
+  if (!hasUsage) return null;
+
+  const unknownInputTokens = Math.max(
+    0,
+    (usage.inputTokens ?? 0) - textInputTokens - imageInputTokens
+  );
+  const cost =
+    (textInputTokens + unknownInputTokens) * prices.textInputTokenUsd +
+    imageInputTokens * prices.imageInputTokenUsd +
+    outputTokens * prices.imageOutputTokenUsd;
+  return roundUsd(cost);
+}
+
+function readImageTokenUsage(result: GenerateImageResult): ImageTokenUsage {
+  const usage = result.usage;
+  const tokenDetails = firstOpenAIImageTokenDetails(result);
+  return {
+    inputTokens: readFiniteNumber(usage.inputTokens),
+    outputTokens: readFiniteNumber(usage.outputTokens),
+    totalTokens: readFiniteNumber(usage.totalTokens),
+    textInputTokens: readFiniteNumber(tokenDetails?.textTokens),
+    imageInputTokens: readFiniteNumber(tokenDetails?.imageTokens)
+  };
+}
+
+function firstOpenAIImageTokenDetails(
+  value: GenerateImageResult
+): { imageTokens?: unknown; textTokens?: unknown } | null {
+  const openaiMetadata = value.providerMetadata.openai;
+  if (!isRecord(openaiMetadata) || !Array.isArray(openaiMetadata.images)) {
+    return null;
+  }
+  const first = openaiMetadata.images[0];
+  if (!isRecord(first)) return null;
+  return first;
 }
 
 const OPENAI_IMAGE_COST_BY_MODEL: Record<
@@ -229,6 +295,21 @@ const OPENAI_IMAGE_COST_BY_MODEL: Record<
   "gpt-image-1-mini": {
     square: { low: 0.005, medium: 0.011, high: 0.016 },
     large: { low: 0.007, medium: 0.016, high: 0.024 }
+  }
+};
+
+const OPENAI_IMAGE_TOKEN_PRICES_BY_MODEL: Record<
+  string,
+  {
+    imageInputTokenUsd: number;
+    imageOutputTokenUsd: number;
+    textInputTokenUsd: number;
+  }
+> = {
+  "gpt-image-2": {
+    textInputTokenUsd: 5 / 1_000_000,
+    imageInputTokenUsd: 8 / 1_000_000,
+    imageOutputTokenUsd: 30 / 1_000_000
   }
 };
 
@@ -256,6 +337,14 @@ function firstResponseRequestId(value: GenerateImageResult): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function summarizeImageProviderError(error: unknown): {

@@ -20,6 +20,7 @@ export function ImageCanvas({
   selectedAssetId: string | null;
   workspace: ImageWorkspace | null;
 }) {
+  const [canvasError, setCanvasError] = useState<string | null>(null);
   const [readyCanvasKey, setReadyCanvasKey] = useState<string | null>(null);
   const [controller, setController] = useState<CanvasController | null>(null);
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
@@ -50,7 +51,11 @@ export function ImageCanvas({
   useEffect(() => {
     if (!canvasReady || !persistenceKey || !canvasHostRef.current) return;
 
-    const nextController = createLeaferCanvasController({
+    let cancelled = false;
+    let mountedController: CanvasController | null = null;
+    setCanvasError(null);
+
+    void createLeaferCanvasController({
       container: canvasHostRef.current,
       events: {
         onChange: () => undefined,
@@ -65,17 +70,29 @@ export function ImageCanvas({
           onSelectAsset(assetId);
         },
       },
-    });
-
-    controllerRef.current = nextController;
-    setController(nextController);
+    })
+      .then((nextController) => {
+        if (cancelled) {
+          nextController.destroy();
+          return;
+        }
+        mountedController = nextController;
+        controllerRef.current = nextController;
+        setController(nextController);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error(error);
+        setCanvasError("图像画布加载失败，请刷新后重试");
+      });
 
     return () => {
-      nextController.destroy();
-      if (controllerRef.current === nextController) {
+      cancelled = true;
+      mountedController?.destroy();
+      if (controllerRef.current === mountedController) {
         controllerRef.current = null;
       }
-      setController((current) => (current === nextController ? null : current));
+      setController((current) => (current === mountedController ? null : current));
     };
   }, [canvasReady, onSelectAsset, persistenceKey]);
 
@@ -124,10 +141,11 @@ export function ImageCanvas({
   );
 
   const loadingMessage = useMemo(() => {
+    if (canvasError) return canvasError;
     if (loading || !canvasReady) return "正在加载图像画布";
     if (!workspace) return "创建一个图像工作区后开始";
     return null;
-  }, [canvasReady, loading, workspace]);
+  }, [canvasError, canvasReady, loading, workspace]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[var(--surface-muted)]">

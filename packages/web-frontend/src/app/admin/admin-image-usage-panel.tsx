@@ -1,9 +1,10 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadAdminImageUsage } from "./admin-api";
 import type {
+  AdminImageUsageModel,
   AdminImageUsageProvider,
   AdminImageUsageResponse,
   AdminImageUsageType,
@@ -25,6 +26,7 @@ export function AdminImageUsagePanel({
 }: {
   showHeader?: boolean;
 }) {
+  const initialLoadStartedRef = useRef(false);
   const [usage, setUsage] = useState<AdminImageUsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -43,7 +45,11 @@ export function AdminImageUsagePanel({
   }
 
   useEffect(() => {
-    void refreshUsage();
+    if (initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
+    queueMicrotask(() => {
+      void refreshUsage();
+    });
   }, []);
 
   const failedTaskCount = usage?.statusCounts.failed ?? 0;
@@ -120,7 +126,13 @@ export function AdminImageUsagePanel({
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <BreakdownTable
+          emptyLabel="暂无模型用量"
+          rows={usage?.byModel ?? []}
+          title="模型"
+          valueKey="model"
+        />
         <BreakdownTable
           emptyLabel="暂无 provider 用量"
           rows={usage?.byProvider ?? []}
@@ -186,9 +198,9 @@ function BreakdownTable({
   valueKey,
 }: {
   emptyLabel: string;
-  rows: Array<AdminImageUsageProvider | AdminImageUsageType>;
+  rows: Array<AdminImageUsageModel | AdminImageUsageProvider | AdminImageUsageType>;
   title: string;
-  valueKey: "provider" | "type";
+  valueKey: "model" | "provider" | "type";
 }) {
   return (
     <section className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -206,9 +218,11 @@ function BreakdownTable({
             <tbody>
               {rows.map((row) => {
                 const rowName =
-                  valueKey === "provider"
-                    ? (row as AdminImageUsageProvider).provider
-                    : (row as AdminImageUsageType).type;
+                  valueKey === "model"
+                    ? (row as AdminImageUsageModel).model
+                    : valueKey === "provider"
+                      ? (row as AdminImageUsageProvider).provider
+                      : (row as AdminImageUsageType).type;
 
                 return (
                   <tr

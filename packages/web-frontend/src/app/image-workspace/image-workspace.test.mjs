@@ -80,8 +80,8 @@ test("image canvas hydrates backend image assets into Leafer image nodes", () =>
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
   const apiSource = readImageWorkspaceFile("workspace-api.ts");
 
-  assert.match(adapterSource, /from "leafer-ui"/);
-  assert.match(adapterSource, /from "leafer-editor"/);
+  assert.match(adapterSource, /import\("leafer-ui"\)/);
+  assert.match(adapterSource, /import\("leafer-editor"\)/);
   assert.match(adapterSource, /createLeaferCanvasController/);
   assert.match(adapterSource, /hydrateWorkspace/);
   assert.match(adapterSource, /createImageAssetPreviewUrl\(asset\.id\)/);
@@ -92,6 +92,20 @@ test("image canvas hydrates backend image assets into Leafer image nodes", () =>
   assert.match(adapterSource, /type:\s*"image"/);
   assert.match(apiSource, /createImageAssetPreviewUrl/);
   assert.match(apiSource, /\/api\/image-assets\/\$\{encodeURIComponent\(assetId\)\}\/preview/);
+});
+
+test("image canvas loads Leafer only after the browser host is ready", () => {
+  const canvasSource = readImageWorkspaceFile("image-canvas.tsx");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /Promise<CanvasController>/);
+  assert.match(adapterSource, /await Promise\.all/);
+  assert.match(adapterSource, /import\("leafer-ui"\)/);
+  assert.match(adapterSource, /import\("leafer-editor"\)/);
+  assert.doesNotMatch(adapterSource, /import\s*\{\s*App[\s\S]*from "leafer-ui"/);
+  assert.match(canvasSource, /void createLeaferCanvasController/);
+  assert.match(canvasSource, /cancelled/);
+  assert.match(canvasSource, /nextController\.destroy\(\)/);
 });
 
 test("image canvas removes stale Mira image nodes after backend asset deletion", () => {
@@ -448,6 +462,25 @@ test("asset version panel supports drawing and uploading an edit mask", () => {
   assert.doesNotMatch(apiSource, /maskKey\?: string/);
   assert.match(inspectorSource, /onUploadMask/);
   assert.match(shellSource, /onUploadMask/);
+});
+
+test("asset version mask preview shows the full source image at source resolution", () => {
+  const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
+  const maskSource = panelSource.slice(
+    panelSource.indexOf("aria-label=\"绘制蒙版\"") - 700,
+    panelSource.indexOf("aria-label=\"绘制蒙版\"") + 700,
+  );
+
+  assert.match(maskSource, /object-contain/);
+  assert.doesNotMatch(maskSource, /object-cover/);
+  assert.match(panelSource, /MASK_PREVIEW_MAX_HEIGHT/);
+  assert.match(panelSource, /maskFrameStyle/);
+  assert.match(panelSource, /maxWidth/);
+  assert.match(maskSource, /items-center justify-center/);
+  assert.match(panelSource, /height=\{maskCanvasHeight\}/);
+  assert.match(panelSource, /width=\{maskCanvasWidth\}/);
+  assert.doesNotMatch(maskSource, /height=\{512\}/);
+  assert.doesNotMatch(maskSource, /width=\{512\}/);
 });
 
 test("image workspace has a focused asset version panel component", () => {

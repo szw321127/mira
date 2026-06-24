@@ -178,6 +178,25 @@ describe("AdminController", () => {
         }
       ])
     );
+    expect(response.body.byModel).toEqual(
+      expect.arrayContaining([
+        {
+          estimatedCostUsd: 0.042,
+          model: "gpt-image-1",
+          taskCount: 1
+        },
+        {
+          estimatedCostUsd: 0.1,
+          model: "gpt-image-1.5",
+          taskCount: 1
+        },
+        {
+          estimatedCostUsd: 0,
+          model: "unknown",
+          taskCount: 2
+        }
+      ])
+    );
     expect(response.body.byType).toEqual(
       expect.arrayContaining([
         {

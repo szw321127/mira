@@ -86,6 +86,8 @@ test("admin image usage panel renders compact usage and cost reporting", () => {
   assert.match(usagePanelSource, /图像用量/);
   assert.match(usagePanelSource, /loadAdminImageUsage/);
   assert.match(usagePanelSource, /estimatedCostUsd/);
+  assert.match(usagePanelSource, /byModel/);
+  assert.match(usagePanelSource, /暂无模型用量/);
   assert.match(usagePanelSource, /byProvider/);
   assert.match(usagePanelSource, /byType/);
   assert.match(usagePanelSource, /h-11/);

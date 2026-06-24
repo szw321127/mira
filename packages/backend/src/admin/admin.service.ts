@@ -195,6 +195,7 @@ export class AdminService {
       running: 0
     } satisfies Record<ImageTaskUsageStatus, number>;
     const activeUsers = new Set<string>();
+    const byModel = new Map<string, { estimatedCostUsd: number; taskCount: number }>();
     const byProvider = new Map<string, { estimatedCostUsd: number; taskCount: number }>();
     const byType = new Map<string, { estimatedCostUsd: number; taskCount: number }>();
     let estimatedCostUsd = 0;
@@ -205,12 +206,14 @@ export class AdminService {
 
       const cost = readImageTaskCost(task.cost);
       estimatedCostUsd += cost.estimatedCostUsd;
+      addUsageGroup(byModel, cost.model, cost.estimatedCostUsd);
       addUsageGroup(byProvider, cost.provider, cost.estimatedCostUsd);
       addUsageGroup(byType, task.type, cost.estimatedCostUsd);
     }
 
     return {
       activeUsers: activeUsers.size,
+      byModel: mapUsageGroups(byModel, "model"),
       byProvider: mapUsageGroups(byProvider, "provider"),
       byType: mapUsageGroups(byType, "type"),
       estimatedCostUsd: roundUsd(estimatedCostUsd),
@@ -350,17 +353,22 @@ export function maskSecret(value: string) {
 
 function readImageTaskCost(value: unknown): {
   estimatedCostUsd: number;
+  model: string;
   provider: string;
 } {
   if (!isRecord(value)) {
     return {
       estimatedCostUsd: 0,
+      model: "unknown",
       provider: "unknown"
     };
   }
 
   return {
     estimatedCostUsd: readFiniteNumber(value.estimatedCostUsd),
+    model: typeof value.model === "string" && value.model.trim()
+      ? value.model.trim()
+      : "unknown",
     provider: typeof value.provider === "string" && value.provider.trim()
       ? value.provider.trim()
       : "unknown"
@@ -381,7 +389,7 @@ function addUsageGroup(
 
 function mapUsageGroups(
   groups: Map<string, { estimatedCostUsd: number; taskCount: number }>,
-  keyName: "provider" | "type"
+  keyName: "model" | "provider" | "type"
 ) {
   return [...groups.entries()]
     .map(([key, value]) => ({
