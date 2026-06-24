@@ -152,7 +152,7 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
         ...(args.config.openaiBaseURL.trim()
           ? { baseURL: args.config.openaiBaseURL.trim() }
           : {}),
-        fetch: this.createCompatibleImageFetch(Boolean(args.config.openaiBaseURL.trim()))
+        fetch: this.createCompatibleImageFetch()
       });
       return await generateImage({
         model: openai.image(args.config.openaiModel),
@@ -170,10 +170,9 @@ export class OpenAIImageProviderService implements ImageProviderAdapter {
     }
   }
 
-  private createCompatibleImageFetch(requestBase64Response: boolean): OpenAIImageFetch {
+  private createCompatibleImageFetch(): OpenAIImageFetch {
     return async (input, init) => {
-      const nextInit = normalizeImageRequest(input, init, requestBase64Response);
-      const response = await this.fetcher(input, nextInit);
+      const response = await this.fetcher(input, init);
       return normalizeImageResponse(input, response, this.fetcher);
     };
   }
@@ -351,31 +350,6 @@ function firstResponseRequestId(value: GenerateImageResult): string | null {
     }
   }
   return null;
-}
-
-function normalizeImageRequest(
-  input: string | URL | Request,
-  init: RequestInit | undefined,
-  requestBase64Response: boolean
-): RequestInit | undefined {
-  if (
-    !requestBase64Response ||
-    !isImageEndpoint(input) ||
-    typeof init?.body !== "string"
-  ) {
-    return init;
-  }
-
-  const body = parseJsonObject(init.body);
-  if (!body) return init;
-
-  return {
-    ...init,
-    body: JSON.stringify({
-      ...body,
-      response_format: "b64_json"
-    })
-  };
 }
 
 async function normalizeImageResponse(

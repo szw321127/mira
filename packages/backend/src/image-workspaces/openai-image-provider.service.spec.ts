@@ -264,10 +264,10 @@ describe("OpenAIImageProviderService", () => {
     expect(readJsonRequestBody(calls[0])).toEqual(
       expect.objectContaining({
         model: "gpt-image-2",
-        output_format: "png",
-        response_format: "b64_json"
+        output_format: "png"
       })
     );
+    expect(readJsonRequestBody(calls[0])).not.toHaveProperty("response_format");
     expect(calls[1]?.url).toBe("https://image-gateway.example/generated.png");
   });
 
