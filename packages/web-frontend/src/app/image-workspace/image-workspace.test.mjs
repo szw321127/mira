@@ -870,6 +870,16 @@ test("image task stream hook accepts task-created and asset-placeholder events",
   assert.match(streamSource, /objectId:\s*value\.objectId/);
 });
 
+test("image workspace recognizes expand task type in shared surfaces", () => {
+  const typesSource = readImageWorkspaceFile("types.ts");
+  const streamSource = readImageWorkspaceFile("use-image-task-stream.ts");
+  const taskSource = readImageWorkspaceFile("components/task-inspector.tsx");
+
+  assert.match(typesSource, /"expand"/);
+  assert.match(streamSource, /value === "expand"/);
+  assert.match(taskSource, /expand: "扩展图片"/);
+});
+
 test("image task stream hook accepts canvas-updated events and refreshes the workspace", () => {
   const typesSource = readImageWorkspaceFile("types.ts");
   const streamSource = readImageWorkspaceFile("use-image-task-stream.ts");

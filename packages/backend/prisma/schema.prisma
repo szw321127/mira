@@ -126,6 +126,7 @@ enum ImageTaskType {
   variation
   upscale
   background_removal
+  expand
 }
 
 model ImageWorkspace {

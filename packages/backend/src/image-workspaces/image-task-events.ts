@@ -2,7 +2,7 @@ export type ImageTaskQueuePayload = {
   taskId: string;
   workspaceId: string;
   userId: string;
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
 };
 
 export type ImageTaskEvent =

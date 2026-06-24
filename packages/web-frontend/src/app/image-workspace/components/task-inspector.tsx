@@ -169,6 +169,7 @@ function taskTypeLabel(type: ImageTask["type"]): string {
     variation: "生成变体",
     upscale: "放大图像",
     background_removal: "移除背景",
+    expand: "扩展图片",
   } satisfies Record<ImageTask["type"], string>;
   return labels[type];
 }

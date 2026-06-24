@@ -25,7 +25,7 @@ type ImageTaskRow = {
   id: string;
   workspaceId: string;
   userId: string;
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
   status: "queued" | "running" | "complete" | "failed" | "canceled";
   input: unknown;
 };

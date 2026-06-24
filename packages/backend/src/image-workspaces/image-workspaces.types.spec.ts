@@ -81,6 +81,61 @@ describe("image workspace parsers", () => {
     });
   });
 
+  it("accepts valid image expand task requests", () => {
+    expect(
+      parseImageTaskRequest({
+        type: "expand",
+        prompt: "extend the street",
+        assetId: "asset-1",
+        versionId: "version-1",
+        mode: "direction",
+        direction: "right",
+        percent: 0.25,
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 },
+        aspectRatio: "16:9"
+      })
+    ).toEqual({
+      type: "expand",
+      prompt: "extend the street",
+      assetId: "asset-1",
+      versionId: "version-1",
+      mode: "direction",
+      direction: "right",
+      percent: 0.25,
+      padding: { left: 0, right: 256, top: 0, bottom: 0 },
+      target: { width: 1280, height: 1024 },
+      aspectRatio: "16:9"
+    });
+  });
+
+  it("rejects invalid image expand task payloads", () => {
+    expect(
+      parseImageTaskRequest({
+        type: "expand",
+        prompt: "extend",
+        assetId: "asset-1",
+        versionId: "version-1",
+        mode: "free",
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+        target: { width: 1024, height: 1024 }
+      })
+    ).toBeNull();
+
+    expect(
+      parseImageTaskRequest({
+        type: "expand",
+        prompt: "extend",
+        assetId: "asset-1",
+        versionId: "version-1",
+        mode: "direction",
+        direction: "diagonal",
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 }
+      })
+    ).toBeNull();
+  });
+
   it("rejects unsupported generate task settings", () => {
     expect(
       parseImageTaskRequest({

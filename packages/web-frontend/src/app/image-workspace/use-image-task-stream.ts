@@ -233,7 +233,8 @@ function normalizeTaskType(value: string): ImageTaskEvent & {
     value === "edit" ||
     value === "variation" ||
     value === "upscale" ||
-    value === "background_removal"
+    value === "background_removal" ||
+    value === "expand"
   ) {
     return value;
   }

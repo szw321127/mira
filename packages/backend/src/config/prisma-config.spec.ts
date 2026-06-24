@@ -44,6 +44,7 @@ describe("prisma.config", () => {
     expect(schema).toContain("model UserSession");
     expect(schema).toContain("model Conversation");
     expect(schema).toContain("model Message");
+    expect(schema).toContain("  expand");
 
     expect(migration).toContain('CREATE TABLE "users"');
     expect(migration).toContain('CREATE TABLE "email_verification_codes"');

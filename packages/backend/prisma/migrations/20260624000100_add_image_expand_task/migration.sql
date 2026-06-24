@@ -1,0 +1,1 @@
+ALTER TYPE "ImageTaskType" ADD VALUE IF NOT EXISTS 'expand';

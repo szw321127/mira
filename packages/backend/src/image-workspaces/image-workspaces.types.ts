@@ -28,13 +28,26 @@ export type CanvasSnapshot = {
   objects: CanvasObjectInput[];
 };
 
+export type ImageExpandMode = "free" | "ratio" | "direction";
+export type ImageExpandDirection = "left" | "right" | "top" | "bottom" | "around";
+export type ImageExpandPadding = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+export type ImageExpandTarget = {
+  width: number;
+  height: number;
+};
+
 export type ImageTaskRequest = {
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
   prompt: string;
   target?: {
     x: number;
     y: number;
-  };
+  } | ImageExpandTarget;
   assetId?: string;
   versionId?: string;
   maskKey?: string;
@@ -42,6 +55,11 @@ export type ImageTaskRequest = {
   size?: ImageGenerateSize;
   quality?: "low" | "medium" | "high" | "auto";
   background?: "transparent" | "opaque" | "auto";
+  mode?: ImageExpandMode;
+  direction?: ImageExpandDirection;
+  percent?: number;
+  padding?: ImageExpandPadding;
+  expandTarget?: ImageExpandTarget;
 };
 
 type CanvasObjectRecord = Omit<CanvasObjectInput, "props"> & {
@@ -145,8 +163,6 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
   const prompt = value.prompt.trim();
   if (!prompt) return null;
 
-  const target = parsePoint(value.target);
-  if (value.target !== undefined && !target) return null;
   const aspectRatio = parseImageAspectRatio(value.aspectRatio);
   if (value.aspectRatio !== undefined && !aspectRatio) return null;
   const size = parseImageSize(value.size);
@@ -155,6 +171,35 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
   if (value.quality !== undefined && !quality) return null;
   const background = parseImageBackground(value.background);
   if (value.background !== undefined && !background) return null;
+
+  if (value.type === "expand") {
+    const assetId = parseRequiredString(value.assetId);
+    const versionId = parseRequiredString(value.versionId);
+    const mode = parseImageExpandMode(value.mode);
+    const direction = parseImageExpandDirection(value.direction);
+    const percent = parseImageExpandPercent(value.percent);
+    const padding = parseImageExpandPadding(value.padding);
+    const target = parseImageExpandTarget(value.target);
+    if (!assetId || !versionId || !mode || !padding || !target) return null;
+    if (mode === "direction" && !direction) return null;
+    if (value.direction !== undefined && !direction) return null;
+    if (value.percent !== undefined && percent === null) return null;
+    return {
+      type: value.type,
+      prompt,
+      assetId,
+      versionId,
+      mode,
+      ...(direction ? { direction } : {}),
+      ...(percent !== null ? { percent } : {}),
+      padding,
+      target,
+      ...(aspectRatio ? { aspectRatio } : {})
+    };
+  }
+
+  const target = parsePoint(value.target);
+  if (value.target !== undefined && !target) return null;
 
   return {
     type: value.type,
@@ -270,7 +315,12 @@ function sanitizeImageTaskInput(input: unknown): Record<string, unknown> {
     "size",
     "quality",
     "background",
-    "target"
+    "target",
+    "mode",
+    "direction",
+    "percent",
+    "padding",
+    "expandTarget"
   ]);
 }
 
@@ -357,8 +407,60 @@ function isTaskType(value: unknown): value is ImageTaskRequest["type"] {
     value === "edit" ||
     value === "variation" ||
     value === "upscale" ||
-    value === "background_removal"
+    value === "background_removal" ||
+    value === "expand"
   );
+}
+
+function parseImageExpandMode(value: unknown): ImageExpandMode | null {
+  if (value === "free" || value === "ratio" || value === "direction") {
+    return value;
+  }
+  return null;
+}
+
+function parseImageExpandDirection(value: unknown): ImageExpandDirection | null {
+  if (
+    value === "left" ||
+    value === "right" ||
+    value === "top" ||
+    value === "bottom" ||
+    value === "around"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function parseImageExpandPercent(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (!isFiniteNumber(value) || value <= 0 || value > 1) return null;
+  return value;
+}
+
+function parseImageExpandPadding(value: unknown): ImageExpandPadding | null {
+  if (!isRecord(value)) return null;
+
+  const left = parseNonNegativeInteger(value.left);
+  const right = parseNonNegativeInteger(value.right);
+  const top = parseNonNegativeInteger(value.top);
+  const bottom = parseNonNegativeInteger(value.bottom);
+  if (left === null || right === null || top === null || bottom === null) {
+    return null;
+  }
+  if (left + right + top + bottom <= 0) return null;
+
+  return { left, right, top, bottom };
+}
+
+function parseImageExpandTarget(value: unknown): ImageExpandTarget | null {
+  if (!isRecord(value)) return null;
+
+  const width = parsePositiveInteger(value.width);
+  const height = parsePositiveInteger(value.height);
+  if (width === null || height === null) return null;
+
+  return { width, height };
 }
 
 function parseImageSize(value: unknown): ImageTaskRequest["size"] | null {
@@ -417,4 +519,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseRequiredString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function parsePositiveInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return null;
+  }
+  return value;
 }

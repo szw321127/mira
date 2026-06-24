@@ -53,7 +53,7 @@ export type ImageAsset = {
 export type ImageTask = {
   id: string;
   workspaceId: string;
-  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal" | "expand";
   status: "queued" | "running" | "complete" | "failed" | "canceled";
   input: Record<string, unknown>;
   output: unknown;
