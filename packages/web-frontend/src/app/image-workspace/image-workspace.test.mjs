@@ -660,6 +660,30 @@ test("asset version panel delegates local edit overlays to the Leafer canvas", (
   assert.doesNotMatch(panelSource, /onPointerDown=\{startMaskStroke\}/);
 });
 
+test("local edit overlays are cleared and restored through toolbar undo redo", () => {
+  const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
+  const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.doesNotMatch(panelSource, /Eraser/);
+  assert.doesNotMatch(panelSource, /onClearLocalEditOverlay/);
+  assert.doesNotMatch(panelSource, /清除/);
+  assert.doesNotMatch(inspectorSource, /onClearLocalEditOverlay/);
+  assert.doesNotMatch(shellSource, /onClearLocalEditOverlay/);
+  assert.match(adapterSource, /type LocalEditOverlaySnapshot/);
+  assert.match(adapterSource, /localEditUndoStack/);
+  assert.match(adapterSource, /localEditRedoStack/);
+  assert.match(adapterSource, /captureLocalEditSnapshot/);
+  assert.match(adapterSource, /applyLocalEditSnapshot/);
+  assert.match(adapterSource, /pushLocalEditHistory/);
+  assert.match(adapterSource, /getCanUndo:\s*\(\) => localEditUndoStack\.length > 0/);
+  assert.match(adapterSource, /getCanRedo:\s*\(\) => localEditRedoStack\.length > 0/);
+  assert.match(adapterSource, /undo:\s*\(\) =>/);
+  assert.match(adapterSource, /redo:\s*\(\) =>/);
+  assert.match(adapterSource, /currentLocalEditHistorySnapshot/);
+});
+
 test("image workspace has a focused asset version panel component", () => {
   const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
   const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");

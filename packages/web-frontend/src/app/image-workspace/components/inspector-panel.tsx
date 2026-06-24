@@ -25,7 +25,6 @@ export function InspectorPanel({
   localEditOverlayState,
   mobileOpen,
   onCancelTask,
-  onClearLocalEditOverlay,
   onCloseMobile,
   onDeleteAsset,
   onDeleteTask,
@@ -52,7 +51,6 @@ export function InspectorPanel({
   localEditOverlayState: LocalEditOverlayState;
   mobileOpen: boolean;
   onCancelTask: (taskId: string) => Promise<void> | void;
-  onClearLocalEditOverlay: () => void;
   onCloseMobile: () => void;
   onDeleteAsset: (assetId: string) => Promise<void> | void;
   onDeleteTask: (taskId: string) => Promise<void> | void;
@@ -119,7 +117,6 @@ export function InspectorPanel({
           currentVersion={currentVersion}
           disabled={creatingTask}
           localEditOverlayState={localEditOverlayState}
-          onClearLocalEditOverlay={onClearLocalEditOverlay}
           onDelete={onDeleteAsset}
           onDownload={onDownloadAsset}
           onLocalEditRadiusChange={onLocalEditRadiusChange}

@@ -127,10 +127,6 @@ export function ImageWorkspaceShell({
     [],
   );
 
-  const clearLocalEditOverlay = useCallback(() => {
-    canvasControllerRef.current?.clearLocalEditOverlay();
-  }, []);
-
   const setLocalEditMarkerRadius = useCallback((radius: number) => {
     canvasControllerRef.current?.setLocalEditMarkerRadius(radius);
   }, []);
@@ -227,7 +223,6 @@ export function ImageWorkspaceShell({
         onCloseMobile={() => setMobileInspectorOpen(false)}
         onCancelTask={onCancelTask}
         localEditOverlayState={localEditOverlayState}
-        onClearLocalEditOverlay={clearLocalEditOverlay}
         onDeleteAsset={onDeleteAsset}
         onDeleteTask={onDeleteTask}
         onDownloadAsset={onDownloadAsset}

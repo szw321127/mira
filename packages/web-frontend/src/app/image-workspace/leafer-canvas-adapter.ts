@@ -74,6 +74,15 @@ type LocalEditMarker = {
   versionId: string;
 };
 
+type LocalEditOverlaySnapshot = {
+  activeMaskAssetId: string | null;
+  activeMaskVersionId: string | null;
+  currentMaskStroke: LocalEditPoint[] | null;
+  marker: LocalEditMarker | null;
+  markerRadius: number;
+  maskStrokes: LocalEditStroke[];
+};
+
 const DEFAULT_OBJECT_SIZE = 320;
 const DEFAULT_VIEWPORT: CanvasViewport = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_MARKER_RADIUS = 96;
@@ -116,6 +125,17 @@ async function createLoadedLeaferCanvasController({
   let panStart: { pointer: { x: number; y: number }; viewport: CanvasViewport } | null =
     null;
   const changeListeners = new Set<() => void>();
+  let localEditGestureStartSnapshot: LocalEditOverlaySnapshot | null = null;
+  let localEditRedoStack: LocalEditOverlaySnapshot[] = [];
+  let localEditUndoStack: LocalEditOverlaySnapshot[] = [];
+  let currentLocalEditHistorySnapshot: LocalEditOverlaySnapshot = {
+    activeMaskAssetId: null,
+    activeMaskVersionId: null,
+    currentMaskStroke: null,
+    marker: null,
+    markerRadius,
+    maskStrokes: [],
+  };
 
   const app = new App({
     editor: {},
@@ -237,6 +257,89 @@ async function createLoadedLeaferCanvasController({
     applySelectionToEditor(null);
   };
 
+  const cloneLocalEditPoint = (point: LocalEditPoint): LocalEditPoint => ({
+    x: point.x,
+    y: point.y,
+  });
+
+  const cloneLocalEditStroke = (stroke: LocalEditStroke): LocalEditStroke => ({
+    assetId: stroke.assetId,
+    points: stroke.points.map(cloneLocalEditPoint),
+    versionId: stroke.versionId,
+  });
+
+  const cloneLocalEditMarker = (
+    value: LocalEditMarker | null,
+  ): LocalEditMarker | null => {
+    if (!value) return null;
+    return {
+      assetId: value.assetId,
+      center: cloneLocalEditPoint(value.center),
+      radius: value.radius,
+      versionId: value.versionId,
+    };
+  };
+
+  const cloneLocalEditSnapshot = (
+    snapshot: LocalEditOverlaySnapshot,
+  ): LocalEditOverlaySnapshot => ({
+    activeMaskAssetId: snapshot.activeMaskAssetId,
+    activeMaskVersionId: snapshot.activeMaskVersionId,
+    currentMaskStroke: snapshot.currentMaskStroke
+      ? snapshot.currentMaskStroke.map(cloneLocalEditPoint)
+      : null,
+    marker: cloneLocalEditMarker(snapshot.marker),
+    markerRadius: snapshot.markerRadius,
+    maskStrokes: snapshot.maskStrokes.map(cloneLocalEditStroke),
+  });
+
+  const captureLocalEditSnapshot = (): LocalEditOverlaySnapshot => ({
+    activeMaskAssetId,
+    activeMaskVersionId,
+    currentMaskStroke: currentMaskStroke
+      ? currentMaskStroke.map(cloneLocalEditPoint)
+      : null,
+    marker: cloneLocalEditMarker(marker),
+    markerRadius,
+    maskStrokes: maskStrokes.map(cloneLocalEditStroke),
+  });
+
+  const applyLocalEditSnapshot = (snapshot: LocalEditOverlaySnapshot) => {
+    activeMaskAssetId = snapshot.activeMaskAssetId;
+    activeMaskVersionId = snapshot.activeMaskVersionId;
+    currentMaskStroke = snapshot.currentMaskStroke
+      ? snapshot.currentMaskStroke.map(cloneLocalEditPoint)
+      : null;
+    marker = cloneLocalEditMarker(snapshot.marker);
+    markerRadius = snapshot.markerRadius;
+    maskStrokes = snapshot.maskStrokes.map(cloneLocalEditStroke);
+    renderMaskOverlay();
+    renderMarkerOverlay();
+  };
+
+  const localEditSnapshotsEqual = (
+    left: LocalEditOverlaySnapshot,
+    right: LocalEditOverlaySnapshot,
+  ) => JSON.stringify(left) === JSON.stringify(right);
+
+  const resetLocalEditHistory = () => {
+    localEditGestureStartSnapshot = null;
+    localEditRedoStack = [];
+    localEditUndoStack = [];
+    currentLocalEditHistorySnapshot = captureLocalEditSnapshot();
+  };
+
+  const pushLocalEditHistory = (beforeSnapshot: LocalEditOverlaySnapshot) => {
+    const nextSnapshot = captureLocalEditSnapshot();
+    if (localEditSnapshotsEqual(beforeSnapshot, nextSnapshot)) {
+      currentLocalEditHistorySnapshot = nextSnapshot;
+      return;
+    }
+    localEditUndoStack = [...localEditUndoStack, cloneLocalEditSnapshot(beforeSnapshot)];
+    localEditRedoStack = [];
+    currentLocalEditHistorySnapshot = nextSnapshot;
+  };
+
   const clearLocalEditOverlay = (shouldEmit = true) => {
     activeMaskAssetId = null;
     activeMaskVersionId = null;
@@ -245,6 +348,7 @@ async function createLoadedLeaferCanvasController({
     maskStrokes = [];
     maskLayer.removeAll();
     markerLayer.removeAll();
+    resetLocalEditHistory();
     if (shouldEmit) emitChange();
   };
 
@@ -391,11 +495,13 @@ async function createLoadedLeaferCanvasController({
       const versionId = selectedNode?.__mira?.miraVersionId;
       if (!selectedNode || !point || !assetId || !versionId) return;
 
+      const beforeSnapshot = captureLocalEditSnapshot();
       marker = null;
       markerLayer.removeAll();
       activeMaskAssetId = assetId;
       activeMaskVersionId = versionId;
       currentMaskStroke = [point];
+      localEditGestureStartSnapshot = beforeSnapshot;
       renderMaskOverlay();
       emitChange();
       return;
@@ -410,6 +516,7 @@ async function createLoadedLeaferCanvasController({
       const versionId = selectedNode?.__mira?.miraVersionId;
       if (!selectedNode || !point || !assetId || !versionId) return;
 
+      const beforeSnapshot = captureLocalEditSnapshot();
       activeMaskAssetId = null;
       activeMaskVersionId = null;
       currentMaskStroke = null;
@@ -422,6 +529,7 @@ async function createLoadedLeaferCanvasController({
         versionId,
       };
       renderMarkerOverlay();
+      pushLocalEditHistory(beforeSnapshot);
       emitChange();
       return;
     }
@@ -477,6 +585,10 @@ async function createLoadedLeaferCanvasController({
       ];
       currentMaskStroke = null;
       renderMaskOverlay();
+      pushLocalEditHistory(
+        localEditGestureStartSnapshot ?? currentLocalEditHistorySnapshot,
+      );
+      localEditGestureStartSnapshot = null;
       emitChange();
       return;
     }
@@ -546,8 +658,8 @@ async function createLoadedLeaferCanvasController({
       });
     },
     getActiveTool: () => activeTool,
-    getCanRedo: () => false,
-    getCanUndo: () => false,
+    getCanRedo: () => localEditRedoStack.length > 0,
+    getCanUndo: () => localEditUndoStack.length > 0,
     getLocalEditOverlayState,
     hydrateWorkspace: (workspace) => {
       if (!workspace) {
@@ -670,7 +782,18 @@ async function createLoadedLeaferCanvasController({
       }
       emitChange();
     },
-    redo: () => undefined,
+    redo: () => {
+      const nextSnapshot = localEditRedoStack.at(-1);
+      if (!nextSnapshot) return;
+      localEditRedoStack = localEditRedoStack.slice(0, -1);
+      localEditUndoStack = [
+        ...localEditUndoStack,
+        captureLocalEditSnapshot(),
+      ];
+      applyLocalEditSnapshot(nextSnapshot);
+      currentLocalEditHistorySnapshot = captureLocalEditSnapshot();
+      emitChange();
+    },
     selectAsset: (selection) => {
       const nextSelection = normalizeSelectionInput(selection);
       if (!nextSelection.assetId) {
@@ -761,9 +884,14 @@ async function createLoadedLeaferCanvasController({
         };
         renderMarkerOverlay();
       }
+      currentLocalEditHistorySnapshot = captureLocalEditSnapshot();
       emitChange();
     },
     setTool: (tool) => {
+      if (currentMaskStroke && localEditGestureStartSnapshot) {
+        applyLocalEditSnapshot(localEditGestureStartSnapshot);
+        localEditGestureStartSnapshot = null;
+      }
       activeTool = tool;
       isPanning = false;
       panStart = null;
@@ -780,7 +908,18 @@ async function createLoadedLeaferCanvasController({
         changeListeners.delete(listener);
       };
     },
-    undo: () => undefined,
+    undo: () => {
+      const previousSnapshot = localEditUndoStack.at(-1);
+      if (!previousSnapshot) return;
+      localEditUndoStack = localEditUndoStack.slice(0, -1);
+      localEditRedoStack = [
+        ...localEditRedoStack,
+        captureLocalEditSnapshot(),
+      ];
+      applyLocalEditSnapshot(previousSnapshot);
+      currentLocalEditHistorySnapshot = captureLocalEditSnapshot();
+      emitChange();
+    },
     zoomIn: () => {
       setViewport({ ...viewport, zoom: viewport.zoom * 1.12 });
     },

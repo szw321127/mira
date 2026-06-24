@@ -9,7 +9,6 @@ import {
 import {
   Brush,
   Download,
-  Eraser,
   GitCompare,
   Image as ImageIcon,
   Maximize2,
@@ -32,7 +31,6 @@ export function AssetVersionPanel({
   currentVersion,
   disabled,
   localEditOverlayState,
-  onClearLocalEditOverlay,
   onDelete,
   onDownload,
   onLocalEditRadiusChange,
@@ -50,7 +48,6 @@ export function AssetVersionPanel({
   currentVersion: ImageVersion | null;
   disabled: boolean;
   localEditOverlayState: LocalEditOverlayState;
-  onClearLocalEditOverlay: () => void;
   onDelete: (assetId: string) => Promise<void> | void;
   onDownload: (assetId: string, versionId?: string) => Promise<void> | void;
   onLocalEditRadiusChange: (radius: number) => void;
@@ -177,15 +174,6 @@ export function AssetVersionPanel({
                 <Brush aria-hidden="true" size={14} />
                 局部重绘
               </div>
-              <button
-                className="inline-flex h-8 items-center gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2 text-[11px] font-[650] transition-colors hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={!localEditReady || disabled}
-                onClick={onClearLocalEditOverlay}
-                type="button"
-              >
-                <Eraser aria-hidden="true" size={12} />
-                清除
-              </button>
             </div>
             <div className="mt-2 flex items-center justify-between gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px]">
               <span className="font-[650] text-[var(--muted-strong)]">
