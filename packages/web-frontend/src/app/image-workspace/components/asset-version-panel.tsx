@@ -39,6 +39,7 @@ export function AssetVersionPanel({
   onRemoveBackground,
   onRevert,
   onSelectAsset,
+  onSelectVersion,
   onSubmitLocalEdit,
   onUpscale,
   onVariation,
@@ -56,6 +57,7 @@ export function AssetVersionPanel({
   onRemoveBackground: (assetId: string) => Promise<void> | void;
   onRevert: (assetId: string, versionId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
+  onSelectVersion: (versionId: string) => void;
   onSubmitLocalEdit: (
     assetId: string,
     version: ImageVersion,
@@ -329,7 +331,7 @@ export function AssetVersionPanel({
                   }`}
                   disabled={version.id === currentVersion.id || disabled}
                   key={version.id}
-                  onClick={() => runAction(() => onRevert(selectedAsset.id, version.id))}
+                  onClick={() => onSelectVersion(version.id)}
                   type="button"
                 >
                   {version.editPrompt || version.prompt || "图片版本"} ·{" "}

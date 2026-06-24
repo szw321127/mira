@@ -1,5 +1,6 @@
 import type { IApp, IGroup, IImage, IUI } from "leafer-ui";
 import type {
+  CanvasAssetSelection,
   CanvasController,
   CanvasControllerEvents,
   CanvasTool,
@@ -12,11 +13,15 @@ import type {
   ImageAsset,
   ImageWorkspace,
 } from "./types";
-import { createImageAssetPreviewUrl } from "./workspace-api";
+import {
+  createImageAssetPreviewUrl,
+  createImageVersionPreviewUrl,
+} from "./workspace-api";
 
 type MiraImageMeta = {
   miraAssetId: string;
   miraObjectId: string;
+  miraProps: Record<string, unknown>;
   miraVersionId: string;
 };
 
@@ -98,6 +103,9 @@ async function createLoadedLeaferCanvasController({
   let destroyed = false;
   let viewport: CanvasViewport = { ...DEFAULT_VIEWPORT };
   let selectedAssetId: string | null = null;
+  let selectedObjectId: string | null = null;
+  let selectedVersionId: string | null = null;
+  let latestAssetsById = new Map<string, ImageAsset>();
   let activeMaskAssetId: string | null = null;
   let activeMaskVersionId: string | null = null;
   let currentMaskStroke: LocalEditPoint[] | null = null;
@@ -152,10 +160,19 @@ async function createLoadedLeaferCanvasController({
     changeListeners.forEach((listener) => listener());
   };
 
-  const emitSelection = (assetId: string | null) => {
-    if (selectedAssetId === assetId) return;
-    selectedAssetId = assetId;
-    events.onSelectAsset(assetId);
+  const emitSelection = (selection: CanvasAssetSelection) => {
+    if (
+      selectedAssetId === selection.assetId &&
+      selectedObjectId === selection.objectId &&
+      selectedVersionId === selection.selectedVersionId
+    ) {
+      return;
+    }
+
+    selectedAssetId = selection.assetId;
+    selectedObjectId = selection.objectId;
+    selectedVersionId = selection.selectedVersionId;
+    events.onSelectAsset(selection);
     emitChange();
   };
 
@@ -245,7 +262,7 @@ async function createLoadedLeaferCanvasController({
   const selectNode = (node: MiraImageNode | null) => {
     applySelectionToEditor(node);
     clearLocalEditIfNodeChanged(node);
-    emitSelection(node?.__mira?.miraAssetId ?? null);
+    emitSelection(selectionFromNode(node));
   };
 
   const resolveLocalEditNode = (event: unknown) => {
@@ -461,7 +478,7 @@ async function createLoadedLeaferCanvasController({
     clearSelection: () => {
       clearLocalEditOverlay(false);
       applySelectionToEditor(null);
-      emitSelection(null);
+      emitSelection(emptySelection());
     },
     deleteSelection: () => {
       const selectedNode = readSelectedNode();
@@ -469,7 +486,7 @@ async function createLoadedLeaferCanvasController({
       clearLocalEditOverlay(false);
       selectedNode.remove();
       applySelectionToEditor(null);
-      emitSelection(null);
+      emitSelection(emptySelection());
       emitChange();
     },
     destroy: () => {
@@ -509,9 +526,10 @@ async function createLoadedLeaferCanvasController({
     getLocalEditOverlayState,
     hydrateWorkspace: (workspace) => {
       if (!workspace) {
+        latestAssetsById = new Map();
         removeStaleMiraImageNodes(imageLayer, new Set());
         applySelectionToEditor(null);
-        emitSelection(null);
+        emitSelection(emptySelection());
         setViewport(DEFAULT_VIEWPORT);
         clearLocalEditOverlay(false);
         return;
@@ -521,6 +539,7 @@ async function createLoadedLeaferCanvasController({
       setViewport(nextViewport, false);
 
       const assetsById = new Map(workspace.assets.map((asset) => [asset.id, asset]));
+      latestAssetsById = assetsById;
       const validObjectIds = new Set<string>();
       const imageObjects = workspace.objects
         .filter((object) => object.type === "image" && object.assetId)
@@ -528,7 +547,7 @@ async function createLoadedLeaferCanvasController({
 
       for (const object of imageObjects) {
         const asset = object.assetId ? assetsById.get(object.assetId) : null;
-        const version = asset ? getCurrentVersion(asset) : null;
+        const version = asset ? getCanvasObjectVersion(asset, object) : null;
         if (!asset || !version) continue;
 
         validObjectIds.add(object.id);
@@ -537,7 +556,7 @@ async function createLoadedLeaferCanvasController({
           node.set({
             height: object.height,
             rotation: object.rotation,
-            url: createImageAssetPreviewUrl(asset.id),
+            url: createCanvasImageUrl(asset, version),
             width: object.width,
             x: object.x,
             y: object.y,
@@ -546,6 +565,7 @@ async function createLoadedLeaferCanvasController({
           node.__mira = {
             miraAssetId: asset.id,
             miraObjectId: object.id,
+            miraProps: normalizeCanvasObjectProps(object.props),
             miraVersionId: version.id,
           };
           continue;
@@ -556,7 +576,7 @@ async function createLoadedLeaferCanvasController({
           editable: true,
           height: object.height,
           rotation: object.rotation,
-          url: createImageAssetPreviewUrl(asset.id),
+          url: createCanvasImageUrl(asset, version),
           width: object.width,
           x: object.x,
           y: object.y,
@@ -567,6 +587,7 @@ async function createLoadedLeaferCanvasController({
         imageNode.__mira = {
           miraAssetId: asset.id,
           miraObjectId: object.id,
+          miraProps: normalizeCanvasObjectProps(object.props),
           miraVersionId: version.id,
         };
         imageLayer.add(imageNode);
@@ -575,7 +596,11 @@ async function createLoadedLeaferCanvasController({
       removeStaleMiraImageNodes(imageLayer, validObjectIds);
 
       const selectedNode = selectedAssetId
-        ? findMiraImageNodeByAssetId(imageLayer, selectedAssetId)
+        ? findMiraImageNodeBySelection(imageLayer, {
+            assetId: selectedAssetId,
+            objectId: selectedObjectId,
+            selectedVersionId,
+          })
         : null;
       if (selectedAssetId && selectedNode) {
         clearLocalEditIfNodeChanged(selectedNode);
@@ -585,21 +610,46 @@ async function createLoadedLeaferCanvasController({
       }
       if (selectedAssetId && !selectedNode) {
         applySelectionToEditor(null);
-        emitSelection(null);
+        emitSelection(emptySelection());
         clearLocalEditOverlay(false);
       }
       emitChange();
     },
     redo: () => undefined,
-    selectAsset: (assetId) => {
-      if (!assetId) {
+    selectAsset: (selection) => {
+      const nextSelection = normalizeSelectionInput(selection);
+      if (!nextSelection.assetId) {
         applySelectionToEditor(null);
-        emitSelection(null);
+        emitSelection(emptySelection());
         return;
       }
-      selectNode(findMiraImageNodeByAssetId(imageLayer, assetId));
+      selectNode(findMiraImageNodeBySelection(imageLayer, nextSelection));
     },
     serializeSnapshot: () => serializeSnapshot(imageLayer, viewport),
+    setSelectedAssetVersion: (versionId) => {
+      const selectedNode = readSelectedNode();
+      const assetId = selectedNode?.__mira?.miraAssetId;
+      if (!selectedNode || !assetId) return;
+
+      const asset = latestAssetsById.get(assetId);
+      const version = asset?.versions.find((item) => item.id === versionId);
+      if (!asset || !version) return;
+
+      selectedNode.set({
+        url: createCanvasImageUrl(asset, version),
+      });
+      selectedNode.__mira = {
+        ...selectedNode.__mira,
+        miraAssetId: asset.id,
+        miraObjectId: selectedNode.__mira?.miraObjectId ?? "",
+        miraProps: selectedNode.__mira?.miraProps ?? {},
+        miraVersionId: version.id,
+      };
+      clearLocalEditIfNodeChanged(selectedNode);
+      renderMaskOverlay();
+      renderMarkerOverlay();
+      emitSelection(selectionFromNode(selectedNode));
+    },
     exportLocalEditMask: (input) => {
       const selectedNode = findMiraImageNodeByAssetId(imageLayer, input.assetId);
       if (!selectedNode) return { dataUrl: null, source: null };
@@ -709,7 +759,12 @@ function serializeSnapshot(
     height: normalizeFiniteNumber(node.height, DEFAULT_OBJECT_SIZE),
     rotation: normalizeFiniteNumber(node.rotation, 0),
     zIndex: index,
-    props: {},
+    props: {
+      ...(node.__mira?.miraProps ?? {}),
+      ...(node.__mira?.miraVersionId
+        ? { versionId: node.__mira.miraVersionId }
+        : {}),
+    },
   }));
 
   return {
@@ -746,6 +801,58 @@ function findMiraImageNodeByAssetId(imageLayer: IGroup, assetId: string) {
   }) ?? null;
 }
 
+function findMiraImageNodeBySelection(
+  imageLayer: IGroup,
+  selection: CanvasAssetSelection,
+) {
+  const nodes = readMiraImageNodes(imageLayer);
+  if (selection.objectId) {
+    const node = nodes.find((item) => item.__mira?.miraObjectId === selection.objectId);
+    if (node) return node;
+  }
+  if (selection.assetId && selection.selectedVersionId) {
+    const node = nodes.find((item) => {
+      return (
+        item.__mira?.miraAssetId === selection.assetId &&
+        item.__mira?.miraVersionId === selection.selectedVersionId
+      );
+    });
+    if (node) return node;
+  }
+  return selection.assetId ? findMiraImageNodeByAssetId(imageLayer, selection.assetId) : null;
+}
+
+function selectionFromNode(node: MiraImageNode | null): CanvasAssetSelection {
+  if (!node?.__mira) return emptySelection();
+  return {
+    assetId: node.__mira.miraAssetId,
+    objectId: node.__mira.miraObjectId,
+    selectedVersionId: node.__mira.miraVersionId,
+  };
+}
+
+function emptySelection(): CanvasAssetSelection {
+  return {
+    assetId: null,
+    objectId: null,
+    selectedVersionId: null,
+  };
+}
+
+function normalizeSelectionInput(
+  selection: CanvasAssetSelection | string | null,
+): CanvasAssetSelection {
+  if (!selection) return emptySelection();
+  if (typeof selection === "string") {
+    return {
+      assetId: selection,
+      objectId: null,
+      selectedVersionId: null,
+    };
+  }
+  return selection;
+}
+
 function parseViewport(value: ImageWorkspace["viewport"]): CanvasViewport {
   if (!value) return { ...DEFAULT_VIEWPORT };
 
@@ -762,6 +869,31 @@ function getCurrentVersion(asset: ImageAsset) {
     asset.versions[0] ??
     null
   );
+}
+
+function getCanvasObjectVersion(asset: ImageAsset, object: CanvasObject) {
+  const objectVersionId = readCanvasObjectVersionId(object);
+  return (
+    asset.versions.find((version) => version.id === objectVersionId) ??
+    getCurrentVersion(asset)
+  );
+}
+
+function readCanvasObjectVersionId(object: CanvasObject) {
+  const versionId = object.props.versionId;
+  return typeof versionId === "string" && versionId.trim()
+    ? versionId.trim()
+    : null;
+}
+
+function normalizeCanvasObjectProps(props: CanvasObject["props"]) {
+  return props && typeof props === "object" && !Array.isArray(props) ? props : {};
+}
+
+function createCanvasImageUrl(asset: ImageAsset, version: ReturnType<typeof getCurrentVersion>) {
+  return version
+    ? createImageVersionPreviewUrl(asset.id, version.id)
+    : createImageAssetPreviewUrl(asset.id);
 }
 
 function getObjectBounds(nodes: MiraImageNode[]) {

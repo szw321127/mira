@@ -231,7 +231,8 @@ export class ImageAssetsService {
           rotation: 0,
           zIndex: 0,
           props: toInputJson({
-            source: "upload"
+            source: "upload",
+            versionId: version.id
           })
         }
       });

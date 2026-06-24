@@ -1,41 +1,47 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { CanvasAssetSelection } from "./leafer-canvas-types";
 import type { ImageAsset, ImageVersion, ImageWorkspace } from "./types";
+
+const EMPTY_SELECTION: CanvasAssetSelection = {
+  assetId: null,
+  objectId: null,
+  selectedVersionId: null,
+};
 
 export function useSelectedImageAsset(workspace: ImageWorkspace | null): {
   currentVersion: ImageVersion | null;
   previousVersion: ImageVersion | null;
   selectedAsset: ImageAsset | null;
   selectedAssetId: string | null;
-  selectAsset: (assetId: string | null) => void;
+  selectedObjectId: string | null;
+  selectedVersionId: string | null;
+  selectAsset: (selection: CanvasAssetSelection | string | null) => void;
+  selectVersion: (versionId: string) => void;
 } {
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!workspace?.assets.length) {
-      setSelectedAssetId(null);
-      return;
-    }
-    if (selectedAssetId && !workspace.assets.some((asset) => asset.id === selectedAssetId)) {
-      setSelectedAssetId(null);
-    }
-  }, [selectedAssetId, workspace]);
+  const [selection, setSelection] =
+    useState<CanvasAssetSelection>(EMPTY_SELECTION);
 
   const selectedAsset = useMemo(() => {
-    return workspace?.assets.find((asset) => asset.id === selectedAssetId) ?? null;
-  }, [selectedAssetId, workspace]);
+    return workspace?.assets.find((asset) => asset.id === selection.assetId) ?? null;
+  }, [selection.assetId, workspace]);
+
+  const selectedAssetId = selectedAsset ? selection.assetId : null;
+  const selectedObjectId = selectedAsset ? selection.objectId : null;
+  const requestedVersionId = selectedAsset ? selection.selectedVersionId : null;
 
   const currentVersion = useMemo(() => {
     if (!selectedAsset) return null;
     return (
+      selectedAsset.versions.find((version) => version.id === requestedVersionId) ??
       selectedAsset.versions.find(
         (version) => version.id === selectedAsset.currentVersionId,
       ) ??
       selectedAsset.versions[0] ??
       null
     );
-  }, [selectedAsset]);
+  }, [requestedVersionId, selectedAsset]);
 
   const previousVersion = useMemo(() => {
     if (!selectedAsset || !currentVersion) return null;
@@ -50,6 +56,34 @@ export function useSelectedImageAsset(workspace: ImageWorkspace | null): {
     previousVersion,
     selectedAsset,
     selectedAssetId,
-    selectAsset: setSelectedAssetId,
+    selectedObjectId,
+    selectedVersionId: currentVersion?.id ?? requestedVersionId,
+    selectAsset,
+    selectVersion,
   };
+
+  function selectAsset(selection: CanvasAssetSelection | string | null) {
+    if (!selection) {
+      setSelection(EMPTY_SELECTION);
+      return;
+    }
+
+    if (typeof selection === "string") {
+      setSelection({
+        assetId: selection,
+        objectId: null,
+        selectedVersionId: null,
+      });
+      return;
+    }
+
+    setSelection(selection);
+  }
+
+  function selectVersion(versionId: string) {
+    setSelection((current) => ({
+      ...current,
+      selectedVersionId: versionId,
+    }));
+  }
 }

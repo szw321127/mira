@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CanvasToolbar } from "./components/canvas-toolbar";
 import { createLeaferCanvasController } from "./leafer-canvas-adapter";
-import type { CanvasController } from "./leafer-canvas-types";
+import type {
+  CanvasAssetSelection,
+  CanvasController,
+} from "./leafer-canvas-types";
 import type { CanvasSnapshot, ImageWorkspace } from "./types";
 import { useCanvasPersistence } from "./use-canvas-persistence";
 
@@ -13,13 +16,17 @@ export function ImageCanvas({
   onPersistCanvas,
   onSelectAsset,
   selectedAssetId,
+  selectedObjectId,
+  selectedVersionId,
   workspace,
 }: {
   loading: boolean;
   onControllerReady?: (controller: CanvasController | null) => void;
   onPersistCanvas: (snapshot: CanvasSnapshot) => Promise<void> | void;
-  onSelectAsset: (assetId: string | null) => void;
+  onSelectAsset: (selection: CanvasAssetSelection) => void;
   selectedAssetId: string | null;
+  selectedObjectId: string | null;
+  selectedVersionId: string | null;
   workspace: ImageWorkspace | null;
 }) {
   const [canvasError, setCanvasError] = useState<string | null>(null);
@@ -27,7 +34,7 @@ export function ImageCanvas({
   const [controller, setController] = useState<CanvasController | null>(null);
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<CanvasController | null>(null);
-  const lastSelectedAssetRef = useRef<string | null>(null);
+  const lastSelectedAssetRef = useRef<string>("");
   const persistenceKey = workspace ? `mira-image-workspace:${workspace.id}` : null;
   const canvasReady = Boolean(persistenceKey && readyCanvasKey === persistenceKey);
 
@@ -65,11 +72,12 @@ export function ImageCanvas({
           console.error(message);
         },
         onReady: () => undefined,
-        onSelectAsset: (assetId: string | null) => {
-          if (lastSelectedAssetRef.current === assetId) return;
+        onSelectAsset: (selection: CanvasAssetSelection) => {
+          const selectionKey = createSelectionKey(selection);
+          if (lastSelectedAssetRef.current === selectionKey) return;
 
-          lastSelectedAssetRef.current = assetId;
-          onSelectAsset(assetId);
+          lastSelectedAssetRef.current = selectionKey;
+          onSelectAsset(selection);
         },
       },
     })
@@ -109,9 +117,14 @@ export function ImageCanvas({
 
   useEffect(() => {
     if (!controller) return;
-    lastSelectedAssetRef.current = selectedAssetId;
-    controller.selectAsset(selectedAssetId);
-  }, [controller, selectedAssetId]);
+    const selection = {
+      assetId: selectedAssetId,
+      objectId: selectedObjectId,
+      selectedVersionId,
+    };
+    lastSelectedAssetRef.current = createSelectionKey(selection);
+    controller.selectAsset(selection);
+  }, [controller, selectedAssetId, selectedObjectId, selectedVersionId]);
 
   useCanvasPersistence({ controller, onPersistCanvas, workspace });
 
@@ -180,4 +193,12 @@ export function ImageCanvas({
       ) : null}
     </div>
   );
+}
+
+function createSelectionKey(selection: CanvasAssetSelection) {
+  return [
+    selection.assetId ?? "",
+    selection.objectId ?? "",
+    selection.selectedVersionId ?? "",
+  ].join(":");
 }

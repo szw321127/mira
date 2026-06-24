@@ -1,8 +1,12 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useState } from "react";
-import { Loader2, Sparkles, Upload } from "lucide-react";
-import type { ImageGenerationSettings, ImageWorkspace } from "../types";
+import { Loader2, Sparkles, Upload, XCircle } from "lucide-react";
+import type {
+  ImageGenerationSettings,
+  ImageTask,
+  ImageWorkspace,
+} from "../types";
 
 const SIZE_OPTIONS: Array<{
   label: string;
@@ -34,14 +38,18 @@ const BACKGROUND_OPTIONS: Array<{
 
 export function PromptPanel({
   activeWorkspace,
+  activeTask,
   creatingTask,
   error,
+  onCancelTask,
   onGenerate,
   onUploadSourceAsset,
 }: {
   activeWorkspace: ImageWorkspace | null;
+  activeTask: ImageTask | null;
   creatingTask: boolean;
   error: string | null;
+  onCancelTask: (taskId: string) => Promise<void> | void;
   onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
   onUploadSourceAsset: (file: File) => Promise<void> | void;
 }) {
@@ -107,6 +115,18 @@ export function PromptPanel({
         {creatingTask ? <Loader2 aria-hidden="true" size={16} /> : null}
         创建生成任务
       </button>
+      {activeTask ? (
+        <button
+          aria-label="中断当前图像任务"
+          className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[8px] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 text-sm font-[700] text-[var(--danger)] transition-colors hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-55"
+          disabled={creatingTask}
+          onClick={() => onCancelTask(activeTask.id)}
+          type="button"
+        >
+          <XCircle aria-hidden="true" size={16} />
+          中断当前任务
+        </button>
+      ) : null}
       <label className="mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[700] transition-colors hover:bg-[var(--surface-muted)] has-disabled:cursor-not-allowed has-disabled:opacity-55">
         <Upload aria-hidden="true" size={16} />
         上传源图到画布

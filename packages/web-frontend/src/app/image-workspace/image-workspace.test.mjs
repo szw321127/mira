@@ -139,11 +139,14 @@ test("image canvas selection updates the selected Mira asset", () => {
 
   assert.match(canvasSource, /onSelectAsset/);
   assert.match(canvasSource, /selectedAssetId/);
-  assert.match(canvasSource, /controller\.selectAsset\(selectedAssetId\)/);
+  assert.match(canvasSource, /selectedVersionId/);
+  assert.match(canvasSource, /controller\.selectAsset\(selection\)/);
   assert.match(adapterSource, /onSelectAsset/);
   assert.match(adapterSource, /miraAssetId/);
-  assert.match(canvasSource, /onSelectAsset\(assetId\)/);
+  assert.match(adapterSource, /miraObjectId/);
+  assert.match(canvasSource, /onSelectAsset\(selection\)/);
   assert.match(shellSource, /selectedAssetId/);
+  assert.match(shellSource, /selectedVersionId/);
   assert.match(shellSource, /onSelectAsset=\{selectAsset\}/);
 });
 
@@ -151,10 +154,10 @@ test("image canvas selection can be cleared without reselecting the first asset"
   const canvasSource = readImageWorkspaceFile("image-canvas.tsx");
   const selectionSource = readImageWorkspaceFile("use-selected-image-asset.ts");
 
-  assert.match(canvasSource, /onSelectAsset:\s*\(assetId:\s*string\s*\|\s*null\)/);
-  assert.match(canvasSource, /onSelectAsset\(assetId\)/);
+  assert.match(canvasSource, /onSelectAsset:\s*\(selection: CanvasAssetSelection\)/);
+  assert.match(canvasSource, /onSelectAsset\(selection\)/);
   assert.doesNotMatch(canvasSource, /if \(!assetId/);
-  assert.match(selectionSource, /selectAsset:\s*\(assetId:\s*string\s*\|\s*null\)/);
+  assert.match(selectionSource, /selectAsset:\s*\(selection: CanvasAssetSelection \| string \| null\)/);
   assert.doesNotMatch(selectionSource, /workspace\.assets\[0\]/);
   assert.doesNotMatch(selectionSource, /!selectedAssetId\s*\|\|/);
 });
@@ -268,6 +271,29 @@ test("image workspace rail includes workspace search", () => {
   assert.match(railSource, /placeholder="搜索图像画布"/);
   assert.match(railSource, /focus:outline-none/);
   assert.match(railSource, /没有匹配的图像画布/);
+});
+
+test("image workspace rail supports renaming and deleting canvases", () => {
+  const pageSource = readImageWorkspaceFile("page.tsx");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+  const railSource = readImageWorkspaceFile("components/workspace-rail.tsx");
+
+  assert.match(pageSource, /onRenameWorkspace=\{workspace\.renameWorkspace\}/);
+  assert.match(pageSource, /onDeleteWorkspace=\{workspace\.deleteWorkspace\}/);
+  assert.match(shellSource, /onRenameWorkspace/);
+  assert.match(shellSource, /onDeleteWorkspace/);
+  assert.match(shellSource, /onRename=\{onRenameWorkspace\}/);
+  assert.match(shellSource, /onDelete=\{onDeleteWorkspace\}/);
+  assert.match(railSource, /Pencil/);
+  assert.match(railSource, /Trash2/);
+  assert.match(railSource, /Check/);
+  assert.match(railSource, /editingWorkspaceId/);
+  assert.match(railSource, /aria-label="重命名图像画布"/);
+  assert.match(railSource, /aria-label="保存图像画布名称"/);
+  assert.match(railSource, /aria-label="取消重命名图像画布"/);
+  assert.match(railSource, /aria-label="删除图像画布"/);
+  assert.match(railSource, /onRename\(workspace\.id/);
+  assert.match(railSource, /onDelete\(workspace\.id\)/);
 });
 
 test("image workspace shell delegates panels to focused components", () => {
@@ -390,6 +416,21 @@ test("image workspace exposes queued task cancellation controls", () => {
   assert.match(taskSource, /aria-label="取消任务"/);
 });
 
+test("image generation settings expose interruption for the active task", () => {
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+  const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
+  const promptSource = readImageWorkspaceFile("components/prompt-panel.tsx");
+
+  assert.match(shellSource, /activeTask/);
+  assert.match(shellSource, /activeTask=\{activeTask\}/);
+  assert.match(inspectorSource, /activeTask/);
+  assert.match(inspectorSource, /activeTask=\{activeTask\}/);
+  assert.match(promptSource, /activeTask/);
+  assert.match(promptSource, /onCancelTask\(activeTask\.id\)/);
+  assert.match(promptSource, /中断当前任务/);
+  assert.match(promptSource, /aria-label="中断当前图像任务"/);
+});
+
 test("image workspace exposes failed task retry controls", () => {
   const apiSource = readImageWorkspaceFile("workspace-api.ts");
   const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
@@ -479,6 +520,14 @@ test("image workspace uploads local source images into the active canvas", () =>
   );
 });
 
+test("image source upload validates data URLs before calling the workspace asset api", () => {
+  const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
+
+  assert.match(hookSource, /assertSourceDataUrl\(dataUrl,\s*file\)/);
+  assert.match(hookSource, /dataUrl\.startsWith\(`data:\$\{file\.type\};base64,`\)/);
+  assert.match(hookSource, /源图读取结果无效/);
+});
+
 test("asset version panel supports drawing and uploading an edit mask", () => {
   const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
   const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
@@ -545,6 +594,27 @@ test("image workspace has a focused asset version panel component", () => {
   assert.match(inspectorSource, /AssetVersionPanel/);
   assert.match(shellSource, /InspectorPanel/);
   assert.match(shellSource, /useSelectedImageAsset/);
+});
+
+test("asset version panel switches the selected canvas image version without global asset rollback", () => {
+  const typesSource = readImageWorkspaceFile("leafer-canvas-types.ts");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+  const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
+
+  assert.match(typesSource, /selectedVersionId/);
+  assert.match(typesSource, /setSelectedAssetVersion/);
+  assert.match(typesSource, /onSelectAsset:\s*\(selection: CanvasAssetSelection\)/);
+  assert.match(adapterSource, /readCanvasObjectVersionId/);
+  assert.match(adapterSource, /createImageVersionPreviewUrl\(asset\.id,\s*version\.id\)/);
+  assert.match(adapterSource, /setSelectedAssetVersion/);
+  assert.match(adapterSource, /props:\s*\{[\s\S]*versionId:/);
+  assert.match(shellSource, /selectedVersionId/);
+  assert.match(shellSource, /onSelectVersion/);
+  assert.match(shellSource, /canvasControllerRef\.current\?\.setSelectedAssetVersion\(versionId\)/);
+  assert.match(panelSource, /onSelectVersion/);
+  assert.match(panelSource, /onSelectVersion\(version\.id\)/);
+  assert.doesNotMatch(panelSource, /onRevert\(selectedAsset\.id,\s*version\.id\)/);
 });
 
 test("asset version panel lazy-loads same-origin asset thumbnails", () => {

@@ -52,11 +52,13 @@ function ImageWorkspaceHome() {
         onCreate={workspace.createWorkspace}
         onCancelTask={workspace.cancelTask}
         onDeleteAsset={workspace.removeImageAsset}
+        onDeleteWorkspace={workspace.deleteWorkspace}
         onDownloadAsset={workspace.downloadAsset}
         onEditAsset={workspace.editImageAsset}
         onGenerate={workspace.generateImage}
         onPersistCanvas={workspace.persistCanvas}
         onRemoveBackgroundAsset={workspace.createImageBackgroundRemoval}
+        onRenameWorkspace={workspace.renameWorkspace}
         onRevertAsset={workspace.revertAssetVersion}
         onRetryTask={workspace.retryTask}
         onSelect={workspace.selectWorkspace}

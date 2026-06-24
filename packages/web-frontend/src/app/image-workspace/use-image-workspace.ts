@@ -138,7 +138,7 @@ export function useImageWorkspace() {
       );
       setStreamTaskId(null);
     },
-    [activeWorkspace?.id, reloadWorkspace],
+    [activeWorkspace, reloadWorkspace],
   );
 
   const handleStreamError = useCallback((message: string) => {
@@ -291,6 +291,7 @@ export function useImageWorkspace() {
     setError(null);
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      assertSourceDataUrl(dataUrl, file);
       const workspace = await uploadImageWorkspaceAsset(activeWorkspace.id, {
         dataUrl,
         title: file.name,
@@ -484,6 +485,12 @@ function readFileAsDataUrl(file: File) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function assertSourceDataUrl(dataUrl: string, file: File) {
+  if (!dataUrl.startsWith(`data:${file.type};base64,`)) {
+    throw new Error("源图读取结果无效，请重新选择图片");
+  }
 }
 
 function updateWorkspaceTask(

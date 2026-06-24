@@ -8,6 +8,7 @@ import type {
 import type {
   ImageAsset,
   ImageGenerationSettings,
+  ImageTask,
   ImageVersion,
   ImageWorkspace,
 } from "../types";
@@ -17,6 +18,7 @@ import { TaskInspector } from "./task-inspector";
 
 export function InspectorPanel({
   activeWorkspace,
+  activeTask,
   creatingTask,
   currentVersion,
   error,
@@ -33,6 +35,7 @@ export function InspectorPanel({
   onRevertAsset,
   onRetryTask,
   onSelectAsset,
+  onSelectVersion,
   onSubmitLocalEdit,
   onUpscaleAsset,
   onUploadSourceAsset,
@@ -41,6 +44,7 @@ export function InspectorPanel({
   selectedAsset,
 }: {
   activeWorkspace: ImageWorkspace | null;
+  activeTask: ImageTask | null;
   creatingTask: boolean;
   currentVersion: ImageVersion | null;
   error: string | null;
@@ -57,6 +61,7 @@ export function InspectorPanel({
   onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   onSelectAsset: (assetId: string) => void;
+  onSelectVersion: (versionId: string) => void;
   onSubmitLocalEdit: (
     assetId: string,
     version: ImageVersion,
@@ -100,8 +105,10 @@ export function InspectorPanel({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <PromptPanel
           activeWorkspace={activeWorkspace}
+          activeTask={activeTask}
           creatingTask={creatingTask}
           error={error}
+          onCancelTask={onCancelTask}
           onGenerate={onGenerate}
           onUploadSourceAsset={onUploadSourceAsset}
         />
@@ -117,6 +124,7 @@ export function InspectorPanel({
           onRemoveBackground={onRemoveBackgroundAsset}
           onRevert={onRevertAsset}
           onSelectAsset={onSelectAsset}
+          onSelectVersion={onSelectVersion}
           onSubmitLocalEdit={onSubmitLocalEdit}
           onUpscale={onUpscaleAsset}
           onVariation={onVariationAsset}

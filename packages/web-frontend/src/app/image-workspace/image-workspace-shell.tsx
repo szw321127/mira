@@ -15,6 +15,7 @@ import type {
 import type {
   CanvasSnapshot,
   ImageGenerationSettings,
+  ImageTask,
   ImageVersion,
   ImageWorkspace,
 } from "./types";
@@ -35,11 +36,13 @@ export function ImageWorkspaceShell({
   onCancelTask,
   onCreate,
   onDeleteAsset,
+  onDeleteWorkspace,
   onDownloadAsset,
   onEditAsset,
   onGenerate,
   onPersistCanvas,
   onRemoveBackgroundAsset,
+  onRenameWorkspace,
   onRevertAsset,
   onRetryTask,
   onSelect,
@@ -56,6 +59,7 @@ export function ImageWorkspaceShell({
   onCancelTask: (taskId: string) => Promise<void> | void;
   onCreate: () => void;
   onDeleteAsset: (assetId: string) => Promise<void> | void;
+  onDeleteWorkspace: (id: string) => Promise<void> | void;
   onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
   onEditAsset: (
     assetId: string,
@@ -65,6 +69,7 @@ export function ImageWorkspaceShell({
   onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
   onPersistCanvas: (snapshot: CanvasSnapshot) => Promise<void> | void;
   onRemoveBackgroundAsset: (assetId: string) => Promise<void> | void;
+  onRenameWorkspace: (id: string, title: string) => Promise<void> | void;
   onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   onSelect: (id: string) => void;
@@ -89,8 +94,13 @@ export function ImageWorkspaceShell({
     previousVersion,
     selectedAsset,
     selectedAssetId,
+    selectedObjectId,
+    selectedVersionId,
     selectAsset,
+    selectVersion,
   } = useSelectedImageAsset(activeWorkspace);
+  const activeTask =
+    activeWorkspace?.tasks.find((task) => isActiveImageTask(task)) ?? null;
 
   useEffect(() => {
     if (!canvasController) {
@@ -122,6 +132,14 @@ export function ImageWorkspaceShell({
   const setLocalEditMarkerRadius = useCallback((radius: number) => {
     canvasControllerRef.current?.setLocalEditMarkerRadius(radius);
   }, []);
+
+  const handleSelectVersion = useCallback(
+    (versionId: string) => {
+      canvasControllerRef.current?.setSelectedAssetVersion(versionId);
+      selectVersion(versionId);
+    },
+    [selectVersion],
+  );
 
   const submitLocalEdit = useCallback(
     async (assetId: string, version: ImageVersion, prompt: string) => {
@@ -164,6 +182,8 @@ export function ImageWorkspaceShell({
         activeWorkspaceId={activeWorkspace?.id ?? null}
         mobileOpen={mobilePanelOpen}
         onCreate={onCreate}
+        onDelete={onDeleteWorkspace}
+        onRename={onRenameWorkspace}
         onSelect={selectWorkspace}
         workspaces={workspaces}
       />
@@ -182,6 +202,8 @@ export function ImageWorkspaceShell({
           onPersistCanvas={onPersistCanvas}
           onSelectAsset={selectAsset}
           selectedAssetId={selectedAssetId}
+          selectedObjectId={selectedObjectId}
+          selectedVersionId={selectedVersionId}
           workspace={activeWorkspace}
         />
       </section>
@@ -195,6 +217,7 @@ export function ImageWorkspaceShell({
 
       <InspectorPanel
         activeWorkspace={activeWorkspace}
+        activeTask={activeTask}
         creatingTask={creatingTask}
         currentVersion={currentVersion}
         error={error}
@@ -211,6 +234,7 @@ export function ImageWorkspaceShell({
         onRevertAsset={onRevertAsset}
         onRetryTask={onRetryTask}
         onSelectAsset={selectAsset}
+        onSelectVersion={handleSelectVersion}
         onSubmitLocalEdit={submitLocalEdit}
         onUpscaleAsset={onUpscaleAsset}
         onUploadSourceAsset={onUploadSourceAsset}
@@ -220,4 +244,8 @@ export function ImageWorkspaceShell({
       />
     </main>
   );
+}
+
+function isActiveImageTask(task: ImageTask) {
+  return task.status === "queued" || task.status === "running";
 }

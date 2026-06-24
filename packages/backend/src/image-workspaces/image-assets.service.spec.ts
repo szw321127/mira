@@ -465,7 +465,11 @@ describe("ImageAssetsService", () => {
         y: 160,
         width: 640,
         height: 480,
-        rotation: 0
+        rotation: 0,
+        props: expect.objectContaining({
+          source: "upload",
+          versionId: expect.any(String)
+        })
       })
     });
     expect(JSON.stringify(result)).not.toContain("storageKey");

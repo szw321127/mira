@@ -2,6 +2,12 @@ import type { CanvasSnapshot, ImageWorkspace } from "./types";
 
 export type CanvasTool = "select" | "pan" | "mask" | "marker";
 
+export type CanvasAssetSelection = {
+  assetId: string | null;
+  objectId: string | null;
+  selectedVersionId: string | null;
+};
+
 export type LocalEditMaskExportInput = {
   assetId: string;
   versionId: string;
@@ -36,8 +42,9 @@ export type CanvasController = {
   getLocalEditOverlayState: () => LocalEditOverlayState;
   hydrateWorkspace: (workspace: ImageWorkspace | null) => void;
   redo: () => void;
-  selectAsset: (assetId: string | null) => void;
+  selectAsset: (selection: CanvasAssetSelection | string | null) => void;
   serializeSnapshot: () => CanvasSnapshot;
+  setSelectedAssetVersion: (versionId: string) => void;
   setLocalEditMarkerRadius: (radius: number) => void;
   setTool: (tool: CanvasTool) => void;
   subscribeChange: (listener: () => void) => () => void;
@@ -50,5 +57,5 @@ export type CanvasControllerEvents = {
   onChange: () => void;
   onError: (message: string) => void;
   onReady: () => void;
-  onSelectAsset: (assetId: string | null) => void;
+  onSelectAsset: (selection: CanvasAssetSelection) => void;
 };
