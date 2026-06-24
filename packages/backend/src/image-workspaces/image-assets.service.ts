@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Optional
 } from "@nestjs/common";
+import { SOURCE_IMAGE_UPLOAD_BYTES } from "../config/request-body-limit.js";
 import { PrismaService } from "../database/prisma.service.js";
 import type { ImageGenerateSize } from "./image-provider.types.js";
 import {
@@ -153,7 +154,6 @@ const workspaceInclude = {
 
 const UPSCALE_PROMPT = "提升图片清晰度和细节，保持原始构图";
 const BACKGROUND_REMOVAL_PROMPT = "移除背景并保留主体，输出透明背景图片";
-const MAX_SOURCE_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 @Injectable()
 export class ImageAssetsService {
@@ -748,7 +748,7 @@ function parseImageDataUrl(
   if (bytes.byteLength === 0) {
     throw new BadRequestException(messages.empty);
   }
-  if (messages.tooLarge && bytes.byteLength > MAX_SOURCE_UPLOAD_BYTES) {
+  if (messages.tooLarge && bytes.byteLength > SOURCE_IMAGE_UPLOAD_BYTES) {
     throw new BadRequestException(messages.tooLarge);
   }
   return {

@@ -27,6 +27,7 @@
     "@rednote/agent": "workspace:*",
     "ai": "^6.0.196",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "ioredis": "^5.11.1",
     "pg": "^8.21.0",
     "prisma": "^7.8.0",
