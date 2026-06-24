@@ -7,8 +7,8 @@ describe("production deployment topology", () => {
   it("keeps the image API and image worker as explicit compose services", () => {
     const compose = readRepositoryFile("docker-compose.yml");
 
-    expect(compose).toMatch(/\n  backend:\n/);
-    expect(compose).toMatch(/\n  worker:\n/);
+    expect(compose).toContain("\n  backend:\n");
+    expect(compose).toContain("\n  worker:\n");
     expect(compose).toMatch(
       /worker:[\s\S]*image: \$\{REGISTRY:-registry\.cn-hangzhou\.aliyuncs\.com\}\/\$\{IMAGE_OWNER:-szw321127\}\/rednote_backend:\$\{IMAGE_TAG:-latest\}/
     );
@@ -52,6 +52,22 @@ describe("production deployment topology", () => {
     expect(workflow).toContain("resolved_domain_ip");
     expect(workflow).toContain("Skipping domain smoke checks");
     expect(workflow).toContain("grep -E \"(Mira|管理员|登录|邮箱|图像)\"");
+  });
+
+  it("cleans interrupted app container recreates before compose up", () => {
+    const workflow = readRepositoryFile(".github/workflows/deploy.yml");
+    const cleanupIndex = workflow.indexOf("cleanup_interrupted_app_recreates");
+    const upIndex = workflow.indexOf(
+      "docker compose up -d --remove-orphans backend worker frontend caddy"
+    );
+
+    expect(cleanupIndex).toBeGreaterThan(-1);
+    expect(cleanupIndex).toBeLessThan(upIndex);
+    expect(workflow).toContain("rednote-(backend|frontend|worker)");
+    expect(workflow).not.toContain("rednote-(postgres|redis|caddy)");
+    expect(workflow).not.toContain('--filter "status=created"');
+    expect(workflow).not.toContain('--filter "status=exited"');
+    expect(workflow).toContain("docker rm -f \"$container_id\"");
   });
 
   it("builds a dedicated backend worker runner entrypoint", () => {

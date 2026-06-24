@@ -448,6 +448,19 @@ jobs:
             echo "Pulling updated application images..."
             pull_app_images
 
+            cleanup_interrupted_app_recreates() {
+              echo "Cleaning interrupted app container recreates..."
+              docker ps -a \
+                --format '{{.ID}} {{.Names}}' \
+                | grep -E '^[0-9a-f]+ [0-9a-f]+_rednote-(backend|frontend|worker)$' \
+                | while read -r container_id container_name; do
+                    echo "Removing interrupted recreate container ${container_name}..."
+                    docker rm -f "$container_id"
+                  done
+            }
+
+            cleanup_interrupted_app_recreates
+
             echo "Starting application services with docker compose..."
             docker compose up -d --remove-orphans backend worker frontend caddy
 

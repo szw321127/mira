@@ -23,6 +23,19 @@ test("signed image preview route proxies token previews through the backend", ()
   assert.doesNotMatch(source, /assetId/);
 });
 
+test("asset preview routes stream image bytes through the frontend origin", () => {
+  const assetPreviewSource = readRoute("[assetId]/preview/route.ts");
+  const versionPreviewSource = readRoute(
+    "[assetId]/versions/[versionId]/preview/route.ts",
+  );
+
+  for (const source of [assetPreviewSource, versionPreviewSource]) {
+    assert.match(source, /download/);
+    assert.match(source, /proxyImageDownloadPreview/);
+    assert.doesNotMatch(source, /Response\.redirect/);
+  }
+});
+
 test("asset action routes proxy upscale and background removal through the backend", () => {
   const upscaleSource = readRoute("[assetId]/upscale/route.ts");
   const backgroundSource = readRoute("[assetId]/remove-background/route.ts");
