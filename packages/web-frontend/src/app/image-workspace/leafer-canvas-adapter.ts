@@ -859,7 +859,7 @@ async function createLoadedLeaferCanvasController({
         width: sourceSize.width + normalizedPadding.left + normalizedPadding.right,
         height: sourceSize.height + normalizedPadding.top + normalizedPadding.bottom,
       };
-      if (localExpandState.mode === "free" && !hasExpandPadding(normalizedPadding)) {
+      if (!hasExpandPadding(normalizedPadding)) {
         throw new Error("请先设置图片扩展范围");
       }
       localExpandState = {

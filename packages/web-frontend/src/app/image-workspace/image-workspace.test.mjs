@@ -381,11 +381,12 @@ test("leafer local expansion ratio padding uses exact integer ratio targets", ()
   assert.doesNotMatch(adapterSource, /sourceWidth \/ ratio[,\s)]/);
 });
 
-test("leafer local expansion export rejects no-op free expansions and normalizes source target", () => {
+test("leafer local expansion export rejects no-op expansions and normalizes source target", () => {
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
 
   assert.match(adapterSource, /function hasExpandPadding/);
-  assert.match(adapterSource, /localExpandState\.mode === "free" && !hasExpandPadding\(normalizedPadding\)/);
+  assert.match(adapterSource, /if \(!hasExpandPadding\(normalizedPadding\)\) \{\s*throw new Error\("请先设置图片扩展范围"\)/);
+  assert.doesNotMatch(adapterSource, /localExpandState\.mode === "free" && !hasExpandPadding\(normalizedPadding\)/);
   assert.match(adapterSource, /throw new Error\("请先设置图片扩展范围"\)/);
   assert.match(adapterSource, /target:\s*\{\s*width:\s*sourceSize\.width \+ normalizedPadding\.left \+ normalizedPadding\.right/);
   assert.match(adapterSource, /height:\s*sourceSize\.height \+ normalizedPadding\.top \+ normalizedPadding\.bottom/);
