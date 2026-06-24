@@ -4,6 +4,11 @@ import type {
   CanvasController,
   CanvasControllerEvents,
   CanvasTool,
+  LocalExpandDirection,
+  LocalExpandExportInput,
+  LocalExpandMode,
+  LocalExpandOverlayState,
+  LocalExpandPadding,
   LocalEditMaskExportInput,
 } from "./leafer-canvas-types";
 import type {
@@ -74,6 +79,26 @@ type LocalEditMarker = {
   versionId: string;
 };
 
+type ExpandHandlePosition =
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+type ExpandHandleNode = IUI & {
+  __miraExpandHandle?: ExpandHandlePosition;
+};
+
+type LocalExpandDrag = {
+  handle: ExpandHandlePosition;
+  startPadding: LocalExpandPadding;
+  startPointer: LocalEditPoint;
+};
+
 type LocalEditOverlaySnapshot = {
   activeMaskAssetId: string | null;
   activeMaskVersionId: string | null;
@@ -85,9 +110,14 @@ type LocalEditOverlaySnapshot = {
 
 const DEFAULT_OBJECT_SIZE = 320;
 const DEFAULT_VIEWPORT: CanvasViewport = { x: 0, y: 0, zoom: 1 };
+const DEFAULT_EXPAND_PERCENT = 20;
+const EXPAND_HANDLE_SIZE = 10;
+const EXPAND_PROMPT_DEFAULTS = "自然扩展图片画面，保持原图主体、风格和光照一致";
 const DEFAULT_MARKER_RADIUS = 96;
 const MASK_BRUSH_RADIUS = 17;
 const MAX_MARKER_RADIUS = 260;
+const MAX_EXPAND_PADDING = 8192;
+const MAX_EXPAND_PERCENT = 300;
 const MIN_MARKER_RADIUS = 24;
 const MIN_ZOOM = 0.18;
 const MAX_ZOOM = 4;
@@ -103,7 +133,7 @@ async function createLoadedLeaferCanvasController({
   container,
   events,
 }: ControllerOptions): Promise<CanvasController> {
-  const [{ App, Ellipse, Group, Image, Pen, PointerEvent }] = await Promise.all([
+  const [{ App, Ellipse, Group, Image, Pen, PointerEvent, Rect }] = await Promise.all([
     import("leafer-ui"),
     import("leafer-editor"),
   ]);
@@ -118,6 +148,8 @@ async function createLoadedLeaferCanvasController({
   let activeMaskAssetId: string | null = null;
   let activeMaskVersionId: string | null = null;
   let currentMaskStroke: LocalEditPoint[] | null = null;
+  let localExpandState: LocalExpandOverlayState = createDefaultLocalExpandState();
+  let localExpandDrag: LocalExpandDrag | null = null;
   let marker: LocalEditMarker | null = null;
   let markerRadius = DEFAULT_MARKER_RADIUS;
   let maskStrokes: LocalEditStroke[] = [];
@@ -158,11 +190,19 @@ async function createLoadedLeaferCanvasController({
     x: 0,
     y: 0,
   }) as IGroup;
+  const expandLayer = new Group({
+    hitChildren: true,
+    hitSelf: false,
+    hittable: true,
+    x: 0,
+    y: 0,
+  }) as IGroup;
   const editor = app.editor as LeaferEditor;
 
   app.tree.add(imageLayer);
   app.tree.add(maskLayer);
   app.tree.add(markerLayer);
+  app.tree.add(expandLayer);
 
   const resizeObserver = new ResizeObserver(() => {
     safeCall(() => {
@@ -218,6 +258,10 @@ async function createLoadedLeaferCanvasController({
     markerLayer.y = viewport.y;
     markerLayer.scaleX = viewport.zoom;
     markerLayer.scaleY = viewport.zoom;
+    expandLayer.x = viewport.x;
+    expandLayer.y = viewport.y;
+    expandLayer.scaleX = viewport.zoom;
+    expandLayer.scaleY = viewport.zoom;
     if (shouldEmit) emitChange();
   };
 
@@ -352,6 +396,43 @@ async function createLoadedLeaferCanvasController({
     if (shouldEmit) emitChange();
   };
 
+  const clearLocalExpandOverlay = (shouldEmit = true) => {
+    localExpandState = {
+      ...localExpandState,
+      active: false,
+      assetId: null,
+      versionId: null,
+      padding: createEmptyExpandPadding(),
+      target: null,
+    };
+    localExpandDrag = null;
+    expandLayer.removeAll();
+    if (shouldEmit) emitChange();
+  };
+
+  const getLocalExpandState = () => cloneLocalExpandState(localExpandState);
+
+  const activateLocalExpandOverlay = (node: MiraImageNode | null) => {
+    const assetId = node?.__mira?.miraAssetId ?? null;
+    const versionId = node?.__mira?.miraVersionId ?? null;
+    if (!node || !assetId || !versionId) {
+      clearLocalExpandOverlay(false);
+      return;
+    }
+
+    const sourceSize = readNodeSize(node);
+    const padding = getModeExpandPadding(localExpandState, sourceSize);
+    localExpandState = {
+      ...localExpandState,
+      active: true,
+      assetId,
+      versionId,
+      padding,
+      target: calculateExpandTarget(sourceSize, padding),
+    };
+    renderExpandOverlay();
+  };
+
   const getLocalEditOverlayState = () => {
     const maskDirty = Boolean(maskStrokes.length || currentMaskStroke?.length);
     const activeOverlayAssetId = marker?.assetId ?? activeMaskAssetId;
@@ -383,9 +464,23 @@ async function createLoadedLeaferCanvasController({
     }
   };
 
+  const clearLocalExpandIfNodeChanged = (node: MiraImageNode | null) => {
+    if (
+      localExpandState.active &&
+      (
+        !node ||
+        node.__mira?.miraAssetId !== localExpandState.assetId ||
+        node.__mira?.miraVersionId !== localExpandState.versionId
+      )
+    ) {
+      clearLocalExpandOverlay(false);
+    }
+  };
+
   const selectNode = (node: MiraImageNode | null) => {
     applySelectionToEditor(activeTool === "select" ? node : null);
     clearLocalEditIfNodeChanged(node);
+    clearLocalExpandIfNodeChanged(node);
     emitSelection(selectionFromNode(node));
   };
 
@@ -397,6 +492,71 @@ async function createLoadedLeaferCanvasController({
       return targetNode;
     }
     return selectedNode ?? targetNode;
+  };
+
+  const renderExpandOverlay = () => {
+    expandLayer.removeAll();
+    const selectedNode = readSelectedNode();
+    if (
+      !localExpandState.active ||
+      !selectedNode ||
+      selectedNode.__mira?.miraAssetId !== localExpandState.assetId ||
+      selectedNode.__mira?.miraVersionId !== localExpandState.versionId
+    ) {
+      return;
+    }
+
+    const sourceSize = readNodeSize(selectedNode);
+    const padding = normalizeExpandPadding(localExpandState.padding);
+    const x = normalizeFiniteNumber(selectedNode.x, 0) - padding.left;
+    const y = normalizeFiniteNumber(selectedNode.y, 0) - padding.top;
+    const width = sourceSize.width + padding.left + padding.right;
+    const height = sourceSize.height + padding.top + padding.bottom;
+
+    expandLayer.add(
+      new Rect({
+        dashPattern: [8, 6],
+        fill: "rgba(225, 29, 72, 0.12)",
+        height,
+        hitChildren: false,
+        hitSelf: false,
+        hittable: false,
+        stroke: "rgba(225, 29, 72, 0.82)",
+        strokeWidth: 2,
+        width,
+        x,
+        y,
+      }),
+    );
+    expandLayer.add(
+      new Rect({
+        fill: "rgba(255, 255, 255, 0)",
+        height: sourceSize.height,
+        hitChildren: false,
+        hitSelf: false,
+        hittable: false,
+        stroke: "rgba(225, 29, 72, 0.28)",
+        strokeWidth: 1,
+        width: sourceSize.width,
+        x: normalizeFiniteNumber(selectedNode.x, 0),
+        y: normalizeFiniteNumber(selectedNode.y, 0),
+      }),
+    );
+
+    if (localExpandState.mode !== "free") return;
+    for (const handle of createExpandHandles(x, y, width, height)) {
+      const handleNode = new Rect({
+        fill: handle.corner ? "rgba(225, 29, 72, 0.95)" : "rgba(255, 255, 255, 0.96)",
+        height: EXPAND_HANDLE_SIZE,
+        stroke: "rgba(225, 29, 72, 0.88)",
+        strokeWidth: 1.5,
+        width: EXPAND_HANDLE_SIZE,
+        x: handle.x - EXPAND_HANDLE_SIZE / 2,
+        y: handle.y - EXPAND_HANDLE_SIZE / 2,
+      }) as ExpandHandleNode;
+      handleNode.__miraExpandHandle = handle.position;
+      expandLayer.add(handleNode);
+    }
   };
 
   const renderMaskOverlay = () => {
@@ -487,6 +647,18 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerDown = (event: unknown) => {
+    const expandHandle = readExpandHandle((event as { target?: unknown }).target);
+    if (expandHandle && localExpandState.active && localExpandState.mode === "free") {
+      const pointer = readContentPointer(event, imageLayer, viewport);
+      if (!pointer) return;
+      localExpandDrag = {
+        handle: expandHandle,
+        startPadding: normalizeExpandPadding(localExpandState.padding),
+        startPointer: pointer,
+      };
+      return;
+    }
+
     if (activeTool === "mask") {
       const selectedNode = resolveLocalEditNode(event);
       const point = selectedNode
@@ -544,6 +716,21 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerMove = (event: unknown) => {
+    if (localExpandDrag && localExpandState.active && localExpandState.mode === "free") {
+      const pointer = readContentPointer(event, imageLayer, viewport);
+      const selectedNode = readSelectedNode();
+      if (!pointer || !selectedNode) return;
+      const padding = dragExpandHandle(localExpandDrag, pointer);
+      const sourceSize = readNodeSize(selectedNode);
+      localExpandState = {
+        ...localExpandState,
+        padding,
+        target: calculateExpandTarget(sourceSize, padding),
+      };
+      renderExpandOverlay();
+      return;
+    }
+
     if (activeTool === "mask" && currentMaskStroke) {
       const selectedNode = readSelectedNode();
       const point = selectedNode
@@ -570,6 +757,12 @@ async function createLoadedLeaferCanvasController({
   };
 
   const handlePointerUp = () => {
+    if (localExpandDrag) {
+      localExpandDrag = null;
+      emitChange();
+      return;
+    }
+
     if (
       activeTool === "mask" &&
       currentMaskStroke &&
@@ -612,8 +805,10 @@ async function createLoadedLeaferCanvasController({
   window.requestAnimationFrame(notifyReady);
 
   const controller: CanvasController = {
+    clearLocalExpandOverlay: () => clearLocalExpandOverlay(),
     clearLocalEditOverlay: () => clearLocalEditOverlay(),
     clearSelection: () => {
+      clearLocalExpandOverlay(false);
       clearLocalEditOverlay(false);
       applySelectionToEditor(null);
       emitSelection(emptySelection());
@@ -621,6 +816,7 @@ async function createLoadedLeaferCanvasController({
     deleteSelection: () => {
       const selectedNode = readSelectedNode();
       if (!selectedNode) return;
+      clearLocalExpandOverlay(false);
       clearLocalEditOverlay(false);
       selectedNode.remove();
       applySelectionToEditor(null);
@@ -637,6 +833,56 @@ async function createLoadedLeaferCanvasController({
       safeCall(() => app.destroy());
       changeListeners.clear();
       container.style.cursor = "";
+    },
+    exportLocalExpandInput: (input) => {
+      const selectedNode = readSelectedNode();
+      if (
+        !selectedNode ||
+        selectedNode.__mira?.miraAssetId !== input.assetId ||
+        selectedNode.__mira?.miraVersionId !== input.versionId
+      ) {
+        return null;
+      }
+
+      const sourceSize = {
+        width: normalizePositiveNumber(input.width, readNodeSize(selectedNode).width),
+        height: normalizePositiveNumber(input.height, readNodeSize(selectedNode).height),
+      };
+      const padding = getModeExpandPadding(localExpandState, sourceSize);
+      const normalizedPadding = normalizeExpandPadding(padding);
+      const target = {
+        width: input.width + normalizedPadding.left + normalizedPadding.right,
+        height: input.height + normalizedPadding.top + normalizedPadding.bottom,
+      };
+      localExpandState = {
+        ...localExpandState,
+        active: true,
+        assetId: input.assetId,
+        versionId: input.versionId,
+        padding: normalizedPadding,
+        target,
+      };
+      renderExpandOverlay();
+
+      return {
+        promptDefaults: EXPAND_PROMPT_DEFAULTS,
+        versionId: input.versionId,
+        mode: localExpandState.mode,
+        ...(localExpandState.mode === "ratio"
+          ? { aspectRatio: localExpandState.aspectRatio }
+          : {}),
+        ...(localExpandState.mode === "direction"
+          ? {
+              direction: localExpandState.direction,
+              percent: localExpandState.percent,
+            }
+          : {}),
+        padding: normalizedPadding,
+        target: {
+          width: input.width + normalizedPadding.left + normalizedPadding.right,
+          height: input.height + normalizedPadding.top + normalizedPadding.bottom,
+        },
+      };
     },
     fitView: () => {
       const bounds = getObjectBounds(readMiraImageNodes(imageLayer));
@@ -661,7 +907,8 @@ async function createLoadedLeaferCanvasController({
     getActiveTool: () => activeTool,
     getCanRedo: () => localEditRedoStack.length > 0,
     getCanUndo: () => localEditUndoStack.length > 0,
-    getLocalEditOverlayState,
+    getLocalExpandState: () => getLocalExpandState(),
+    getLocalEditOverlayState: () => getLocalEditOverlayState(),
     hydrateWorkspace: (workspace) => {
       if (!workspace) {
         latestAssetsById = new Map();
@@ -669,6 +916,7 @@ async function createLoadedLeaferCanvasController({
         applySelectionToEditor(null);
         emitSelection(emptySelection());
         setViewport(DEFAULT_VIEWPORT);
+        clearLocalExpandOverlay(false);
         clearLocalEditOverlay(false);
         return;
       }
@@ -701,6 +949,7 @@ async function createLoadedLeaferCanvasController({
         selectedAssetId = null;
         selectedObjectId = null;
         selectedVersionId = null;
+        clearLocalExpandOverlay(false);
         clearLocalEditOverlay(false);
         applySelectionToEditor(null);
       }
@@ -776,13 +1025,16 @@ async function createLoadedLeaferCanvasController({
         : null;
       if (selectedAssetId && selectedNode) {
         clearLocalEditIfNodeChanged(selectedNode);
+        clearLocalExpandIfNodeChanged(selectedNode);
         applySelectionToEditor(selectedNode);
+        renderExpandOverlay();
         renderMaskOverlay();
         renderMarkerOverlay();
       }
       if (selectedAssetId && !selectedNode) {
         applySelectionToEditor(null);
         emitSelection(emptySelection());
+        clearLocalExpandOverlay(false);
         clearLocalEditOverlay(false);
       }
       emitChange();
@@ -803,6 +1055,7 @@ async function createLoadedLeaferCanvasController({
       const nextSelection = normalizeSelectionInput(selection);
       if (!nextSelection.assetId) {
         applySelectionToEditor(null);
+        clearLocalExpandOverlay(false);
         emitSelection(emptySelection());
         return;
       }
@@ -828,7 +1081,9 @@ async function createLoadedLeaferCanvasController({
         miraProps: selectedNode.__mira?.miraProps ?? {},
         miraVersionId: version.id,
       };
+      clearLocalExpandIfNodeChanged(selectedNode);
       clearLocalEditIfNodeChanged(selectedNode);
+      renderExpandOverlay();
       renderMaskOverlay();
       renderMarkerOverlay();
       emitSelection(selectionFromNode(selectedNode));
@@ -875,6 +1130,62 @@ async function createLoadedLeaferCanvasController({
         }),
         source: "mask",
       };
+    },
+    setLocalExpandAspectRatio: (aspectRatio) => {
+      localExpandState = {
+        ...localExpandState,
+        aspectRatio,
+        mode: "ratio",
+      };
+      activateLocalExpandOverlay(readSelectedNode());
+      emitChange();
+    },
+    setLocalExpandDirection: (direction) => {
+      localExpandState = {
+        ...localExpandState,
+        direction,
+        mode: "direction",
+      };
+      activateLocalExpandOverlay(readSelectedNode());
+      emitChange();
+    },
+    setLocalExpandMode: (mode) => {
+      localExpandState = {
+        ...localExpandState,
+        mode,
+      };
+      activateLocalExpandOverlay(readSelectedNode());
+      emitChange();
+    },
+    setLocalExpandPadding: (padding) => {
+      const selectedNode = readSelectedNode();
+      const normalizedPadding = normalizeExpandPadding({
+        ...localExpandState.padding,
+        ...padding,
+      });
+      localExpandState = {
+        ...localExpandState,
+        mode: "free",
+        padding: normalizedPadding,
+        target: selectedNode
+          ? calculateExpandTarget(readNodeSize(selectedNode), normalizedPadding)
+          : null,
+      };
+      activateLocalExpandOverlay(selectedNode);
+      emitChange();
+    },
+    setLocalExpandPercent: (percent) => {
+      localExpandState = {
+        ...localExpandState,
+        mode: "direction",
+        percent: clamp(
+          normalizeFiniteNumber(percent, DEFAULT_EXPAND_PERCENT),
+          0,
+          MAX_EXPAND_PERCENT,
+        ),
+      };
+      activateLocalExpandOverlay(readSelectedNode());
+      emitChange();
     },
     setLocalEditMarkerRadius: (radius) => {
       markerRadius = clamp(
@@ -934,6 +1245,191 @@ async function createLoadedLeaferCanvasController({
   };
 
   return controller;
+}
+
+function createDefaultLocalExpandState(): LocalExpandOverlayState {
+  return {
+    active: false,
+    assetId: null,
+    versionId: null,
+    mode: "free",
+    aspectRatio: "1:1",
+    direction: "around",
+    percent: DEFAULT_EXPAND_PERCENT,
+    padding: createEmptyExpandPadding(),
+    target: null,
+  };
+}
+
+function createEmptyExpandPadding(): LocalExpandPadding {
+  return { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+function cloneLocalExpandState(
+  state: LocalExpandOverlayState,
+): LocalExpandOverlayState {
+  return {
+    ...state,
+    padding: { ...state.padding },
+    target: state.target ? { ...state.target } : null,
+  };
+}
+
+function readNodeSize(node: MiraImageNode) {
+  return {
+    width: normalizePositiveNumber(node.width, DEFAULT_OBJECT_SIZE),
+    height: normalizePositiveNumber(node.height, DEFAULT_OBJECT_SIZE),
+  };
+}
+
+function getModeExpandPadding(
+  state: LocalExpandOverlayState,
+  sourceSize: { width: number; height: number },
+) {
+  if (state.mode === "ratio") {
+    return calculateRatioExpandPadding(
+      sourceSize.width,
+      sourceSize.height,
+      state.aspectRatio,
+    );
+  }
+  if (state.mode === "direction") {
+    return calculateDirectionalExpandPadding(
+      sourceSize.width,
+      sourceSize.height,
+      state.direction,
+      state.percent,
+    );
+  }
+  return normalizeExpandPadding(state.padding);
+}
+
+function normalizeExpandPadding(
+  padding: Partial<LocalExpandPadding>,
+): LocalExpandPadding {
+  return {
+    left: normalizeExpandPaddingValue(padding.left),
+    right: normalizeExpandPaddingValue(padding.right),
+    top: normalizeExpandPaddingValue(padding.top),
+    bottom: normalizeExpandPaddingValue(padding.bottom),
+  };
+}
+
+function normalizeExpandPaddingValue(value: unknown) {
+  return Math.round(
+    clamp(normalizeFiniteNumber(value, 0), 0, MAX_EXPAND_PADDING),
+  );
+}
+
+function calculateExpandTarget(
+  sourceSize: { width: number; height: number },
+  padding: LocalExpandPadding,
+) {
+  const normalizedPadding = normalizeExpandPadding(padding);
+  return {
+    width: sourceSize.width + normalizedPadding.left + normalizedPadding.right,
+    height: sourceSize.height + normalizedPadding.top + normalizedPadding.bottom,
+  };
+}
+
+function calculateRatioExpandPadding(
+  width: number,
+  height: number,
+  aspectRatio: LocalExpandOverlayState["aspectRatio"],
+): LocalExpandPadding {
+  const sourceWidth = normalizePositiveNumber(width, DEFAULT_OBJECT_SIZE);
+  const sourceHeight = normalizePositiveNumber(height, DEFAULT_OBJECT_SIZE);
+  const ratio = parseAspectRatio(aspectRatio);
+  const targetWidth = Math.max(sourceWidth, sourceHeight * ratio);
+  const targetHeight = Math.max(sourceHeight, sourceWidth / ratio);
+  const horizontal = Math.round(targetWidth - sourceWidth);
+  const vertical = Math.round(targetHeight - sourceHeight);
+
+  return normalizeExpandPadding({
+    left: Math.floor(horizontal / 2),
+    right: Math.ceil(horizontal / 2),
+    top: Math.floor(vertical / 2),
+    bottom: Math.ceil(vertical / 2),
+  });
+}
+
+function calculateDirectionalExpandPadding(
+  width: number,
+  height: number,
+  direction: LocalExpandDirection,
+  percent: number,
+): LocalExpandPadding {
+  const sourceWidth = normalizePositiveNumber(width, DEFAULT_OBJECT_SIZE);
+  const sourceHeight = normalizePositiveNumber(height, DEFAULT_OBJECT_SIZE);
+  const normalizedPercent = clamp(
+    normalizeFiniteNumber(percent, DEFAULT_EXPAND_PERCENT),
+    0,
+    MAX_EXPAND_PERCENT,
+  ) / 100;
+  const horizontal = Math.round(sourceWidth * normalizedPercent);
+  const vertical = Math.round(sourceHeight * normalizedPercent);
+
+  if (direction === "left") return normalizeExpandPadding({ left: horizontal });
+  if (direction === "right") return normalizeExpandPadding({ right: horizontal });
+  if (direction === "top") return normalizeExpandPadding({ top: vertical });
+  if (direction === "bottom") return normalizeExpandPadding({ bottom: vertical });
+  return normalizeExpandPadding({
+    left: horizontal,
+    right: horizontal,
+    top: vertical,
+    bottom: vertical,
+  });
+}
+
+function parseAspectRatio(
+  aspectRatio: LocalExpandOverlayState["aspectRatio"],
+) {
+  const [width = 1, height = 1] = aspectRatio.split(":").map(Number);
+  return normalizePositiveNumber(width, 1) / normalizePositiveNumber(height, 1);
+}
+
+function createExpandHandles(x: number, y: number, width: number, height: number) {
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const right = x + width;
+  const bottom = y + height;
+  return [
+    { position: "top-left", x, y, corner: true },
+    { position: "top", x: centerX, y, corner: false },
+    { position: "top-right", x: right, y, corner: true },
+    { position: "right", x: right, y: centerY, corner: false },
+    { position: "bottom-right", x: right, y: bottom, corner: true },
+    { position: "bottom", x: centerX, y: bottom, corner: false },
+    { position: "bottom-left", x, y: bottom, corner: true },
+    { position: "left", x, y: centerY, corner: false },
+  ] satisfies Array<{
+    position: ExpandHandlePosition;
+    x: number;
+    y: number;
+    corner: boolean;
+  }>;
+}
+
+function readExpandHandle(target: unknown): ExpandHandlePosition | null {
+  if (!target || typeof target !== "object") return null;
+  const handleNode = target as ExpandHandleNode;
+  return handleNode.__miraExpandHandle ?? null;
+}
+
+function dragExpandHandle(
+  drag: LocalExpandDrag,
+  pointer: LocalEditPoint,
+): LocalExpandPadding {
+  const dx = pointer.x - drag.startPointer.x;
+  const dy = pointer.y - drag.startPointer.y;
+  const padding = { ...drag.startPadding };
+
+  if (drag.handle.includes("left")) padding.left -= dx;
+  if (drag.handle.includes("right")) padding.right += dx;
+  if (drag.handle.includes("top")) padding.top -= dy;
+  if (drag.handle.includes("bottom")) padding.bottom += dy;
+
+  return normalizeExpandPadding(padding);
 }
 
 function removeStaleMiraImageNodes(
@@ -1353,6 +1849,10 @@ function toSourcePoint(point: LocalEditPoint, scale: { x: number; y: number }) {
 
 function normalizeFiniteNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizePositiveNumber(value: unknown, fallback: number) {
+  return Math.max(1, normalizeFiniteNumber(value, fallback));
 }
 
 function clamp(value: number, min: number, max: number) {
