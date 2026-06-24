@@ -209,11 +209,13 @@ export function AssetVersionPanel({
               <CompareVersion
                 assetId={selectedAsset.id}
                 label="当前"
+                onSelect={() => onSelectVersion(currentVersion.id)}
                 version={currentVersion}
               />
               <CompareVersion
                 assetId={selectedAsset.id}
                 label="对比"
+                onSelect={() => onSelectVersion(previousVersion.id)}
                 version={previousVersion}
               />
             </div>
@@ -382,14 +384,20 @@ function VersionStat({
 function CompareVersion({
   assetId,
   label,
+  onSelect,
   version,
 }: {
   assetId: string;
   label: string;
+  onSelect: () => void;
   version: ImageVersion;
 }) {
   return (
-    <div className="min-w-0">
+    <button
+      className="min-w-0 rounded-[8px] border border-transparent p-1 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-muted)] focus:outline-none focus-visible:border-[var(--accent)]"
+      onClick={onSelect}
+      type="button"
+    >
       <img
         alt={label}
         className="mb-2 aspect-square w-full rounded-[6px] border border-[var(--border)] object-cover"
@@ -404,7 +412,7 @@ function CompareVersion({
       <div className="mt-1 text-[11px] text-[var(--muted-strong)]">
         {formatImageSize(version)}
       </div>
-    </div>
+    </button>
   );
 }
 

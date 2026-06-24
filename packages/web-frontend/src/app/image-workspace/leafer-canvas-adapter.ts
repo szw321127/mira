@@ -675,6 +675,7 @@ async function createLoadedLeaferCanvasController({
       const nextViewport = parseViewport(workspace.viewport);
       setViewport(nextViewport, false);
 
+      const previousAssetsById = latestAssetsById;
       const assetsById = new Map(workspace.assets.map((asset) => [asset.id, asset]));
       const workspaceAssetIds = new Set(assetsById.keys());
       const workspaceObjectIds = new Set(workspace.objects.map((object) => object.id));
@@ -710,7 +711,10 @@ async function createLoadedLeaferCanvasController({
 
       for (const object of imageObjects) {
         const asset = object.assetId ? assetsById.get(object.assetId) : null;
-        const version = asset ? getCanvasObjectVersion(asset, object) : null;
+        const previousAsset = asset ? previousAssetsById.get(asset.id) : null;
+        const version = asset
+          ? getCanvasObjectVersion(asset, object, previousAsset)
+          : null;
         if (!asset || !version) continue;
 
         validObjectIds.add(object.id);
@@ -1092,11 +1096,21 @@ function getCurrentVersion(asset: ImageAsset) {
   );
 }
 
-function getCanvasObjectVersion(asset: ImageAsset, object: CanvasObject) {
+function getCanvasObjectVersion(
+  asset: ImageAsset,
+  object: CanvasObject,
+  previousAsset?: ImageAsset | null,
+) {
+  const currentVersion = getCurrentVersion(asset);
+  const assetCurrentVersionChanged =
+    Boolean(previousAsset) &&
+    previousAsset?.currentVersionId !== asset.currentVersionId;
+  if (assetCurrentVersionChanged && currentVersion) return currentVersion;
+
   const objectVersionId = readCanvasObjectVersionId(object);
   return (
     asset.versions.find((version) => version.id === objectVersionId) ??
-    getCurrentVersion(asset)
+    currentVersion
   );
 }
 

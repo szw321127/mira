@@ -732,6 +732,33 @@ test("asset version panel switches the selected canvas image version without glo
   assert.doesNotMatch(panelSource, /onRevert\(selectedAsset\.id,\s*version\.id\)/);
 });
 
+test("leafer canvas refreshes image nodes when asset current versions change", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /const previousAssetsById = latestAssetsById/);
+  assert.match(adapterSource, /previousAssetsById\.get\(asset\.id\)/);
+  assert.match(adapterSource, /getCanvasObjectVersion\(asset,\s*object,\s*previousAsset\)/);
+  assert.match(adapterSource, /assetCurrentVersionChanged/);
+  assert.match(
+    adapterSource,
+    /previousAsset\?\.currentVersionId !== asset\.currentVersionId/,
+  );
+  assert.match(
+    adapterSource,
+    /if \(assetCurrentVersionChanged && currentVersion\) return currentVersion/,
+  );
+});
+
+test("asset version comparison images update the selected leafer image", () => {
+  const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
+
+  assert.match(panelSource, /onSelect=\{\(\) => onSelectVersion\(currentVersion\.id\)\}/);
+  assert.match(panelSource, /onSelect=\{\(\) => onSelectVersion\(previousVersion\.id\)\}/);
+  assert.match(panelSource, /function CompareVersion/);
+  assert.match(panelSource, /onClick=\{onSelect\}/);
+  assert.match(panelSource, /type="button"/);
+});
+
 test("asset version panel lazy-loads same-origin asset thumbnails", () => {
   const panelSource = readImageWorkspaceFile("components/asset-version-panel.tsx");
 
