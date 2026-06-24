@@ -37,6 +37,7 @@ test("image workspace canvas and task routes proxy nested backend paths", () => 
   const tasksSource = readRoute("[id]/tasks/route.ts");
   const assetsSource = readRoute("[id]/assets/route.ts");
   const streamSource = readRoute("[id]/tasks/[taskId]/stream/route.ts");
+  const deleteTaskSource = readRoute("[id]/tasks/[taskId]/route.ts");
   const cancelSource = readRoute("[id]/tasks/[taskId]/cancel/route.ts");
   const retrySource = readRoute("[id]/tasks/[taskId]/retry/route.ts");
 
@@ -48,12 +49,14 @@ test("image workspace canvas and task routes proxy nested backend paths", () => 
   assert.match(assetsSource, /export async function POST/);
   assert.match(streamSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/stream/);
   assert.match(streamSource, /export async function GET/);
+  assert.match(deleteTaskSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
+  assert.match(deleteTaskSource, /export async function DELETE/);
   assert.match(cancelSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/cancel/);
   assert.match(cancelSource, /export async function POST/);
   assert.match(retrySource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/retry/);
   assert.match(retrySource, /export async function POST/);
   assert.match(
-    `${canvasSource}\n${tasksSource}\n${assetsSource}\n${streamSource}\n${cancelSource}\n${retrySource}`,
+    `${canvasSource}\n${tasksSource}\n${assetsSource}\n${streamSource}\n${deleteTaskSource}\n${cancelSource}\n${retrySource}`,
     /proxyBackendRequest/,
   );
 });

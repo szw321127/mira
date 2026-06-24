@@ -52,6 +52,7 @@ function ImageWorkspaceHome() {
         onCreate={workspace.createWorkspace}
         onCancelTask={workspace.cancelTask}
         onDeleteAsset={workspace.removeImageAsset}
+        onDeleteTask={workspace.deleteTask}
         onDeleteWorkspace={workspace.deleteWorkspace}
         onDownloadAsset={workspace.downloadAsset}
         onEditAsset={workspace.editImageAsset}

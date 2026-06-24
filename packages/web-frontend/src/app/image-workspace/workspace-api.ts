@@ -151,6 +151,18 @@ export async function retryImageTask(workspaceId: string, taskId: string) {
   return data.task;
 }
 
+export async function deleteImageTask(workspaceId: string, taskId: string) {
+  const response = await fetch(
+    `/api/image-workspaces/${encodeURIComponent(
+      workspaceId,
+    )}/tasks/${encodeURIComponent(taskId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  await assertOk(response, "图像任务删除失败");
+}
+
 export async function createImageAssetEditTask(
   assetId: string,
   input: {

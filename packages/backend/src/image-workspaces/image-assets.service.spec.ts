@@ -48,7 +48,7 @@ type WorkspaceRow = {
   deletedAt: Date | null;
   objects: CanvasObjectRow[];
   assets: AssetRow[];
-  tasks: unknown[];
+  tasks: ImageTaskRow[];
 };
 
 type CanvasObjectRow = {
@@ -65,6 +65,21 @@ type CanvasObjectRow = {
   props: unknown;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type ImageTaskRow = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  type: "generate" | "edit" | "variation" | "upscale" | "background_removal";
+  status: "queued" | "running" | "complete" | "failed" | "canceled";
+  input: unknown;
+  output: unknown;
+  error: string | null;
+  cost: unknown;
+  createdAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
 };
 
 function createVersion(
@@ -289,22 +304,74 @@ function createPrisma(assets: AssetRow[], workspaces: WorkspaceRow[] = []) {
       })
     },
     imageTask: {
+      findMany: jest.fn(({ where, orderBy, skip, select }: Record<string, unknown>) => {
+        const typedWhere = where as { workspaceId?: string };
+        const typedOrderBy = orderBy as { createdAt?: "desc" | "asc" } | undefined;
+        const rows = workspaces
+          .flatMap((workspace) => workspace.tasks)
+          .filter((task) => {
+            if (typedWhere.workspaceId && task.workspaceId !== typedWhere.workspaceId) {
+              return false;
+            }
+            return true;
+          })
+          .sort((left, right) => {
+            if (typedOrderBy?.createdAt === "asc") {
+              return left.createdAt.getTime() - right.createdAt.getTime();
+            }
+            return right.createdAt.getTime() - left.createdAt.getTime();
+          })
+          .slice(typeof skip === "number" ? skip : 0);
+        const typedSelect = select as { id?: boolean } | undefined;
+        if (typedSelect?.id) {
+          return Promise.resolve(rows.map((task) => ({ id: task.id })));
+        }
+        return Promise.resolve(rows);
+      }),
+      deleteMany: jest.fn(({ where }: Record<string, unknown>) => {
+        const typedWhere = where as {
+          id?: string | { in?: string[] };
+          workspaceId?: string;
+          userId?: string;
+        };
+        const ids =
+          typeof typedWhere.id === "string"
+            ? [typedWhere.id]
+            : typedWhere.id?.in ?? null;
+        let count = 0;
+        for (const workspace of workspaces) {
+          const remainingTasks = workspace.tasks.filter((task) => {
+            if (ids && !ids.includes(task.id)) return true;
+            if (typedWhere.workspaceId && task.workspaceId !== typedWhere.workspaceId) {
+              return true;
+            }
+            if (typedWhere.userId && task.userId !== typedWhere.userId) return true;
+            count += 1;
+            return false;
+          });
+          workspace.tasks = remainingTasks;
+        }
+        return Promise.resolve({ count });
+      }),
       create: jest.fn(({ data }: Record<string, unknown>) => {
         taskCount += 1;
-        return Promise.resolve({
+        const task: ImageTaskRow = {
           id: `task-${taskCount}`,
           workspaceId: (data as { workspaceId: string }).workspaceId,
           userId: (data as { userId: string }).userId,
-          type: (data as { type: string }).type,
+          type: (data as { type: ImageTaskRow["type"] }).type,
           status: "queued",
           input: (data as { input: unknown }).input,
           output: null,
           error: null,
           cost: null,
-          createdAt: new Date("2026-06-23T09:00:00.000Z"),
+          createdAt: new Date(Date.UTC(2026, 5, 23, 9, taskCount, 0, 0)),
           startedAt: null,
           finishedAt: null
-        });
+        };
+        const workspace = workspaces.find((row) => row.id === task.workspaceId);
+        workspace?.tasks.push(task);
+        return Promise.resolve(task);
       })
     },
     canvasObject: {
@@ -363,7 +430,30 @@ function includeWorkspace(workspace: WorkspaceRow) {
     objects: [...workspace.objects],
     assets: workspace.assets.map(includeVersions),
     tasks: [...workspace.tasks]
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, 20)
   };
+}
+
+function createTaskHistory(
+  count: number,
+  workspaceId: string,
+  userId: string
+): ImageTaskRow[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `task-old-${index + 1}`,
+    workspaceId,
+    userId,
+    type: "generate",
+    status: "complete",
+    input: { prompt: "older task" },
+    output: null,
+    error: null,
+    cost: null,
+    createdAt: new Date(Date.UTC(2026, 5, 23, 8, index, 0, 0)),
+    startedAt: null,
+    finishedAt: new Date(Date.UTC(2026, 5, 23, 8, index, 30, 0))
+  }));
 }
 
 function createQueue() {
@@ -853,6 +943,37 @@ describe("ImageAssetsService", () => {
       workspaceId: "workspace-1",
       userId: "user-1",
       type: "variation"
+    });
+  });
+
+  it("keeps only the latest 20 workspace tasks when creating asset tasks", async () => {
+    const queue = createQueue();
+    const usage = createUsage();
+    const asset = createAsset("asset-1", "user-1", "workspace-1");
+    const workspace = createWorkspace("workspace-1", "user-1", [asset]);
+    workspace.tasks = createTaskHistory(20, "workspace-1", "user-1");
+    const prisma = createPrisma([asset], [workspace]);
+    const service = new ImageAssetsService(
+      prisma,
+      queue,
+      createStorage(),
+      usage
+    );
+
+    await service.createVariationTask("user-1", "asset-1", "203.0.113.22");
+
+    const workspaceTasks = await prisma.imageTask.findMany({
+      where: { workspaceId: "workspace-1" },
+      orderBy: { createdAt: "desc" }
+    });
+    expect(workspaceTasks).toHaveLength(20);
+    expect(workspaceTasks.map((task) => task.id)).not.toContain("task-old-1");
+    expect(prisma.imageTask.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ["task-old-1"]
+        }
+      }
     });
   });
 

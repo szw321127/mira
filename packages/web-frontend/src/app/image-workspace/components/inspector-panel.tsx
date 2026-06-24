@@ -28,6 +28,7 @@ export function InspectorPanel({
   onClearLocalEditOverlay,
   onCloseMobile,
   onDeleteAsset,
+  onDeleteTask,
   onDownloadAsset,
   onGenerate,
   onLocalEditRadiusChange,
@@ -54,6 +55,7 @@ export function InspectorPanel({
   onClearLocalEditOverlay: () => void;
   onCloseMobile: () => void;
   onDeleteAsset: (assetId: string) => Promise<void> | void;
+  onDeleteTask: (taskId: string) => Promise<void> | void;
   onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
   onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
   onLocalEditRadiusChange: (radius: number) => void;
@@ -133,6 +135,7 @@ export function InspectorPanel({
         />
         <TaskInspector
           onCancelTask={onCancelTask}
+          onDeleteTask={onDeleteTask}
           onRetryTask={onRetryTask}
           tasks={activeWorkspace?.tasks ?? []}
         />

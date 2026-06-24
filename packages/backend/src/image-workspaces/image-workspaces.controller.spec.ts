@@ -87,6 +87,31 @@ describe("ImageWorkspacesController", () => {
     );
   });
 
+  it("deletes image tasks for the authenticated workspace owner", async () => {
+    const workspaces = createWorkspacesService();
+    const controller = new ImageWorkspacesController(
+      workspaces,
+      createSessions(),
+      createAssetsService()
+    ) as ImageWorkspacesController & {
+      deleteTask: (
+        request: Request,
+        workspaceId: string,
+        taskId: string
+      ) => Promise<unknown>;
+    };
+
+    await expect(
+      controller.deleteTask(createRequest(), "workspace-1", "task-1")
+    ).resolves.toEqual({ ok: true });
+
+    expect(workspaces.deleteTask).toHaveBeenCalledWith(
+      "user-1",
+      "workspace-1",
+      "task-1"
+    );
+  });
+
   it("uploads source image assets for the authenticated workspace owner", async () => {
     const assets = createAssetsService();
     const controller = new ImageWorkspacesController(
@@ -149,6 +174,7 @@ function createWorkspacesService() {
       Promise.resolve({ task: { id: "task-1", status: "canceled" } })
     ),
     createTask: jest.fn(() => Promise.resolve({ task: { id: "task-1" } })),
+    deleteTask: jest.fn(() => Promise.resolve({ ok: true })),
     retryTask: jest.fn(() =>
       Promise.resolve({ task: { id: "task-retry", status: "queued" } })
     )

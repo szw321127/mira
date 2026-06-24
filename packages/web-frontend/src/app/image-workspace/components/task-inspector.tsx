@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, RotateCcw, XCircle } from "lucide-react";
+import { ChevronDown, RotateCcw, Trash2, XCircle } from "lucide-react";
 import type { ImageTask } from "../types";
 
 export function TaskInspector({
   onCancelTask,
+  onDeleteTask,
   onRetryTask,
   tasks,
 }: {
   onCancelTask: (taskId: string) => Promise<void> | void;
+  onDeleteTask: (taskId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   tasks: ImageTask[];
 }) {
@@ -71,6 +73,7 @@ export function TaskInspector({
                 canCancel={canCancel}
                 canRetry={canRetry}
                 onCancelTask={onCancelTask}
+                onDeleteTask={onDeleteTask}
                 onRetryTask={onRetryTask}
                 task={task}
               />
@@ -95,12 +98,14 @@ function TaskCard({
   canCancel,
   canRetry,
   onCancelTask,
+  onDeleteTask,
   onRetryTask,
   task,
 }: {
   canCancel: boolean;
   canRetry: boolean;
   onCancelTask: (taskId: string) => Promise<void> | void;
+  onDeleteTask: (taskId: string) => Promise<void> | void;
   onRetryTask: (taskId: string) => Promise<void> | void;
   task: ImageTask;
 }) {
@@ -134,6 +139,15 @@ function TaskCard({
               <RotateCcw aria-hidden="true" size={14} />
             </button>
           ) : null}
+          <button
+            aria-label="删除任务"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--danger)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+            onClick={() => onDeleteTask(task.id)}
+            title="删除任务"
+            type="button"
+          >
+            <Trash2 aria-hidden="true" size={14} />
+          </button>
         </div>
       </div>
       <div className="mt-2 line-clamp-3 text-xs leading-relaxed text-[var(--muted-strong)]">

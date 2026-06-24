@@ -409,6 +409,8 @@ test("image workspace api uses same-origin image workspace endpoints", () => {
   assert.match(apiSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/cancel/);
   assert.match(apiSource, /retryImageTask/);
   assert.match(apiSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}\/retry/);
+  assert.match(apiSource, /deleteImageTask/);
+  assert.match(apiSource, /\/tasks\/\$\{encodeURIComponent\(taskId\)\}/);
   assert.match(apiSource, /encodeURIComponent\(id\)/);
 });
 
@@ -477,6 +479,32 @@ test("image workspace exposes queued task cancellation controls", () => {
   assert.match(taskSource, /XCircle/);
   assert.match(taskSource, /task\.status === "queued" \|\| task\.status === "running"/);
   assert.match(taskSource, /aria-label="取消任务"/);
+});
+
+test("image workspace keeps task history to 20 items and exposes task deletion controls", () => {
+  const apiSource = readImageWorkspaceFile("workspace-api.ts");
+  const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
+  const pageSource = readImageWorkspaceFile("page.tsx");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+  const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
+  const taskSource = readImageWorkspaceFile("components/task-inspector.tsx");
+
+  assert.match(apiSource, /deleteImageTask/);
+  assert.match(apiSource, /method:\s*"DELETE"/);
+  assert.match(hookSource, /IMAGE_TASK_HISTORY_LIMIT\s*=\s*20/);
+  assert.match(hookSource, /limitImageTasks/);
+  assert.match(hookSource, /\.slice\(0,\s*IMAGE_TASK_HISTORY_LIMIT\)/);
+  assert.match(hookSource, /deleteTask/);
+  assert.match(hookSource, /deleteImageTask\(activeWorkspace\.id,\s*taskId\)/);
+  assert.match(hookSource, /task\.id !== taskId/);
+  assert.match(hookSource, /setStreamTaskId\(\(current\) => \(current === taskId \? null : current\)\)/);
+  assert.match(pageSource, /onDeleteTask=\{workspace\.deleteTask\}/);
+  assert.match(shellSource, /onDeleteTask/);
+  assert.match(inspectorSource, /onDeleteTask/);
+  assert.match(taskSource, /onDeleteTask/);
+  assert.match(taskSource, /Trash2/);
+  assert.match(taskSource, /aria-label="删除任务"/);
+  assert.match(taskSource, /title="删除任务"/);
 });
 
 test("image generation settings expose interruption for the active task", () => {

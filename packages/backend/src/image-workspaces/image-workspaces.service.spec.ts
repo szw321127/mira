@@ -200,6 +200,30 @@ function createPrisma(workspaces: WorkspaceRow[]) {
       })
     },
     imageTask: {
+      findMany: jest.fn(({ where, orderBy, skip, select }: Record<string, unknown>) => {
+        const typedWhere = where as { workspaceId?: string };
+        const typedOrderBy = orderBy as { createdAt?: "desc" | "asc" } | undefined;
+        const rows = workspaces
+          .flatMap((workspace) => workspace.tasks)
+          .filter((task) => {
+            if (typedWhere.workspaceId && task.workspaceId !== typedWhere.workspaceId) {
+              return false;
+            }
+            return true;
+          })
+          .sort((left, right) => {
+            if (typedOrderBy?.createdAt === "asc") {
+              return left.createdAt.getTime() - right.createdAt.getTime();
+            }
+            return right.createdAt.getTime() - left.createdAt.getTime();
+          })
+          .slice(typeof skip === "number" ? skip : 0);
+        const typedSelect = select as { id?: boolean } | undefined;
+        if (typedSelect?.id) {
+          return Promise.resolve(rows.map((task) => ({ id: task.id })));
+        }
+        return Promise.resolve(rows);
+      }),
       findFirst: jest.fn(({ where }: Record<string, unknown>) => {
         const typedWhere = where as {
           id: string;
@@ -247,6 +271,31 @@ function createPrisma(workspaces: WorkspaceRow[]) {
         }
         return Promise.resolve({ count });
       }),
+      deleteMany: jest.fn(({ where }: Record<string, unknown>) => {
+        const typedWhere = where as {
+          id?: string | { in?: string[] };
+          workspaceId?: string;
+          userId?: string;
+        };
+        const ids =
+          typeof typedWhere.id === "string"
+            ? [typedWhere.id]
+            : typedWhere.id?.in ?? null;
+        let count = 0;
+        for (const workspace of workspaces) {
+          const remainingTasks = workspace.tasks.filter((task) => {
+            if (ids && !ids.includes(task.id)) return true;
+            if (typedWhere.workspaceId && task.workspaceId !== typedWhere.workspaceId) {
+              return true;
+            }
+            if (typedWhere.userId && task.userId !== typedWhere.userId) return true;
+            count += 1;
+            return false;
+          });
+          workspace.tasks = remainingTasks;
+        }
+        return Promise.resolve({ count });
+      }),
       create: jest.fn(({ data }: Record<string, unknown>) => {
         const typedData = data as {
           workspaceId: string;
@@ -269,7 +318,7 @@ function createPrisma(workspaces: WorkspaceRow[]) {
           output: null,
           error: null,
           cost: null,
-          createdAt: new Date("2026-06-23T09:02:00.000Z"),
+          createdAt: new Date(Date.UTC(2026, 5, 23, 9, 2 + taskCount, 0, 0)),
           startedAt: null,
           finishedAt: null
         };
@@ -293,7 +342,7 @@ function includeWorkspaceRelations(workspace: WorkspaceRow) {
     assets: workspace.assets.map((asset) => ({ ...asset, versions: asset.versions })),
     tasks: [...workspace.tasks].sort(
       (left, right) => right.createdAt.getTime() - left.createdAt.getTime()
-    )
+    ).slice(0, 20)
   };
 }
 
@@ -364,6 +413,15 @@ function imageTask(
     finishedAt: null,
     ...overrides
   };
+}
+
+function imageTasks(count: number, workspaceId: string, userId: string): ImageTaskRow[] {
+  return Array.from({ length: count }, (_, index) =>
+    imageTask(`task-old-${index + 1}`, workspaceId, userId, "complete", {
+      createdAt: new Date(Date.UTC(2026, 5, 23, 8, index, 0, 0)),
+      finishedAt: new Date(Date.UTC(2026, 5, 23, 8, index, 30, 0))
+    })
+  );
 }
 
 describe("ImageWorkspacesService", () => {
@@ -592,6 +650,35 @@ describe("ImageWorkspacesService", () => {
     });
   });
 
+  it("keeps only the latest 20 tasks after creating a new task", async () => {
+    const existingTasks = imageTasks(20, "workspace-1", "user-1");
+    const prisma = createPrisma([
+      workspace("workspace-1", "user-1", "Board", "2026-06-23T08:00:00.000Z", {
+        tasks: existingTasks
+      })
+    ]);
+    const service = new ImageWorkspacesService(prisma);
+
+    await service.createTask("user-1", "workspace-1", {
+      type: "generate",
+      prompt: "make a cover"
+    });
+
+    const workspaceTasks = await prisma.imageTask.findMany({
+      where: { workspaceId: "workspace-1" },
+      orderBy: { createdAt: "desc" }
+    });
+    expect(workspaceTasks).toHaveLength(20);
+    expect(workspaceTasks.map((task) => task.id)).not.toContain("task-old-1");
+    expect(prisma.imageTask.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: {
+          in: ["task-old-1"]
+        }
+      }
+    });
+  });
+
   it("checks image usage policy before creating a task", async () => {
     const prisma = createPrisma([
       workspace("workspace-1", "user-1", "Board", "2026-06-23T08:00:00.000Z")
@@ -720,6 +807,64 @@ describe("ImageWorkspacesService", () => {
     });
     expect(task.status).toBe("canceled");
     expect(task.finishedAt).toBeInstanceOf(Date);
+  });
+
+  it("deletes an owned task from the workspace history and removes it from the queue", async () => {
+    const task = imageTask("task-1", "workspace-1", "user-1", "queued");
+    const prisma = createPrisma([
+      workspace("workspace-1", "user-1", "Board", "2026-06-23T08:00:00.000Z", {
+        tasks: [task]
+      })
+    ]);
+    const queue = {
+      remove: jest.fn(() => Promise.resolve())
+    };
+    const service = new ImageWorkspacesService(prisma, queue as never) as ImageWorkspacesService & {
+      deleteTask: (
+        userId: string,
+        workspaceId: string,
+        taskId: string
+      ) => Promise<{ ok: boolean }>;
+    };
+
+    await expect(
+      service.deleteTask("user-1", "workspace-1", "task-1")
+    ).resolves.toEqual({ ok: true });
+
+    expect(queue.remove).toHaveBeenCalledWith("task-1");
+    expect(prisma.imageTask.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: "task-1",
+        workspaceId: "workspace-1",
+        userId: "user-1"
+      }
+    });
+    await expect(
+      service.assertTaskBelongsToWorkspace("user-1", "workspace-1", "task-1")
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("does not delete tasks from another user's workspace", async () => {
+    const prisma = createPrisma([
+      workspace("workspace-2", "user-2", "Other", "2026-06-23T08:00:00.000Z", {
+        tasks: [imageTask("task-1", "workspace-2", "user-2", "queued")]
+      })
+    ]);
+    const queue = {
+      remove: jest.fn(() => Promise.resolve())
+    };
+    const service = new ImageWorkspacesService(prisma, queue as never) as ImageWorkspacesService & {
+      deleteTask: (
+        userId: string,
+        workspaceId: string,
+        taskId: string
+      ) => Promise<{ ok: boolean }>;
+    };
+
+    await expect(
+      service.deleteTask("user-1", "workspace-2", "task-1")
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(queue.remove).not.toHaveBeenCalled();
   });
 
   it("does not cancel completed tasks", async () => {

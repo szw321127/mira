@@ -10,6 +10,7 @@ import {
   createImageWorkspace,
   cancelImageTask,
   deleteImageAsset,
+  deleteImageTask,
   deleteImageWorkspace,
   downloadImageAsset,
   downloadImageAssetVersion,
@@ -30,6 +31,8 @@ import type {
   ImageTaskEvent,
   ImageWorkspace,
 } from "./types";
+
+const IMAGE_TASK_HISTORY_LIMIT = 20;
 
 export function useImageWorkspace() {
   const [workspaces, setWorkspaces] = useState<ImageWorkspace[]>([]);
@@ -235,7 +238,7 @@ export function useImageWorkspace() {
           if (workspace.id !== activeWorkspace.id) return workspace;
           return {
             ...workspace,
-            tasks: [task, ...workspace.tasks],
+            tasks: limitImageTasks([task, ...workspace.tasks]),
           };
         }),
       );
@@ -421,6 +424,26 @@ export function useImageWorkspace() {
     }
   }
 
+  async function deleteTask(taskId: string) {
+    if (!activeWorkspace) return;
+    setError(null);
+    try {
+      await deleteImageTask(activeWorkspace.id, taskId);
+      setWorkspaces((current) =>
+        current.map((workspace) => {
+          if (workspace.id !== activeWorkspace.id) return workspace;
+          return {
+            ...workspace,
+            tasks: workspace.tasks.filter((task) => task.id !== taskId),
+          };
+        }),
+      );
+      setStreamTaskId((current) => (current === taskId ? null : current));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "图像任务删除失败");
+    }
+  }
+
   return {
     activeWorkspace,
     workspaces,
@@ -442,6 +465,7 @@ export function useImageWorkspace() {
     downloadAsset,
     removeImageAsset,
     cancelTask,
+    deleteTask,
     retryTask,
     selectWorkspace: setActiveWorkspaceId,
   };
@@ -452,7 +476,7 @@ export function useImageWorkspace() {
         if (workspace.id !== workspaceId) return workspace;
         return {
           ...workspace,
-          tasks: [task, ...workspace.tasks],
+          tasks: limitImageTasks([task, ...workspace.tasks]),
         };
       }),
     );
@@ -504,4 +528,8 @@ function updateWorkspaceTask(
       task.id === taskId ? updateTask(task) : task,
     ),
   }));
+}
+
+function limitImageTasks(tasks: ImageTask[]) {
+  return tasks.slice(0, IMAGE_TASK_HISTORY_LIMIT);
 }

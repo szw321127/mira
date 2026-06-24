@@ -229,6 +229,29 @@ describe("ImageWorkerService", () => {
     );
   });
 
+  it("treats deleted running tasks as canceled during provider work", async () => {
+    const prisma = createPrisma({ statuses: ["queued", null] });
+    const queue = createQueue();
+    const provider = createProvider();
+    const storage = createStorage();
+    const worker = new ImageWorkerService(prisma, queue, provider, storage);
+
+    await worker.processTask("task-1");
+
+    expect(provider.generate).toHaveBeenCalled();
+    expect(storage.putImage).not.toHaveBeenCalled();
+    expect(prisma.imageAsset.create).not.toHaveBeenCalled();
+    expect(prisma.imageVersion.create).not.toHaveBeenCalled();
+    expect(prisma.canvasObject.create).not.toHaveBeenCalled();
+    expect(prisma.imageTask.update).not.toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "complete"
+        })
+      })
+    );
+  });
+
   it("does not create generated assets when a task is canceled after storage writes", async () => {
     const prisma = createPrisma({ statuses: ["queued", "queued", "canceled"] });
     const queue = createQueue();
@@ -260,7 +283,9 @@ describe("ImageWorkerService", () => {
   });
 });
 
-function createPrisma(overrides: { status?: string; statuses?: string[] } = {}) {
+function createPrisma(
+  overrides: { status?: string; statuses?: Array<string | null> } = {}
+) {
   const task = {
     id: "task-1",
     workspaceId: "workspace-1",
@@ -282,8 +307,12 @@ function createPrisma(overrides: { status?: string; statuses?: string[] } = {}) 
   const prisma = {
     imageTask: {
       findUnique: jest.fn(() => {
-        const status = overrides.statuses?.[findUniqueCallCount] ?? task.status;
+        const status =
+          overrides.statuses && findUniqueCallCount in overrides.statuses
+            ? overrides.statuses[findUniqueCallCount]
+            : task.status;
         findUniqueCallCount += 1;
+        if (status === null) return Promise.resolve(null);
         return Promise.resolve({
           ...task,
           status

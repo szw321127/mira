@@ -256,7 +256,7 @@ export class ImageWorkerService {
       where: { id: taskId },
       select: { status: true }
     });
-    return task?.status === "canceled";
+    return !task || task.status === "canceled";
   }
 
   private async cleanupStoredImageIfCanceled(

@@ -7,6 +7,10 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../database/prisma.service.js";
 import type { ImageGenerateSize } from "./image-provider.types.js";
+import {
+  IMAGE_TASK_HISTORY_LIMIT,
+  pruneImageTaskHistory
+} from "./image-task-history.js";
 import { ImageQueueService } from "./image-queue.service.js";
 import { ImageUsageService } from "./image-usage.service.js";
 import {
@@ -143,7 +147,7 @@ const workspaceInclude = {
     orderBy: {
       createdAt: "desc" as const
     },
-    take: 20
+    take: IMAGE_TASK_HISTORY_LIMIT
   }
 };
 
@@ -245,7 +249,7 @@ export class ImageAssetsService {
         include: workspaceInclude
       });
       if (!reloaded) throw new NotFoundException("Image workspace not found.");
-      return reloaded as ImageWorkspaceRecord;
+      return reloaded;
     });
 
     return {
@@ -294,6 +298,7 @@ export class ImageAssetsService {
         })
       }
     });
+    await pruneImageTaskHistory(this.prisma, asset.workspaceId);
 
     await this.queue.enqueue({
       taskId: task.id,
@@ -339,6 +344,7 @@ export class ImageAssetsService {
         })
       }
     });
+    await pruneImageTaskHistory(this.prisma, asset.workspaceId);
 
     await this.queue.enqueue({
       taskId: task.id,
@@ -495,7 +501,7 @@ export class ImageAssetsService {
     return {
       url: await this.storage.createSignedPreviewUrl({
         storageKey: version.storageKey,
-        mimeType: normalizeImageMimeType(version.mimeType) as ImageMimeType,
+        mimeType: normalizeImageMimeType(version.mimeType),
         width: version.width,
         height: version.height,
         sizeBytes: version.sizeBytes
@@ -552,7 +558,7 @@ export class ImageAssetsService {
       include: assetInclude
     });
     if (!asset) throw new NotFoundException("Image asset not found.");
-    return asset as ImageAssetRecord;
+    return asset;
   }
 
   private async findOwnedWorkspace(
@@ -568,7 +574,7 @@ export class ImageAssetsService {
       include: workspaceInclude
     });
     if (!workspace) throw new NotFoundException("Image workspace not found.");
-    return workspace as ImageWorkspaceRecord;
+    return workspace;
   }
 
   private currentVersion(asset: ImageAssetRecord) {
@@ -597,7 +603,7 @@ export class ImageAssetsService {
     if (!mask) {
       throw new BadRequestException("遮罩图片不存在或不属于当前工作区");
     }
-    return mask as ImageVersionRecord;
+    return mask;
   }
 
   private async resolveMaskIdInWorkspace(
@@ -617,7 +623,7 @@ export class ImageAssetsService {
     if (!mask) {
       throw new BadRequestException("遮罩图片不存在或不属于当前工作区");
     }
-    return mask as ImageVersionRecord;
+    return mask;
   }
 
   private async resolveEditMaskKey(
@@ -681,6 +687,7 @@ export class ImageAssetsService {
         })
       }
     });
+    await pruneImageTaskHistory(this.prisma, asset.workspaceId);
 
     await this.queue.enqueue({
       taskId: task.id,

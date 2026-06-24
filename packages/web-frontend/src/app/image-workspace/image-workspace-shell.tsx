@@ -36,6 +36,7 @@ export function ImageWorkspaceShell({
   onCancelTask,
   onCreate,
   onDeleteAsset,
+  onDeleteTask,
   onDeleteWorkspace,
   onDownloadAsset,
   onEditAsset,
@@ -59,6 +60,7 @@ export function ImageWorkspaceShell({
   onCancelTask: (taskId: string) => Promise<void> | void;
   onCreate: () => void;
   onDeleteAsset: (assetId: string) => Promise<void> | void;
+  onDeleteTask: (taskId: string) => Promise<void> | void;
   onDeleteWorkspace: (id: string) => Promise<void> | void;
   onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
   onEditAsset: (
@@ -227,6 +229,7 @@ export function ImageWorkspaceShell({
         localEditOverlayState={localEditOverlayState}
         onClearLocalEditOverlay={clearLocalEditOverlay}
         onDeleteAsset={onDeleteAsset}
+        onDeleteTask={onDeleteTask}
         onDownloadAsset={onDownloadAsset}
         onGenerate={onGenerate}
         onLocalEditRadiusChange={setLocalEditMarkerRadius}

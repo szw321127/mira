@@ -8,6 +8,10 @@ import { PrismaService } from "../database/prisma.service.js";
 import { ImageQueueService } from "./image-queue.service.js";
 import { ImageUsageService } from "./image-usage.service.js";
 import { ImageWorkerService } from "./image-worker.service.js";
+import {
+  IMAGE_TASK_HISTORY_LIMIT,
+  pruneImageTaskHistory
+} from "./image-task-history.js";
 import { ImageAgentService } from "./image-agent.service.js";
 import {
   type CanvasSnapshot,
@@ -39,7 +43,7 @@ const workspaceInclude = {
     orderBy: {
       createdAt: "desc" as const
     },
-    take: 20
+    take: IMAGE_TASK_HISTORY_LIMIT
   }
 };
 
@@ -280,6 +284,25 @@ export class ImageWorkspacesService {
     };
   }
 
+  async deleteTask(userId: string, workspaceId: string, taskId: string) {
+    await this.findOwnedWorkspace(userId, workspaceId);
+
+    const result = await this.prisma.imageTask.deleteMany({
+      where: {
+        id: taskId,
+        workspaceId,
+        userId
+      }
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException("Image task not found.");
+    }
+
+    await this.queue?.remove(taskId);
+    return { ok: true };
+  }
+
   async retryTask(
     userId: string,
     workspaceId: string,
@@ -352,6 +375,7 @@ export class ImageWorkspacesService {
         input: toInputJson(this.agent.prepareTaskInput(request))
       }
     });
+    await pruneImageTaskHistory(this.prisma, workspaceId);
 
     if (this.queue) {
       await this.queue.enqueue({

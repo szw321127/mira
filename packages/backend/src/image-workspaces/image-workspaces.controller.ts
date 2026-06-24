@@ -111,6 +111,16 @@ export class ImageWorkspacesController {
     return this.workspaces.retryTask(user.id, id, taskId, readRequestIp(request));
   }
 
+  @Delete(":id/tasks/:taskId")
+  async deleteTask(
+    @Req() request: Request,
+    @Param("id") id: string,
+    @Param("taskId") taskId: string
+  ) {
+    const user = await this.requireUser(request);
+    return this.workspaces.deleteTask(user.id, id, taskId);
+  }
+
   @Post(":id/assets")
   async uploadSourceAsset(
     @Req() request: Request,
