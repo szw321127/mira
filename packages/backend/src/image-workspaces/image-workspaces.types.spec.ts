@@ -134,6 +134,19 @@ describe("image workspace parsers", () => {
         target: { width: 1280, height: 1024 }
       })
     ).toBeNull();
+
+    expect(
+      parseImageTaskRequest({
+        type: "expand",
+        prompt: "extend",
+        assetId: "asset-1",
+        versionId: "version-1",
+        mode: "direction",
+        direction: "right",
+        padding: { left: 0, right: 256, top: 0, bottom: 0 },
+        target: { width: 1280, height: 1024 }
+      })
+    ).toBeNull();
   });
 
   it("rejects unsupported generate task settings", () => {

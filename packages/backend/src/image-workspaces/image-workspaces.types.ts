@@ -192,7 +192,7 @@ export function parseImageTaskRequest(value: unknown): ImageTaskRequest | null {
     const padding = parseImageExpandPadding(value.padding);
     const target = parseImageExpandTarget(value.target);
     if (!assetId || !versionId || !mode || !padding || !target) return null;
-    if (mode === "direction" && !direction) return null;
+    if (mode === "direction" && (!direction || percent === null)) return null;
     if (value.direction !== undefined && !direction) return null;
     if (value.percent !== undefined && percent === null) return null;
     return {

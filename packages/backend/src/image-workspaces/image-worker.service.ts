@@ -49,6 +49,8 @@ type CanvasImageObjectRow = {
   id: string;
   x: number;
   y: number;
+  width: number;
+  height: number;
   props: unknown;
 };
 
@@ -657,7 +659,13 @@ export class ImageWorkerService {
           currentVersionId: version.id
         }
       });
-      const objectIds = await this.updateExpandedCanvasObjects(tx, task, input, version.id);
+      const objectIds = await this.updateExpandedCanvasObjects(
+        tx,
+        task,
+        input,
+        sourceVersion,
+        version.id
+      );
       await tx.imageTask.update({
         where: { id: task.id },
         data: {
@@ -685,6 +693,7 @@ export class ImageWorkerService {
     tx: ImageWorkerTransaction,
     task: ImageTaskRow,
     input: ExpandTaskInput,
+    sourceVersion: ImageVersionRow,
     versionId: string
   ): Promise<string[]> {
     const objects = (await tx.canvasObject.findMany({
@@ -697,18 +706,22 @@ export class ImageWorkerService {
         id: true,
         x: true,
         y: true,
+        width: true,
+        height: true,
         props: true
       }
     })) as CanvasImageObjectRow[];
 
     for (const object of objects) {
+      const scaleX = displayScale(object.width, sourceVersion.width);
+      const scaleY = displayScale(object.height, sourceVersion.height);
       await tx.canvasObject.update({
         where: { id: object.id },
         data: {
-          x: object.x - input.padding.left,
-          y: object.y - input.padding.top,
-          width: input.expandTarget.width,
-          height: input.expandTarget.height,
+          x: object.x - input.padding.left * scaleX,
+          y: object.y - input.padding.top * scaleY,
+          width: input.expandTarget.width * scaleX,
+          height: input.expandTarget.height * scaleY,
           props: toInputJson({
             ...(isRecord(object.props) ? object.props : {}),
             versionId
@@ -719,6 +732,12 @@ export class ImageWorkerService {
 
     return objects.map((object) => object.id);
   }
+}
+
+function displayScale(displaySize: number, sourceSize: number): number {
+  if (!Number.isFinite(displaySize) || !Number.isFinite(sourceSize)) return 1;
+  if (displaySize <= 0 || sourceSize <= 0) return 1;
+  return displaySize / sourceSize;
 }
 
 type GenerateTaskInput = {

@@ -178,6 +178,10 @@ describe("ImageWorkerService edit and variation tasks", () => {
           width: 1224,
           height: 1264
         }
+      },
+      canvasObject: {
+        width: 512,
+        height: 512
       }
     });
     const provider = createProvider();
@@ -201,16 +205,18 @@ describe("ImageWorkerService edit and variation tasks", () => {
         id: true,
         x: true,
         y: true,
+        width: true,
+        height: true,
         props: true
       }
     });
     expect(prisma.canvasObject.update).toHaveBeenCalledWith({
       where: { id: "object-1" },
       data: {
-        x: 200,
-        y: 280,
-        width: 1224,
-        height: 1264,
+        x: 260,
+        y: 300,
+        width: 612,
+        height: 632,
         props: {
           source: "upload",
           versionId: "version-edited"
@@ -774,6 +780,10 @@ function createPrisma(taskInput: {
   type: TaskType;
   input: Record<string, unknown>;
   statuses?: string[];
+  canvasObject?: {
+    width: number;
+    height: number;
+  };
 }) {
   const task = {
     id: "task-1",
@@ -868,6 +878,8 @@ function createPrisma(taskInput: {
             id: "object-1",
             x: 320,
             y: 320,
+            width: taskInput.canvasObject?.width ?? 1024,
+            height: taskInput.canvasObject?.height ?? 1024,
             props: {
               source: "upload",
               versionId: "version-source"
