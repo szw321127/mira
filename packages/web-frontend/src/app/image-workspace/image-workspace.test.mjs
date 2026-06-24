@@ -242,7 +242,7 @@ test("image canvas exposes a focused Mira toolbar for common canvas actions", ()
   assert.match(toolbarSource, /aria-pressed=\{active/);
   assert.match(toolbarSource, /tool:\s*"select"/);
   assert.match(toolbarSource, /tool:\s*"pan"/);
-  assert.match(toolbarSource, /controller\.setTool\(button\.tool\)/);
+  assert.match(toolbarSource, /handleToolClick\(button\.tool\)/);
   assert.match(toolbarSource, /controller\.undo\(\)/);
   assert.match(toolbarSource, /controller\.redo\(\)/);
   assert.match(toolbarSource, /controller\.zoomIn\(\)/);
@@ -280,7 +280,7 @@ test("leafer toolbar tools are mutually exclusive and disable other tool behavio
   assert.match(toolbarSource, /toolButtons/);
   assert.match(toolbarSource, /activeTool === button\.tool/);
   assert.match(toolbarSource, /aria-pressed=\{active\}/);
-  assert.match(toolbarSource, /controller\.setTool\(button\.tool\)/);
+  assert.match(toolbarSource, /handleToolClick\(button\.tool\)/);
   assert.match(adapterSource, /applyToolInteractionState/);
   assert.match(adapterSource, /activeTool === "select"/);
   assert.match(adapterSource, /node\.draggable = canEdit/);
@@ -296,12 +296,30 @@ test("leafer toolbar tools are mutually exclusive and disable other tool behavio
 test("leafer toolbar makes the active tool mode obvious", () => {
   const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
 
+  assert.match(toolbarSource, /useSyncExternalStore/);
+  assert.match(toolbarSource, /controller\?\.subscribeChange/);
+  assert.match(toolbarSource, /controller\?\.getActiveTool\(\) \?\? "select"/);
+  assert.match(toolbarSource, /handleToolClick/);
+  assert.match(toolbarSource, /controller\.setTool\(tool\)/);
   assert.match(toolbarSource, /activeToolButton/);
   assert.match(toolbarSource, /当前工具/);
   assert.match(toolbarSource, /activeToolButton\.label/);
   assert.match(toolbarSource, /data-active-tool=\{active\}/);
   assert.match(toolbarSource, /ring-2 ring-\[var\(--accent\)\]/);
   assert.match(toolbarSource, /border-\[color-mix\(in_oklch,var\(--accent\)_70%,var\(--border\)\)\]/);
+});
+
+test("leafer mask brush uses the official Pen element", () => {
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(adapterSource, /App, Ellipse, Group, Image, Pen, PointerEvent/);
+  assert.match(adapterSource, /import type \{[\s\S]*IPen[\s\S]*\} from "leafer-ui"/);
+  assert.match(adapterSource, /new Pen\(/);
+  assert.match(adapterSource, /drawMaskStrokePen/);
+  assert.match(adapterSource, /\.moveTo\(/);
+  assert.match(adapterSource, /\.lineTo\(/);
+  assert.match(adapterSource, /\.paint\(\)/);
+  assert.doesNotMatch(adapterSource, /for \(const point of stroke\.points\)[\s\S]*new Ellipse/);
 });
 
 test("image workspace shell exposes rail, canvas, prompt, task, and mobile panels", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useSyncExternalStore } from "react";
 import {
   Brush,
   Hand,
@@ -32,19 +32,17 @@ type ToolButton = {
   tool: CanvasTool;
 };
 
-export function CanvasToolbar({ controller }: CanvasToolbarProps) {
-  const [, setRevision] = useState(0);
+const subscribeNoop = () => () => {};
 
-  useEffect(() => {
-    if (!controller) return;
-    return controller.subscribeChange(() => {
-      setRevision((revision) => revision + 1);
-    });
-  }, [controller]);
+export function CanvasToolbar({ controller }: CanvasToolbarProps) {
+  const activeTool = useSyncExternalStore(
+    controller?.subscribeChange ?? subscribeNoop,
+    () => controller?.getActiveTool() ?? "select",
+    () => "select",
+  );
 
   if (!controller) return null;
 
-  const activeTool = controller.getActiveTool();
   const toolButtons: ToolButton[] = [
     {
       icon: MousePointer2,
@@ -99,6 +97,9 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
   ];
   const activeToolButton =
     toolButtons.find((button) => button.tool === activeTool) ?? toolButtons[0];
+  const handleToolClick = (tool: CanvasTool) => {
+    controller.setTool(tool);
+  };
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4 max-md:bottom-3">
@@ -124,7 +125,7 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
               }`}
               data-active-tool={active}
               key={button.tool}
-              onClick={() => controller.setTool(button.tool)}
+              onClick={() => handleToolClick(button.tool)}
               title={button.label}
               type="button"
             >

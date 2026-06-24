@@ -1,4 +1,4 @@
-import type { IApp, IGroup, IImage, IUI } from "leafer-ui";
+import type { IApp, IGroup, IImage, IPen, IUI } from "leafer-ui";
 import type {
   CanvasAssetSelection,
   CanvasController,
@@ -103,7 +103,7 @@ async function createLoadedLeaferCanvasController({
   container,
   events,
 }: ControllerOptions): Promise<CanvasController> {
-  const [{ App, Ellipse, Group, Image, PointerEvent }] = await Promise.all([
+  const [{ App, Ellipse, Group, Image, Pen, PointerEvent }] = await Promise.all([
     import("leafer-ui"),
     import("leafer-editor"),
   ]);
@@ -418,22 +418,23 @@ async function createLoadedLeaferCanvasController({
     ];
 
     for (const stroke of strokes) {
-      for (const point of stroke.points) {
-        maskLayer.add(
-          new Ellipse({
-            fill: "rgba(225, 29, 72, 0.42)",
-            height: MASK_BRUSH_RADIUS * 2,
-            hitChildren: false,
-            hitSelf: false,
-            hittable: false,
-            stroke: "rgba(225, 29, 72, 0.75)",
-            strokeWidth: 1,
-            width: MASK_BRUSH_RADIUS * 2,
-            x: normalizeFiniteNumber(selectedNode.x, 0) + point.x - MASK_BRUSH_RADIUS,
-            y: normalizeFiniteNumber(selectedNode.y, 0) + point.y - MASK_BRUSH_RADIUS,
-          }),
-        );
-      }
+      const pen = drawMaskStrokePen(
+        new Pen({
+          hitChildren: false,
+          hitSelf: false,
+          hittable: false,
+          stroke: "rgba(225, 29, 72, 0.58)",
+          strokeCap: "round",
+          strokeJoin: "round",
+          strokeWidth: MASK_BRUSH_RADIUS * 2,
+        }) as IPen,
+        stroke.points,
+        {
+          x: normalizeFiniteNumber(selectedNode.x, 0),
+          y: normalizeFiniteNumber(selectedNode.y, 0),
+        },
+      );
+      if (pen) maskLayer.add(pen);
     }
   };
 
@@ -1292,6 +1293,27 @@ function drawMaskStrokes(
     }
     context.stroke();
   }
+}
+
+function drawMaskStrokePen(
+  pen: IPen,
+  points: LocalEditPoint[],
+  origin: LocalEditPoint,
+): IPen | null {
+  if (!points.length) return null;
+  const firstPoint = points[0];
+  pen.moveTo(origin.x + firstPoint.x, origin.y + firstPoint.y);
+
+  if (points.length === 1) {
+    pen.lineTo(origin.x + firstPoint.x + 0.01, origin.y + firstPoint.y + 0.01);
+  } else {
+    for (const point of points.slice(1)) {
+      pen.lineTo(origin.x + point.x, origin.y + point.y);
+    }
+  }
+
+  pen.paint();
+  return pen;
 }
 
 function drawMarkerMask(
