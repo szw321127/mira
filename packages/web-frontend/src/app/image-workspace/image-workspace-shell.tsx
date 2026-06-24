@@ -13,6 +13,9 @@ import type {
   LocalEditOverlayState,
 } from "./leafer-canvas-types";
 import type {
+  ImageExpandRequest,
+} from "./workspace-api";
+import type {
   CanvasSnapshot,
   ImageGenerationSettings,
   ImageTask,
@@ -26,6 +29,40 @@ const EMPTY_LOCAL_EDIT_OVERLAY_STATE: LocalEditOverlayState = {
   dirty: false,
   markerRadius: 96,
   source: null,
+};
+
+type ImageWorkspaceShellProps = {
+  activeWorkspace: ImageWorkspace | null;
+  creatingTask: boolean;
+  error: string | null;
+  loading: boolean;
+  onCancelTask: (taskId: string) => Promise<void> | void;
+  onCreate: () => void;
+  onDeleteAsset: (assetId: string) => Promise<void> | void;
+  onDeleteTask: (taskId: string) => Promise<void> | void;
+  onDeleteWorkspace: (id: string) => Promise<void> | void;
+  onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
+  onEditAsset: (
+    assetId: string,
+    prompt: string,
+    maskId?: string,
+  ) => Promise<void> | void;
+  onExpandAsset: (assetId: string, input: ImageExpandRequest) => Promise<void> | void;
+  onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
+  onPersistCanvas: (snapshot: CanvasSnapshot) => Promise<void> | void;
+  onRemoveBackgroundAsset: (assetId: string) => Promise<void> | void;
+  onRenameWorkspace: (id: string, title: string) => Promise<void> | void;
+  onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
+  onRetryTask: (taskId: string) => Promise<void> | void;
+  onSelect: (id: string) => void;
+  onUpscaleAsset: (assetId: string) => Promise<void> | void;
+  onUploadMask: (
+    assetId: string,
+    dataUrl: string,
+  ) => Promise<{ maskId: string; sizeBytes: number }>;
+  onUploadSourceAsset: (file: File) => Promise<void> | void;
+  onVariationAsset: (assetId: string) => Promise<void> | void;
+  workspaces: ImageWorkspace[];
 };
 
 export function ImageWorkspaceShell({
@@ -52,38 +89,7 @@ export function ImageWorkspaceShell({
   onUploadSourceAsset,
   onVariationAsset,
   workspaces,
-}: {
-  activeWorkspace: ImageWorkspace | null;
-  creatingTask: boolean;
-  error: string | null;
-  loading: boolean;
-  onCancelTask: (taskId: string) => Promise<void> | void;
-  onCreate: () => void;
-  onDeleteAsset: (assetId: string) => Promise<void> | void;
-  onDeleteTask: (taskId: string) => Promise<void> | void;
-  onDeleteWorkspace: (id: string) => Promise<void> | void;
-  onDownloadAsset: (assetId: string, versionId?: string) => Promise<void> | void;
-  onEditAsset: (
-    assetId: string,
-    prompt: string,
-    maskId?: string,
-  ) => Promise<void> | void;
-  onGenerate: (prompt: string, settings: ImageGenerationSettings) => void;
-  onPersistCanvas: (snapshot: CanvasSnapshot) => Promise<void> | void;
-  onRemoveBackgroundAsset: (assetId: string) => Promise<void> | void;
-  onRenameWorkspace: (id: string, title: string) => Promise<void> | void;
-  onRevertAsset: (assetId: string, versionId: string) => Promise<void> | void;
-  onRetryTask: (taskId: string) => Promise<void> | void;
-  onSelect: (id: string) => void;
-  onUpscaleAsset: (assetId: string) => Promise<void> | void;
-  onUploadMask: (
-    assetId: string,
-    dataUrl: string,
-  ) => Promise<{ maskId: string; sizeBytes: number }>;
-  onUploadSourceAsset: (file: File) => Promise<void> | void;
-  onVariationAsset: (assetId: string) => Promise<void> | void;
-  workspaces: ImageWorkspace[];
-}) {
+}: ImageWorkspaceShellProps) {
   const canvasControllerRef = useRef<CanvasController | null>(null);
   const [canvasController, setCanvasController] =
     useState<CanvasController | null>(null);

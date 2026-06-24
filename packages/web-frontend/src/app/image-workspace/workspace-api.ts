@@ -11,6 +11,17 @@ type BackendMessage = {
   error?: string;
 };
 
+export type ImageExpandRequest = {
+  prompt?: string;
+  versionId: string;
+  mode: "free" | "ratio" | "direction";
+  direction?: "left" | "right" | "top" | "bottom" | "around";
+  percent?: number;
+  padding: { left: number; right: number; top: number; bottom: number };
+  target: { width: number; height: number };
+  aspectRatio?: ImageGenerationSettings["aspectRatio"];
+};
+
 async function readJson<T>(response: Response): Promise<T> {
   const value: unknown = await response.json().catch(() => ({}));
   return value as T;
@@ -216,6 +227,20 @@ export async function createImageAssetUpscaleTask(assetId: string) {
     },
   );
   await assertOk(response, "图片放大任务创建失败");
+  const data = await readJson<{ task: ImageTask }>(response);
+  return data.task;
+}
+
+export async function createImageAssetExpandTask(assetId: string, input: ImageExpandRequest) {
+  const response = await fetch(
+    `/api/image-assets/${encodeURIComponent(assetId)}/expand`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  await assertOk(response, "图片扩展任务创建失败");
   const data = await readJson<{ task: ImageTask }>(response);
   return data.task;
 }

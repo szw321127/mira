@@ -56,6 +56,7 @@ function ImageWorkspaceHome() {
         onDeleteWorkspace={workspace.deleteWorkspace}
         onDownloadAsset={workspace.downloadAsset}
         onEditAsset={workspace.editImageAsset}
+        onExpandAsset={workspace.expandImageAsset}
         onGenerate={workspace.generateImage}
         onPersistCanvas={workspace.persistCanvas}
         onRemoveBackgroundAsset={workspace.createImageBackgroundRemoval}

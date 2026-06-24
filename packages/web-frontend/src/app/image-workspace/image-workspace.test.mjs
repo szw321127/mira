@@ -14,6 +14,12 @@ function readImageWorkspaceFile(fileName) {
   return readFileSync(filePath, "utf8");
 }
 
+function readAppFile(relativePath) {
+  const filePath = join(appDir, relativePath);
+  assert.equal(existsSync(filePath), true, `${relativePath} should exist`);
+  return readFileSync(filePath, "utf8");
+}
+
 test("image workspace page is gated behind the existing email session", () => {
   const pageSource = readImageWorkspaceFile("page.tsx");
 
@@ -611,6 +617,63 @@ test("image workspace exposes asset editing api helpers", () => {
   assert.doesNotMatch(typesSource, /storageKey:\s*string/);
   assert.doesNotMatch(typesSource, /maskKey:\s*string\s*\|\s*null/);
   assert.doesNotMatch(typesSource, /providerJob:\s*string\s*\|\s*null/);
+});
+
+test("image asset expand route proxies expansion tasks through the backend", () => {
+  const routeSource = readAppFile("api/image-assets/[assetId]/expand/route.ts");
+
+  assert.match(routeSource, /export async function POST/);
+  assert.match(routeSource, /proxyBackendRequest/);
+  assert.match(
+    routeSource,
+    /image-assets\/\$\{encodeURIComponent\(assetId\)\}\/expand/,
+  );
+});
+
+test("image workspace api exposes image expansion task creation", () => {
+  const apiSource = readImageWorkspaceFile("workspace-api.ts");
+
+  assert.match(apiSource, /export type ImageExpandRequest/);
+  assert.match(apiSource, /prompt\?:\s*string/);
+  assert.match(apiSource, /versionId:\s*string/);
+  assert.match(apiSource, /mode:\s*"free"\s*\|\s*"ratio"\s*\|\s*"direction"/);
+  assert.match(apiSource, /direction\?:\s*"left"\s*\|\s*"right"\s*\|\s*"top"\s*\|\s*"bottom"\s*\|\s*"around"/);
+  assert.match(apiSource, /padding:\s*\{\s*left:\s*number;\s*right:\s*number;\s*top:\s*number;\s*bottom:\s*number/);
+  assert.match(apiSource, /target:\s*\{\s*width:\s*number;\s*height:\s*number/);
+  assert.match(apiSource, /aspectRatio\?:\s*ImageGenerationSettings\["aspectRatio"\]/);
+  assert.match(apiSource, /createImageAssetExpandTask\(assetId:\s*string,\s*input:\s*ImageExpandRequest\)/);
+  assert.match(apiSource, /\/api\/image-assets\/\$\{encodeURIComponent\(assetId\)\}\/expand/);
+  assert.match(apiSource, /body:\s*JSON\.stringify\(input\)/);
+  assert.match(apiSource, /图片扩展任务创建失败/);
+});
+
+test("image workspace hook exposes image expansion task creation", () => {
+  const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
+
+  assert.match(hookSource, /createImageAssetExpandTask/);
+  assert.match(hookSource, /ImageExpandRequest/);
+  assert.match(
+    hookSource,
+    /expandImageAsset\(assetId:\s*string,\s*input:\s*ImageExpandRequest\)/,
+  );
+  assert.match(hookSource, /if \(!activeWorkspace \|\| creatingTask\) return/);
+  assert.match(hookSource, /createImageAssetExpandTask\(assetId,\s*input\)/);
+  assert.match(hookSource, /appendTask\(activeWorkspace\.id,\s*task\)/);
+  assert.match(hookSource, /setStreamTaskId\(task\.id\)/);
+  assert.match(hookSource, /图片扩展任务创建失败/);
+  assert.match(hookSource, /expandImageAsset/);
+});
+
+test("image workspace page and shell thread image expansion props", () => {
+  const pageSource = readImageWorkspaceFile("page.tsx");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+
+  assert.match(pageSource, /onExpandAsset=\{workspace\.expandImageAsset\}/);
+  assert.match(shellSource, /onExpandAsset/);
+  assert.match(
+    shellSource,
+    /onExpandAsset:\s*\(assetId:\s*string,\s*input:\s*ImageExpandRequest\)/,
+  );
 });
 
 test("image workspace uploads local source images into the active canvas", () => {

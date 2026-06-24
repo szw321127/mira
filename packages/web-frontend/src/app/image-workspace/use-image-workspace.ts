@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createImageAssetBackgroundRemovalTask,
   createImageAssetEditTask,
+  createImageAssetExpandTask,
   createImageAssetUpscaleTask,
   createImageAssetVariationTask,
   createImageTask,
@@ -23,6 +24,7 @@ import {
   uploadImageAssetMask,
   uploadImageWorkspaceAsset
 } from "./workspace-api";
+import type { ImageExpandRequest } from "./workspace-api";
 import { useImageTaskStream } from "./use-image-task-stream";
 import type {
   CanvasSnapshot,
@@ -339,6 +341,22 @@ export function useImageWorkspace() {
     }
   }
 
+  async function expandImageAsset(assetId: string, input: ImageExpandRequest) {
+    if (!activeWorkspace || creatingTask) return;
+
+    setCreatingTask(true);
+    setError(null);
+    try {
+      const task = await createImageAssetExpandTask(assetId, input);
+      appendTask(activeWorkspace.id, task);
+      setStreamTaskId(task.id);
+    } catch (taskError) {
+      setError(taskError instanceof Error ? taskError.message : "图片扩展任务创建失败");
+    } finally {
+      setCreatingTask(false);
+    }
+  }
+
   async function createImageBackgroundRemoval(assetId: string) {
     if (!activeWorkspace || creatingTask) return;
 
@@ -460,6 +478,7 @@ export function useImageWorkspace() {
     uploadAssetMask,
     createImageVariation,
     createImageUpscale,
+    expandImageAsset,
     createImageBackgroundRemoval,
     revertAssetVersion,
     downloadAsset,
