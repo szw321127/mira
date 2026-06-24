@@ -352,6 +352,7 @@ export function useImageWorkspace() {
       setStreamTaskId(task.id);
     } catch (taskError) {
       setError(taskError instanceof Error ? taskError.message : "图片扩展任务创建失败");
+      throw taskError;
     } finally {
       setCreatingTask(false);
     }

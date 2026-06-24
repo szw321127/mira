@@ -784,6 +784,7 @@ test("image workspace hook exposes image expansion task creation", () => {
   assert.match(hookSource, /appendTask\(activeWorkspace\.id,\s*task\)/);
   assert.match(hookSource, /setStreamTaskId\(task\.id\)/);
   assert.match(hookSource, /图片扩展任务创建失败/);
+  assert.match(hookSource, /catch \(taskError\) \{\s*setError\(taskError instanceof Error \? taskError\.message : "图片扩展任务创建失败"\);\s*throw taskError;\s*\}/);
   assert.match(hookSource, /expandImageAsset/);
 });
 
