@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+import sharp from "sharp";
 import type { PrismaService } from "../database/prisma.service.js";
 import type { ImageProviderAdapter } from "./image-provider.types.js";
 import type { ImageQueueService } from "./image-queue.service.js";
@@ -16,7 +17,7 @@ describe("ImageWorkerService edit and variation tasks", () => {
         versionId: "version-source",
         mode: "direction",
         direction: "top",
-        percent: 25,
+        percent: 0.25,
         padding: {
           left: 0,
           right: 0,
@@ -31,6 +32,7 @@ describe("ImageWorkerService edit and variation tasks", () => {
     });
     const queue = createQueue();
     const provider = createProvider();
+    provider.edit.mockResolvedValueOnce(await createProviderImageResult(1024, 1536));
     const storage = createStorage();
     const worker = new ImageWorkerService(prisma, queue, provider, storage);
 
@@ -68,7 +70,7 @@ describe("ImageWorkerService edit and variation tasks", () => {
           operation: "expand",
           mode: "direction",
           direction: "top",
-          percent: 25,
+          percent: 0.25,
           padding: {
             left: 0,
             right: 0,
@@ -178,10 +180,12 @@ describe("ImageWorkerService edit and variation tasks", () => {
         }
       }
     });
+    const provider = createProvider();
+    provider.edit.mockResolvedValueOnce(await createProviderImageResult(1536, 1024));
     const worker = new ImageWorkerService(
       prisma,
       createQueue(),
-      createProvider(),
+      provider,
       createStorage()
     );
 
@@ -213,6 +217,213 @@ describe("ImageWorkerService edit and variation tasks", () => {
         }
       }
     });
+  });
+
+  it("stores and versions expand output at the requested expand target dimensions", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "direction",
+        direction: "top",
+        percent: 0.25,
+        padding: {
+          left: 0,
+          right: 0,
+          top: 256,
+          bottom: 0
+        },
+        expandTarget: {
+          width: 1024,
+          height: 1280
+        }
+      }
+    });
+    const provider = createProvider();
+    provider.edit.mockResolvedValueOnce({
+      bytes: await solidPng(1024, 1536),
+      mimeType: "image/png",
+      width: 1024,
+      height: 1536,
+      provider: "openai",
+      providerJob: "job-edit",
+      metadata: {
+        model: "gpt-image-1",
+        size: "1024x1536",
+        quality: null,
+        estimatedCostUsd: null
+      }
+    });
+    const storage = createStorage();
+    storage.putImage.mockImplementationOnce((input) =>
+      Promise.resolve({
+        storageKey: "local/user/workspace/task/edited.png",
+        mimeType: input.mimeType,
+        width: 0,
+        height: 0,
+        sizeBytes: input.bytes.length
+      })
+    );
+    const worker = new ImageWorkerService(
+      prisma,
+      createQueue(),
+      provider,
+      storage
+    );
+
+    await worker.processTask("task-1");
+
+    expect(storage.putImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bytes: expect.any(Buffer),
+        mimeType: "image/png"
+      })
+    );
+    await expect(
+      sharp(storage.putImage.mock.calls[0]?.[0].bytes).metadata()
+    ).resolves.toEqual(
+      expect.objectContaining({
+        width: 1024,
+        height: 1280
+      })
+    );
+    expect(prisma.imageVersion.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        width: 1024,
+        height: 1280
+      })
+    });
+    expect(prisma.canvasObject.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          width: 1024,
+          height: 1280
+        })
+      })
+    );
+  });
+
+  it("fails malformed expand input before reading source bytes or calling the provider", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "free",
+        padding: {
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0
+        },
+        expandTarget: {
+          width: 1024,
+          height: 1024
+        }
+      }
+    });
+    const provider = createProvider();
+    const storage = createStorage();
+    const worker = new ImageWorkerService(
+      prisma,
+      createQueue(),
+      provider,
+      storage
+    );
+
+    await worker.processTask("task-1");
+
+    expect(storage.getImage).not.toHaveBeenCalled();
+    expect(provider.edit).not.toHaveBeenCalled();
+    expect(prisma.imageTask.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "task-1" },
+        data: expect.objectContaining({
+          status: "failed",
+          error: "图片扩展失败，请稍后再试"
+        })
+      })
+    );
+  });
+
+  it("fails oversized expand input before reading source bytes or calling the provider", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "free",
+        padding: {
+          left: 4096,
+          right: 0,
+          top: 0,
+          bottom: 0
+        },
+        expandTarget: {
+          width: 5120,
+          height: 1024
+        }
+      }
+    });
+    const provider = createProvider();
+    const storage = createStorage();
+    const worker = new ImageWorkerService(
+      prisma,
+      createQueue(),
+      provider,
+      storage
+    );
+
+    await worker.processTask("task-1");
+
+    expect(storage.getImage).not.toHaveBeenCalled();
+    expect(provider.edit).not.toHaveBeenCalled();
+  });
+
+  it("skips provider calls when expand is canceled after source and mask preparation", async () => {
+    const prisma = createPrisma({
+      type: "expand",
+      input: {
+        type: "expand",
+        prompt: "extend the scene",
+        assetId: "asset-1",
+        versionId: "version-source",
+        mode: "free",
+        padding: {
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: 16
+        },
+        expandTarget: {
+          width: 1056,
+          height: 1056
+        }
+      },
+      statuses: ["queued", "canceled"]
+    });
+    const provider = createProvider();
+    const storage = createStorage();
+    const worker = new ImageWorkerService(
+      prisma,
+      createQueue(),
+      provider,
+      storage
+    );
+
+    await worker.processTask("task-1");
+
+    expect(storage.getImage).toHaveBeenCalled();
+    expect(provider.edit).not.toHaveBeenCalled();
+    expect(storage.putImage).not.toHaveBeenCalled();
+    expect(prisma.imageVersion.create).not.toHaveBeenCalled();
   });
 
   it("runs an edit task by creating a child version and updating the asset current version", async () => {
@@ -722,4 +933,46 @@ function tinyPng(): Buffer {
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
     "base64"
   );
+}
+
+async function solidPng(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: {
+        r: 64,
+        g: 96,
+        b: 128,
+        alpha: 1
+      }
+    }
+  })
+    .png()
+    .toBuffer();
+}
+
+async function createProviderImageResult(width: number, height: number) {
+  return {
+    bytes: await solidPng(width, height),
+    mimeType: "image/png" as const,
+    width,
+    height,
+    provider: "openai",
+    providerJob: "job-edit",
+    metadata: {
+      model: "gpt-image-1",
+      size: providerSizeForDimensions(width, height),
+      quality: null,
+      estimatedCostUsd: null,
+      revisedPrompt: "safe edited prompt"
+    }
+  };
+}
+
+function providerSizeForDimensions(width: number, height: number): string {
+  if (width > height) return "1536x1024";
+  if (height > width) return "1024x1536";
+  return "1024x1024";
 }

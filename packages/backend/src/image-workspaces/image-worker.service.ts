@@ -12,7 +12,10 @@ import {
   type ImageGenerateSize,
   type ImageProviderAdapter
 } from "./image-provider.types.js";
-import { buildImageExpandEditInput } from "./image-expand-canvas.js";
+import {
+  buildImageExpandEditInput,
+  normalizeImageExpandOutput
+} from "./image-expand-canvas.js";
 import { ImageQueueService } from "./image-queue.service.js";
 import {
   IMAGE_STORAGE,
@@ -57,6 +60,8 @@ type ImageVersionLookupInput = {
 type ImageWorkerTransaction = Parameters<
   Parameters<PrismaService["$transaction"]>[0]
 >[0];
+
+const EXPAND_MAX_DIMENSION = 4096;
 
 @Injectable()
 export class ImageWorkerService {
@@ -221,6 +226,7 @@ export class ImageWorkerService {
 
   private async processImageExpandTask(task: ImageTaskRow): Promise<void> {
     const input = parseExpandTaskInput(task.input);
+    validateStaticExpandInput(input);
     const sourceVersion = await this.findTaskVersion(task, input);
     validateExpandTargetMatchesSource(input, sourceVersion);
     const sourceRef = toStoredImageRef(sourceVersion);
@@ -231,6 +237,8 @@ export class ImageWorkerService {
       padding: input.padding,
       target: input.expandTarget
     });
+    if (await this.isTaskCanceled(task.id)) return;
+
     const size = imageGenerateSizeForTarget(input.expandTarget);
     const generated = await this.provider.edit({
       prompt: expandPrompt(input.prompt),
@@ -240,13 +248,27 @@ export class ImageWorkerService {
     });
     if (await this.isTaskCanceled(task.id)) return;
 
+    const normalized = await normalizeImageExpandOutput({
+      bytes: generated.bytes,
+      target: input.expandTarget
+    });
+    if (await this.isTaskCanceled(task.id)) return;
+
+    const expandedGenerated = {
+      ...generated,
+      bytes: normalized.bytes,
+      mimeType: "image/png" as const,
+      width: normalized.width,
+      height: normalized.height
+    };
+
     const stored = await this.storage.putImage({
       userId: task.userId,
       workspaceId: task.workspaceId,
       taskId: task.id,
       filename: `${task.id}.png`,
-      bytes: generated.bytes,
-      mimeType: generated.mimeType
+      bytes: expandedGenerated.bytes,
+      mimeType: expandedGenerated.mimeType
     });
     if (await this.cleanupStoredImageIfCanceled(task.id, stored)) return;
 
@@ -254,7 +276,7 @@ export class ImageWorkerService {
       task,
       input,
       sourceVersion,
-      generated,
+      expandedGenerated,
       stored,
       size
     );
@@ -278,7 +300,7 @@ export class ImageWorkerService {
         objectIds: version.objectIds
       });
     }
-    await this.emitUsageEvent(task, generated, {
+    await this.emitUsageEvent(task, expandedGenerated, {
       quality: null,
       size
     });
@@ -610,8 +632,8 @@ export class ImageWorkerService {
     size: ImageGenerateSize
   ): Promise<{ objectIds: string[]; versionId: string }> {
     return this.prisma.$transaction(async (tx) => {
-      const width = stored.width || generated.width;
-      const height = stored.height || generated.height;
+      const width = input.expandTarget.width;
+      const height = input.expandTarget.height;
       const version = await tx.imageVersion.create({
         data: {
           assetId: input.assetId,
@@ -783,11 +805,14 @@ function parseExpandTaskInput(input: unknown): ExpandTaskInput {
   const target = parseExpandTarget(record.expandTarget ?? record.target);
   const padding = parseExpandPadding(record.padding);
   const mode = parseExpandMode(record.mode);
-  const direction = parseExpandDirection(record.direction);
+  const direction =
+    record.direction === undefined || record.direction === null
+      ? undefined
+      : parseExpandDirection(record.direction);
   const aspectRatio = isImageAspectRatio(record.aspectRatio)
     ? record.aspectRatio
     : undefined;
-  const percent = parseOptionalPositiveNumber(record.percent);
+  const percent = parseOptionalExpandPercent(record.percent);
   const parsed: ExpandTaskInput = {
     prompt: typeof record.prompt === "string" && record.prompt.trim()
       ? record.prompt.trim()
@@ -883,6 +908,89 @@ function validateExpandTargetMatchesSource(
   }
 }
 
+function validateStaticExpandInput(input: ExpandTaskInput): void {
+  if (
+    input.expandTarget.width > EXPAND_MAX_DIMENSION ||
+    input.expandTarget.height > EXPAND_MAX_DIMENSION
+  ) {
+    throw new Error("Invalid expand target dimensions");
+  }
+
+  if (
+    input.padding.left +
+      input.padding.right +
+      input.padding.top +
+      input.padding.bottom <=
+    0
+  ) {
+    throw new Error("Invalid expand padding");
+  }
+
+  if (input.mode === "direction") {
+    if (!input.direction || input.percent === undefined) {
+      throw new Error("Invalid expand direction");
+    }
+    validateDirectionPadding(input.direction, input.padding);
+  } else {
+    if (input.direction || input.percent !== undefined) {
+      throw new Error("Invalid expand direction");
+    }
+  }
+
+  if (input.mode === "ratio") {
+    if (!input.aspectRatio) throw new Error("Invalid expand aspect ratio");
+    validateAspectRatioTarget(input.aspectRatio, input.expandTarget);
+  } else if (input.aspectRatio) {
+    throw new Error("Invalid expand aspect ratio");
+  }
+}
+
+function validateDirectionPadding(
+  direction: NonNullable<ExpandTaskInput["direction"]>,
+  padding: ExpandTaskInput["padding"]
+): void {
+  if (direction === "around") {
+    const paddedSideCount = [
+      padding.left,
+      padding.right,
+      padding.top,
+      padding.bottom
+    ].filter((side) => side > 0).length;
+    if (paddedSideCount >= 2) return;
+    throw new Error("Invalid expand direction");
+  }
+
+  const expected = {
+    left: direction === "left" ? padding.left : 0,
+    right: direction === "right" ? padding.right : 0,
+    top: direction === "top" ? padding.top : 0,
+    bottom: direction === "bottom" ? padding.bottom : 0
+  };
+  const matchesDirection =
+    (direction !== "left" || expected.left > 0) &&
+    (direction !== "right" || expected.right > 0) &&
+    (direction !== "top" || expected.top > 0) &&
+    (direction !== "bottom" || expected.bottom > 0) &&
+    padding.left === expected.left &&
+    padding.right === expected.right &&
+    padding.top === expected.top &&
+    padding.bottom === expected.bottom;
+
+  if (!matchesDirection) throw new Error("Invalid expand direction");
+}
+
+function validateAspectRatioTarget(
+  aspectRatio: ImageAspectRatio,
+  target: ExpandTaskInput["expandTarget"]
+): void {
+  const [ratioWidth, ratioHeight] = aspectRatio
+    .split(":")
+    .map((part) => Number.parseInt(part, 10));
+  if (target.width * ratioHeight !== target.height * ratioWidth) {
+    throw new Error("Invalid expand aspect ratio");
+  }
+}
+
 function expandPrompt(prompt: string): string {
   return [
     "请自然扩展图片画面，保持原图主体、风格、透视和光照一致。",
@@ -975,8 +1083,9 @@ function parseTarget(value: unknown): { x: number; y: number } {
 }
 
 function parseExpandMode(value: unknown): ExpandTaskInput["mode"] {
+  if (value === undefined || value === null || value === "free") return "free";
   if (value === "ratio" || value === "direction") return value;
-  return "free";
+  throw new Error("Invalid expand mode");
 }
 
 function parseExpandDirection(
@@ -991,7 +1100,7 @@ function parseExpandDirection(
   ) {
     return value;
   }
-  return undefined;
+  throw new Error("Invalid expand direction");
 }
 
 function parseExpandPadding(value: unknown): ExpandTaskInput["padding"] {
@@ -1012,9 +1121,14 @@ function parseExpandTarget(value: unknown): ExpandTaskInput["expandTarget"] {
   };
 }
 
-function parseOptionalPositiveNumber(value: unknown): number | null {
+function parseOptionalExpandPercent(value: unknown): number | null {
   if (value === undefined || value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0.1 &&
+    value <= 1
+  ) {
     return value;
   }
   throw new Error("Invalid expand percent");

@@ -74,6 +74,27 @@ export async function buildImageExpandEditInput(input: {
   };
 }
 
+export async function normalizeImageExpandOutput(input: {
+  bytes: Buffer;
+  target: ImageExpandTarget;
+}): Promise<{
+  bytes: Buffer;
+  width: number;
+  height: number;
+}> {
+  const bytes = await sharp(input.bytes)
+    .resize(input.target.width, input.target.height, {
+      fit: "fill"
+    })
+    .png()
+    .toBuffer();
+  return {
+    bytes,
+    width: input.target.width,
+    height: input.target.height
+  };
+}
+
 async function renderImageExpandCanvas(
   input: ImageExpandRendererInput
 ): Promise<ImageExpandRendererOutput> {
@@ -113,29 +134,29 @@ async function renderImageExpandCanvas(
       height: input.source.height,
       channels: 4,
       background: {
-        r: 0,
-        g: 0,
-        b: 0,
-        alpha: 0
+        r: 255,
+        g: 255,
+        b: 255,
+        alpha: 1
       }
     }
   })
     .png()
     .toBuffer();
 
-  // OpenAI image-edit masks treat transparent pixels as protected source and
-  // opaque/white pixels as editable. The expansion area is therefore white,
-  // while the original image rectangle remains transparent.
+  // OpenAI image-edit masks treat transparent pixels as editable and
+  // opaque pixels as protected. The expansion area stays transparent,
+  // while the original image rectangle is opaque.
   const maskBytes = await sharp({
     create: {
       width: input.target.width,
       height: input.target.height,
       channels: 4,
       background: {
-        r: 255,
-        g: 255,
-        b: 255,
-        alpha: 1
+        r: 0,
+        g: 0,
+        b: 0,
+        alpha: 0
       }
     }
   })
