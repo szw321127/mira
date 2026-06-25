@@ -23,6 +23,14 @@ test("chat thread shows assistant error details in the failed message", () => {
   assert.match(chatThreadSource, /text-\[var\(--danger\)\]/);
 });
 
+test("chat thread renders user image attachments as thumbnails", () => {
+  assert.match(chatThreadSource, /message\.attachments\?\.length/);
+  assert.match(chatThreadSource, /message\.attachments\.map/);
+  assert.match(chatThreadSource, /<img/);
+  assert.match(chatThreadSource, /src=\{attachment\.dataUrl\}/);
+  assert.match(chatThreadSource, /alt=\{attachment\.name/);
+});
+
 test("context dock remains responsible for agent event rows", () => {
   assert.match(contextDockSource, /\bAgentEventRow\b/);
   assert.match(contextDockSource, /event\.type !== "text-delta"/);

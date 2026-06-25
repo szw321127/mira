@@ -98,6 +98,7 @@ model Message {
   conversationId String
   role           MessageRole
   content        String
+  attachments    Json          @default("[]")
   status         MessageStatus?
   events         Json          @default("[]")
   createdAt      DateTime      @default(now())

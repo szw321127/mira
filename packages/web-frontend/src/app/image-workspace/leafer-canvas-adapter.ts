@@ -1078,7 +1078,9 @@ async function createLoadedLeaferCanvasController({
       if (!asset || !version) return;
 
       selectedNode.set({
+        height: version.height,
         url: createCanvasImageUrl(asset, version),
+        width: version.width,
       });
       selectedNode.__mira = {
         ...selectedNode.__mira,

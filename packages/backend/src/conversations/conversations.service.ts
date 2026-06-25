@@ -15,6 +15,7 @@ type MessageRecord = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments: unknown;
   status: "complete" | "streaming" | "stopped" | "error" | null;
   events: unknown;
   createdAt: Date;
@@ -136,6 +137,7 @@ export class ConversationsService {
               conversationId: id,
               role: message.role,
               content: message.content,
+              attachments: toJsonAttachments(message.attachments),
               ...(message.status ? { status: message.status } : {}),
               events: toJsonEvents(message.events),
               ...(message.createdAt ? { createdAt: new Date(message.createdAt) } : {})
@@ -172,6 +174,7 @@ export class ConversationsService {
               conversationId: created.id,
               role: message.role,
               content: message.content,
+              attachments: toJsonAttachments(message.attachments),
               ...(message.status ? { status: message.status } : {}),
               events: toJsonEvents(message.events),
               ...(message.createdAt ? { createdAt: new Date(message.createdAt) } : {})
@@ -200,6 +203,7 @@ function serializeMessage(message: MessageRecord): PersistedChatMessage {
     id: message.id,
     role: message.role,
     content: message.content,
+    attachments: Array.isArray(message.attachments) ? message.attachments : [],
     ...(message.status ? { status: message.status } : {}),
     events: Array.isArray(message.events) ? message.events : [],
     createdAt: message.createdAt.toISOString()
@@ -208,4 +212,8 @@ function serializeMessage(message: MessageRecord): PersistedChatMessage {
 
 function toJsonEvents(events: unknown): Prisma.InputJsonValue {
   return (Array.isArray(events) ? events : []) as Prisma.InputJsonValue;
+}
+
+function toJsonAttachments(attachments: unknown): Prisma.InputJsonValue {
+  return (Array.isArray(attachments) ? attachments : []) as Prisma.InputJsonValue;
 }

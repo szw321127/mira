@@ -16,7 +16,7 @@ import { ContextDock } from "./context-dock";
 import { ConversationRail } from "./conversation-rail";
 import { IconButton } from "./icon-button";
 import { isScrolledNearBottom, scrollElementToBottom } from "./scroll-follow";
-import type { Conversation, SendState } from "./types";
+import type { ChatImageAttachment, Conversation, SendState } from "./types";
 
 export function AgentWorkspaceShell({
   activeConversation,
@@ -40,7 +40,7 @@ export function AgentWorkspaceShell({
   onRename: (id: string, title: string) => void;
   onRetry: () => void;
   onSelect: (id: string) => void;
-  onSend: (value: string) => void;
+  onSend: (value: string, attachments?: ChatImageAttachment[]) => void;
   onStop: () => void;
   sendState: SendState;
   storageWarning: string | null;

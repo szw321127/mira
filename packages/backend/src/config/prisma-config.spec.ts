@@ -35,6 +35,12 @@ describe("prisma.config", () => {
       ),
       "utf8",
     );
+    const attachmentMigration = readFileSync(
+      resolve(
+        "prisma/migrations/20260625000100_add_message_attachments/migration.sql",
+      ),
+      "utf8",
+    );
 
     expect(schema).toContain("enum UserStatus");
     expect(schema).toContain("enum MessageRole");
@@ -44,6 +50,7 @@ describe("prisma.config", () => {
     expect(schema).toContain("model UserSession");
     expect(schema).toContain("model Conversation");
     expect(schema).toContain("model Message");
+    expect(schema).toMatch(/attachments\s+Json/);
     expect(schema).toContain("  expand");
 
     expect(migration).toContain('CREATE TABLE "users"');
@@ -51,5 +58,6 @@ describe("prisma.config", () => {
     expect(migration).toContain('CREATE TABLE "user_sessions"');
     expect(migration).toContain('CREATE TABLE "conversations"');
     expect(migration).toContain('CREATE TABLE "messages"');
+    expect(attachmentMigration).toContain('ALTER TABLE "messages" ADD COLUMN "attachments"');
   });
 });

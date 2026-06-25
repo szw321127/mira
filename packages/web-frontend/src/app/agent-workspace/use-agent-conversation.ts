@@ -25,6 +25,7 @@ import {
 import { createId, parseAgentStreamEvent, parseStreamLines } from "./streaming";
 import type {
   AgentStreamEvent,
+  ChatImageAttachment,
   ChatEvent,
   ChatMessage,
   Conversation,
@@ -396,14 +397,21 @@ export function useAgentConversation(user: AuthUser | null) {
   }, []);
 
   const sendMessage = useCallback(
-    async (input: string) => {
+    async (input: string, attachments: ChatImageAttachment[] = []) => {
       const content = input.trim();
-      if (!content || sendState === "streaming" || !activeConversation) return;
+      if (
+        (!content && attachments.length === 0) ||
+        sendState === "streaming" ||
+        !activeConversation
+      ) {
+        return;
+      }
 
       const userMessage: ChatMessage = {
         id: createId("msg"),
         role: "user",
         content,
+        attachments,
         createdAt: now(),
         events: [],
       };
@@ -458,6 +466,7 @@ export function useAgentConversation(user: AuthUser | null) {
               (message) => ({
                 role: message.role,
                 content: message.content,
+                attachments: message.attachments ?? [],
               }),
             ),
           }),
@@ -577,7 +586,9 @@ export function useAgentConversation(user: AuthUser | null) {
         return message.role === "user";
       });
 
-    if (lastUserMessage) void sendMessage(lastUserMessage.content);
+    if (lastUserMessage) {
+      void sendMessage(lastUserMessage.content, lastUserMessage.attachments ?? []);
+    }
   }, [activeConversation, sendMessage]);
 
   return {

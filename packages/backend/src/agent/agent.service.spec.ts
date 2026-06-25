@@ -64,6 +64,60 @@ describe("AgentService", () => {
     expect(events).toEqual([{ type: "text-delta", text: "  最新问题  " }]);
   });
 
+  it("converts chat image attachments into model image parts", async () => {
+    const runEvents = jest.fn(async function* () {
+      await Promise.resolve();
+      yield { type: "stop", reason: "complete" };
+    });
+    const createHarness = jest.fn(() => ({ runEvents }));
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => "registry"),
+        createHarness
+      },
+      createRuntimeSecrets()
+    );
+    const attachment = {
+      id: "att-1",
+      type: "image" as const,
+      name: "source.png",
+      mimeType: "image/png",
+      dataUrl: "data:image/png;base64,aGVsbG8=",
+      sizeBytes: 5
+    };
+
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [
+        { role: "user", content: "第一张", attachments: [attachment] },
+        { role: "assistant", content: "已收到" },
+        { role: "user", content: "  看这张  ", attachments: [attachment] }
+      ]
+    })) {
+      expect(event).toBeDefined();
+    }
+
+    expect(createHarness).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "第一张" },
+              { type: "image", image: "aGVsbG8=", mediaType: "image/png" }
+            ]
+          },
+          { role: "assistant", content: "已收到" }
+        ]
+      })
+    );
+    expect(runEvents).toHaveBeenCalledWith([
+      { type: "text", text: "  看这张  " },
+      { type: "image", image: "aGVsbG8=", mediaType: "image/png" }
+    ]);
+  });
+
   it("does not read model or search keys from process.env", async () => {
     const originalEnv = { ...process.env };
     process.env = {

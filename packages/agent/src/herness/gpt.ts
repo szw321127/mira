@@ -1,4 +1,4 @@
-import { LanguageModel, ModelMessage } from 'ai';
+import { LanguageModel, ModelMessage, UserContent } from 'ai';
 import {
   applyDefense,
   coreRules,
@@ -65,14 +65,14 @@ export function createGPTAgentHarness({
   }
 
   async function* runEvents(
-    content: string,
+    content: UserContent,
   ): AsyncGenerator<AgentLoopEvent, void, void> {
-    const trimmed = content.trim();
-    if (!trimmed) {
+    const normalizedContent = normalizeUserContent(content);
+    if (!normalizedContent) {
       throw new Error('input is empty');
     }
 
-    messages.push({ role: 'user', content: trimmed });
+    messages.push({ role: 'user', content: normalizedContent });
     const beforeLen = messages.length - 1;
 
     try {
@@ -139,4 +139,18 @@ export function createGPTAgentHarness({
     reset,
     close,
   };
+}
+
+function normalizeUserContent(content: UserContent): UserContent | null {
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  const hasContent = content.some((part) => {
+    return part.type === 'text'
+      ? part.text.trim().length > 0
+      : part.type === 'image' || part.type === 'file';
+  });
+  return hasContent ? content : null;
 }

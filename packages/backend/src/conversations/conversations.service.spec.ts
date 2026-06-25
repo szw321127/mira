@@ -19,6 +19,7 @@ type MessageRow = {
   conversationId: string;
   role: "user" | "assistant";
   content: string;
+  attachments: unknown;
   status: "complete" | "streaming" | "stopped" | "error" | null;
   events: unknown;
   createdAt: Date;
@@ -171,6 +172,7 @@ describe("ConversationsService", () => {
               id: "m1",
               role: "user",
               content: "hi",
+              attachments: [],
               status: "complete",
               events: [{ type: "sent" }],
               createdAt: "2026-06-22T09:01:00.000Z"
@@ -179,6 +181,7 @@ describe("ConversationsService", () => {
               id: "m2",
               role: "assistant",
               content: "there",
+              attachments: [],
               events: [],
               createdAt: "2026-06-22T09:02:00.000Z"
             }
@@ -211,6 +214,16 @@ describe("ConversationsService", () => {
         id: "client-user-message",
         role: "user",
         content: "new prompt",
+        attachments: [
+          {
+            id: "att-1",
+            type: "image",
+            name: "source.png",
+            mimeType: "image/png",
+            dataUrl: "data:image/png;base64,aGVsbG8=",
+            sizeBytes: 5
+          }
+        ],
         status: "complete",
         events: [{ type: "submitted" }],
         createdAt: "2026-06-22T10:01:00.000Z"
@@ -219,6 +232,7 @@ describe("ConversationsService", () => {
         id: "client-assistant-message",
         role: "assistant",
         content: "new answer",
+        attachments: [],
         status: "stopped",
         events: [{ type: "stop", reason: "manual" }],
         createdAt: "2026-06-22T10:02:00.000Z"
@@ -284,6 +298,7 @@ function message(
     conversationId,
     role,
     content,
+    attachments: [],
     status: "complete",
     events: [],
     createdAt: new Date(createdAt),

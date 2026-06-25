@@ -80,3 +80,21 @@ test("workspace hook creates remote conversations only for optimistic local ids"
     /if \(!optimisticConversationIdsRef\.current\.has\(id\)\) \{\s*return Promise\.resolve\(id\);\s*\}/,
   );
 });
+
+test("agent workspace supports image attachments from upload drop and paste", () => {
+  const typesSource = readWorkspaceFile("types.ts");
+  const composerSource = readWorkspaceFile("composer.tsx");
+  const hookSource = readWorkspaceFile("use-agent-conversation.ts");
+
+  assert.match(typesSource, /export type ChatImageAttachment/);
+  assert.match(typesSource, /attachments\?: ChatImageAttachment\[\]/);
+  assert.match(typesSource, /AgentChatRequest[\s\S]*attachments\?: ChatImageAttachment\[\]/);
+  assert.match(composerSource, /ImageUploadInput/);
+  assert.match(composerSource, /ImagePlus/);
+  assert.match(composerSource, /onSend\(message,\s*attachments\)/);
+  assert.match(composerSource, /clearAttachments/);
+  assert.match(composerSource, /removeAttachment/);
+  assert.match(hookSource, /sendMessage[\s\S]*attachments: ChatImageAttachment\[\] = \[\]/);
+  assert.match(hookSource, /attachments,\s*createdAt/);
+  assert.match(hookSource, /attachments: message\.attachments \?\? \[\]/);
+});

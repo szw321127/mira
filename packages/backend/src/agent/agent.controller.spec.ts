@@ -121,4 +121,33 @@ describe("AgentController", () => {
     );
     expect(requireUser).toHaveBeenCalledWith("session-token");
   });
+
+  it("accepts image attachments on user chat messages", async () => {
+    streamChat.mockImplementationOnce(async function* () {
+      await Promise.resolve();
+      yield { type: "stop", reason: "complete" };
+    });
+    const attachment = {
+      id: "att-1",
+      type: "image",
+      name: "source.png",
+      mimeType: "image/png",
+      dataUrl: "data:image/png;base64,aGVsbG8=",
+      sizeBytes: 5
+    };
+
+    await request(server)
+      .post("/agent/chat")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({
+        conversationId: "c1",
+        messages: [{ role: "user", content: "看图", attachments: [attachment] }]
+      })
+      .expect(200);
+
+    expect(streamChat).toHaveBeenCalledWith({
+      conversationId: "c1",
+      messages: [{ role: "user", content: "看图", attachments: [attachment] }]
+    });
+  });
 });

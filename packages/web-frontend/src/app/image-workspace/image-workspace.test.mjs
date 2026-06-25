@@ -882,11 +882,11 @@ test("image workspace uploads local source images into the active canvas", () =>
   assert.match(hookSource, /replaceWorkspace\(workspace\)/);
   assert.match(shellSource, /onUploadSourceAsset/);
   assert.match(inspectorSource, /onUploadSourceAsset/);
+  assert.match(panelSource, /ImageUploadInput/);
   assert.match(panelSource, /Upload/);
   assert.match(panelSource, /上传源图到画布/);
   assert.match(panelSource, /accept="image\/png,image\/jpeg,image\/webp"/);
-  assert.match(panelSource, /className="sr-only"/);
-  assert.match(panelSource, /type="file"/);
+  assert.match(panelSource, /onFiles=\{handleFiles\}/);
   assert.doesNotMatch(panelSource, /storageKey|maskKey/);
   assert.doesNotMatch(
     apiSource.slice(
@@ -903,6 +903,22 @@ test("image source upload validates data URLs before calling the workspace asset
   assert.match(hookSource, /assertSourceDataUrl\(dataUrl,\s*file\)/);
   assert.match(hookSource, /dataUrl\.startsWith\(`data:\$\{file\.type\};base64,`\)/);
   assert.match(hookSource, /源图读取结果无效/);
+});
+
+test("shared image upload input handles click upload drag drop and paste", () => {
+  const inputSource = readAppFile("components/image-upload-input.tsx");
+
+  assert.match(inputSource, /export function ImageUploadInput/);
+  assert.match(inputSource, /onDrop/);
+  assert.match(inputSource, /onDragOver/);
+  assert.match(inputSource, /onPaste/);
+  assert.match(inputSource, /clipboardData\.items/);
+  assert.match(inputSource, /dataTransfer\.files/);
+  assert.match(inputSource, /type="file"/);
+  assert.match(inputSource, /accept=\{accept\}/);
+  assert.match(inputSource, /className="sr-only"/);
+  assert.match(inputSource, /isSupportedImageFile/);
+  assert.match(inputSource, /readImageFileAsDataUrl/);
 });
 
 test("asset version panel supports drawing and uploading an edit mask", () => {
@@ -1009,6 +1025,8 @@ test("asset version panel switches the selected canvas image version without glo
   assert.match(adapterSource, /readCanvasObjectVersionId/);
   assert.match(adapterSource, /createImageVersionPreviewUrl\(asset\.id,\s*version\.id\)/);
   assert.match(adapterSource, /setSelectedAssetVersion/);
+  assert.match(adapterSource, /width:\s*version\.width/);
+  assert.match(adapterSource, /height:\s*version\.height/);
   assert.match(adapterSource, /props:\s*\{[\s\S]*versionId:/);
   assert.match(shellSource, /selectedVersionId/);
   assert.match(shellSource, /onSelectVersion/);

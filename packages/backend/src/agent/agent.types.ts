@@ -1,6 +1,16 @@
 export type AgentChatMessage = {
   role: "user" | "assistant";
   content: string;
+  attachments?: AgentChatImageAttachment[];
+};
+
+export type AgentChatImageAttachment = {
+  id: string;
+  type: "image";
+  name: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  dataUrl: string;
+  sizeBytes: number;
 };
 
 export type AgentChatRequest = {
@@ -41,10 +51,16 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest | null {
     if (!message || typeof message !== "object") return false;
     const record = message as Record<string, unknown>;
 
-    return (
-      (record.role === "user" || record.role === "assistant") &&
-      typeof record.content === "string"
-    );
+    if (
+      (record.role !== "user" && record.role !== "assistant") ||
+      typeof record.content !== "string"
+    ) {
+      return false;
+    }
+
+    if (record.attachments === undefined) return true;
+    if (!Array.isArray(record.attachments)) return false;
+    return record.attachments.every(isAgentChatImageAttachment);
   });
 
   if (!validMessages) return null;
@@ -53,4 +69,33 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest | null {
     conversationId: request.conversationId,
     messages: request.messages as AgentChatMessage[]
   };
+}
+
+function isAgentChatImageAttachment(
+  value: unknown
+): value is AgentChatImageAttachment {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.id === "string" &&
+    record.type === "image" &&
+    typeof record.name === "string" &&
+    isSupportedImageMimeType(record.mimeType) &&
+    typeof record.dataUrl === "string" &&
+    record.dataUrl.startsWith(`data:${record.mimeType};base64,`) &&
+    typeof record.sizeBytes === "number" &&
+    Number.isFinite(record.sizeBytes) &&
+    record.sizeBytes >= 0
+  );
+}
+
+function isSupportedImageMimeType(
+  value: unknown
+): value is AgentChatImageAttachment["mimeType"] {
+  return (
+    value === "image/png" ||
+    value === "image/jpeg" ||
+    value === "image/webp"
+  );
 }

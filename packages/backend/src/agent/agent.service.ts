@@ -1,12 +1,16 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import type { LanguageModel, ModelMessage } from "ai";
+import type { LanguageModel, ModelMessage, UserContent } from "ai";
 import type { ToolRegistry } from "@rednote/agent";
 import {
   RuntimeSecretsService,
   type RuntimeModelConfig,
   type RuntimeSearchConfig
 } from "../admin/runtime-secrets.service.js";
-import type { AgentChatRequest, AgentStreamEvent } from "./agent.types.js";
+import type {
+  AgentChatImageAttachment,
+  AgentChatRequest,
+  AgentStreamEvent
+} from "./agent.types.js";
 import { normalizeAgentEvent } from "./agent-event-normalizer.js";
 import { createAgentModel } from "./model-factory.js";
 import {
@@ -54,7 +58,10 @@ export class AgentService {
     request: AgentChatRequest
   ): AsyncGenerator<AgentStreamEvent, void, void> {
     const lastUserMessage = [...request.messages].reverse().find((message) => {
-      return message.role === "user" && message.content.trim();
+      return (
+        message.role === "user" &&
+        (message.content.trim() || (message.attachments?.length ?? 0) > 0)
+      );
     });
 
     if (!lastUserMessage) {
@@ -77,7 +84,9 @@ export class AgentService {
 
     let eventIndex = 0;
 
-    for await (const event of harness.runEvents(lastUserMessage.content)) {
+    for await (const event of harness.runEvents(
+      this.toUserContent(lastUserMessage)
+    )) {
       const normalized = normalizeAgentEvent(event, eventIndex);
       eventIndex += 1;
       yield normalized;
@@ -89,10 +98,39 @@ export class AgentService {
     target: AgentChatRequest["messages"][number]
   ): ModelMessage[] {
     const index = messages.lastIndexOf(target);
-    return messages.slice(0, index).map((message) => ({
-      role: message.role,
-      content: message.content
-    }));
+    return messages.slice(0, index).map((message) => {
+      if (message.role === "user") {
+        return {
+          role: message.role,
+          content: this.toUserContent(message)
+        };
+      }
+
+      return {
+        role: message.role,
+        content: message.content
+      };
+    });
+  }
+
+  private toUserContent(
+    message: AgentChatRequest["messages"][number]
+  ): UserContent {
+    const attachments = message.attachments ?? [];
+    if (attachments.length === 0) return message.content;
+
+    return [
+      { type: "text", text: message.content },
+      ...attachments.map((attachment) => this.toImagePart(attachment))
+    ];
+  }
+
+  private toImagePart(attachment: AgentChatImageAttachment) {
+    return {
+      type: "image" as const,
+      image: readBase64DataUrlPayload(attachment.dataUrl),
+      mediaType: attachment.mimeType
+    };
   }
 
   private async getModelConfig(): Promise<RuntimeModelConfig> {
@@ -108,4 +146,9 @@ export class AgentService {
       tavilyApiKey: ""
     };
   }
+}
+
+function readBase64DataUrlPayload(dataUrl: string) {
+  const commaIndex = dataUrl.indexOf(",");
+  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }

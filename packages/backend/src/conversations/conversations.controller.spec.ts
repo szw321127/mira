@@ -132,6 +132,7 @@ describe("ConversationsController", () => {
         id: "m1",
         role: "user",
         content: "hello",
+        attachments: [],
         status: "complete",
         events: [{ type: "submitted" }],
         createdAt: "2026-06-22T10:01:00.000Z"

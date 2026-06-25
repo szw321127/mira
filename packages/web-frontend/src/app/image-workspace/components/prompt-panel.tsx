@@ -1,7 +1,10 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Loader2, Sparkles, Upload, XCircle } from "lucide-react";
+import {
+  ImageUploadInput,
+} from "../../components/image-upload-input";
 import type {
   ImageGenerationSettings,
   ImageTask,
@@ -69,9 +72,8 @@ export function PromptPanel({
     onGenerate(prompt, settings);
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  function handleFiles(files: File[]) {
+    const file = files[0];
     if (file) void onUploadSourceAsset(file);
   }
 
@@ -133,17 +135,29 @@ export function PromptPanel({
           中断当前任务
         </button>
       ) : null}
-      <label className="mt-2 inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-3 text-sm font-[700] transition-colors hover:bg-[var(--surface-muted)] has-disabled:cursor-not-allowed has-disabled:opacity-55">
-        <Upload aria-hidden="true" size={16} />
-        上传源图到画布
-        <input
-          accept="image/png,image/jpeg,image/webp"
-          className="sr-only"
-          disabled={creatingTask || !activeWorkspace}
-          onChange={handleFileChange}
-          type="file"
-        />
-      </label>
+      <ImageUploadInput
+        accept="image/png,image/jpeg,image/webp"
+        className="mt-2"
+        disabled={creatingTask || !activeWorkspace}
+        multiple={false}
+        onFiles={handleFiles}
+      >
+        {({ dragging, openFileDialog }) => (
+          <button
+            className={`inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[8px] border px-3 text-sm font-[700] transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+              dragging
+                ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-strong)]"
+                : "border-[var(--border)] bg-[var(--surface-raised)] hover:bg-[var(--surface-muted)]"
+            }`}
+            disabled={creatingTask || !activeWorkspace}
+            onClick={openFileDialog}
+            type="button"
+          >
+            <Upload aria-hidden="true" size={16} />
+            上传源图到画布
+          </button>
+        )}
+      </ImageUploadInput>
       {error ? (
         <div className="mt-3 rounded-[8px] border border-[var(--danger)] bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
           {error}

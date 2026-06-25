@@ -5,9 +5,19 @@ export type PersistedChatMessage = {
   id?: string;
   role: ChatMessageRole;
   content: string;
+  attachments?: PersistedChatImageAttachment[];
   status?: ChatMessageStatus;
   events?: unknown[];
   createdAt?: string;
+};
+
+export type PersistedChatImageAttachment = {
+  id: string;
+  type: "image";
+  name: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  dataUrl: string;
+  sizeBytes: number;
 };
 
 export function parseTitle(body: unknown): string | null {
@@ -46,6 +56,10 @@ export function parseMessages(body: unknown): PersistedChatMessage[] | null {
       return null;
     }
 
+    if (raw.attachments !== undefined && !isMessageAttachments(raw.attachments)) {
+      return null;
+    }
+
     if (
       raw.createdAt !== undefined &&
       (typeof raw.createdAt !== "string" || !isValidDateString(raw.createdAt))
@@ -57,6 +71,7 @@ export function parseMessages(body: unknown): PersistedChatMessage[] | null {
       ...(typeof raw.id === "string" ? { id: raw.id } : {}),
       role: raw.role,
       content: raw.content,
+      attachments: isMessageAttachments(raw.attachments) ? raw.attachments : [],
       ...(isMessageStatus(raw.status) ? { status: raw.status } : {}),
       events: Array.isArray(raw.events) ? raw.events : [],
       ...(typeof raw.createdAt === "string" ? { createdAt: raw.createdAt } : {})
@@ -76,6 +91,40 @@ function isMessageStatus(value: unknown): value is ChatMessageStatus {
     value === "streaming" ||
     value === "stopped" ||
     value === "error"
+  );
+}
+
+function isMessageAttachments(
+  value: unknown
+): value is PersistedChatImageAttachment[] {
+  if (value === undefined) return false;
+  if (!Array.isArray(value)) return false;
+  return value.every(isMessageAttachment);
+}
+
+function isMessageAttachment(value: unknown): value is PersistedChatImageAttachment {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    record.type === "image" &&
+    typeof record.name === "string" &&
+    isSupportedImageMimeType(record.mimeType) &&
+    typeof record.dataUrl === "string" &&
+    record.dataUrl.startsWith(`data:${record.mimeType};base64,`) &&
+    typeof record.sizeBytes === "number" &&
+    Number.isFinite(record.sizeBytes) &&
+    record.sizeBytes >= 0
+  );
+}
+
+function isSupportedImageMimeType(
+  value: unknown
+): value is PersistedChatImageAttachment["mimeType"] {
+  return (
+    value === "image/png" ||
+    value === "image/jpeg" ||
+    value === "image/webp"
   );
 }
 

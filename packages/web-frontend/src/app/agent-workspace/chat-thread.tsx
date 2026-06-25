@@ -43,6 +43,22 @@ function MessageBlock({ message }: { message: ChatMessage }) {
         <span>{isUser ? "你" : "Mira Agent"}</span>
         <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       </div>
+      {message.attachments?.length ? (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {message.attachments.map((attachment) => (
+            <div
+              className="h-24 w-24 overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)]"
+              key={attachment.id}
+            >
+              <img
+                alt={attachment.name || "上传图片"}
+                className="h-full w-full object-cover"
+                src={attachment.dataUrl}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
       {message.content ? (
         renderMarkdown ? (
           <MarkdownRenderer content={message.content} />

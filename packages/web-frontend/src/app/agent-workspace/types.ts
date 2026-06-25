@@ -25,10 +25,20 @@ export type ChatEvent = AgentStreamEvent & {
   createdAt: string;
 };
 
+export type ChatImageAttachment = {
+  id: string;
+  type: "image";
+  name: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  dataUrl: string;
+  sizeBytes: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: ChatImageAttachment[];
   createdAt: string;
   status?: "streaming" | "complete" | "error" | "stopped";
   events: ChatEvent[];
@@ -51,7 +61,11 @@ export type SendState = "idle" | "streaming" | "error";
 
 export type AgentChatRequest = {
   conversationId: string;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+    attachments?: ChatImageAttachment[];
+  }>;
 };
 
 export type AgentChatError = {
