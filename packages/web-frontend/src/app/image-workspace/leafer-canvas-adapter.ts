@@ -580,7 +580,7 @@ async function createLoadedLeaferCanvasController({
 
     for (const stroke of strokes) {
       const pen = drawMaskStrokePen(
-        new Pen({
+        new Pen().setStyle({
           hitChildren: false,
           hitSelf: false,
           hittable: false,

@@ -444,6 +444,8 @@ test("leafer mask brush uses the official Pen element", () => {
   assert.match(adapterSource, /App, Ellipse, Group, Image, Pen, PointerEvent/);
   assert.match(adapterSource, /import type \{[\s\S]*IPen[\s\S]*\} from "leafer-ui"/);
   assert.match(adapterSource, /new Pen\(/);
+  assert.match(adapterSource, /new Pen\(\)\.setStyle\(/);
+  assert.doesNotMatch(adapterSource, /new Pen\(\s*\{/);
   assert.match(adapterSource, /drawMaskStrokePen/);
   assert.match(adapterSource, /\.moveTo\(/);
   assert.match(adapterSource, /\.lineTo\(/);
