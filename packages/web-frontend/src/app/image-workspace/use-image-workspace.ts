@@ -28,13 +28,20 @@ import type { ImageExpandRequest } from "./workspace-api";
 import { useImageTaskStream } from "./use-image-task-stream";
 import type {
   CanvasSnapshot,
+  ImageAsset,
   ImageGenerationSettings,
   ImageTask,
   ImageTaskEvent,
   ImageWorkspace,
 } from "./types";
+import type { CanvasAssetSelection } from "./leafer-canvas-types";
 
 const IMAGE_TASK_HISTORY_LIMIT = 20;
+
+export type ImageSourceUploadResult = {
+  selection: CanvasAssetSelection | null;
+  workspace: ImageWorkspace;
+};
 
 export function useImageWorkspace() {
   const [workspaces, setWorkspaces] = useState<ImageWorkspace[]>([]);
@@ -285,11 +292,11 @@ export function useImageWorkspace() {
     }
   }
 
-  async function uploadSourceAsset(file: File) {
-    if (!activeWorkspace || creatingTask) return;
+  async function uploadSourceAsset(file: File): Promise<ImageSourceUploadResult | null> {
+    if (!activeWorkspace || creatingTask) return null;
     if (!isSupportedSourceImage(file)) {
       setError("请上传 PNG、JPEG 或 WebP 源图");
-      return;
+      return null;
     }
 
     setCreatingTask(true);
@@ -302,8 +309,13 @@ export function useImageWorkspace() {
         title: file.name,
       });
       replaceWorkspace(workspace);
+      return {
+        workspace,
+        selection: findUploadedSourceSelection(activeWorkspace, workspace),
+      };
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "源图上传失败");
+      return null;
     } finally {
       setCreatingTask(false);
     }
@@ -535,6 +547,44 @@ function assertSourceDataUrl(dataUrl: string, file: File) {
   if (!dataUrl.startsWith(`data:${file.type};base64,`)) {
     throw new Error("源图读取结果无效，请重新选择图片");
   }
+}
+
+function findUploadedSourceSelection(
+  previousWorkspace: ImageWorkspace,
+  nextWorkspace: ImageWorkspace,
+): CanvasAssetSelection | null {
+  const previousAssetIds = new Set(previousWorkspace.assets.map((asset) => asset.id));
+  const previousObjectIds = new Set(
+    previousWorkspace.objects.map((object) => object.id),
+  );
+  const uploadedAsset = nextWorkspace.assets.find((asset) => {
+    return !previousAssetIds.has(asset.id) && isSourceUploadAsset(asset);
+  });
+  const uploadedObject = uploadedAsset
+    ? nextWorkspace.objects.find((object) => {
+        return (
+          object.assetId === uploadedAsset.id &&
+          !previousObjectIds.has(object.id) &&
+          object.props?.source === "upload"
+        );
+      })
+    : null;
+  const uploadedVersion = uploadedAsset
+    ? uploadedAsset.versions.find(
+        (version) => version.id === uploadedAsset.currentVersionId,
+      ) ?? uploadedAsset.versions[0] ?? null
+    : null;
+
+  if (!uploadedAsset || !uploadedObject || !uploadedVersion) return null;
+  return {
+    assetId: uploadedAsset.id,
+    objectId: uploadedObject.id,
+    selectedVersionId: uploadedVersion.id,
+  };
+}
+
+function isSourceUploadAsset(asset: ImageAsset) {
+  return asset.metadata.kind === "source_upload";
 }
 
 function updateWorkspaceTask(

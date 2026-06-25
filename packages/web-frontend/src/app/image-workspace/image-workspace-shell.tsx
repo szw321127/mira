@@ -9,6 +9,7 @@ import {
 import { WorkspaceRail } from "./components/workspace-rail";
 import { ImageCanvas } from "./image-canvas";
 import type {
+  CanvasAssetSelection,
   CanvasController,
   LocalEditOverlayState,
   LocalExpandDirection,
@@ -30,6 +31,7 @@ import { useSelectedImageAsset } from "./use-selected-image-asset";
 
 const EMPTY_LOCAL_EDIT_OVERLAY_STATE: LocalEditOverlayState = {
   assetId: null,
+  brushSize: 34,
   dirty: false,
   markerRadius: 96,
   source: null,
@@ -78,6 +80,7 @@ type ImageWorkspaceShellProps = {
   ) => Promise<{ maskId: string; sizeBytes: number }>;
   onUploadSourceAsset: (file: File) => Promise<void> | void;
   onVariationAsset: (assetId: string) => Promise<void> | void;
+  uploadedSourceSelection: CanvasAssetSelection | null;
   workspaces: ImageWorkspace[];
 };
 
@@ -105,9 +108,11 @@ export function ImageWorkspaceShell({
   onUploadMask,
   onUploadSourceAsset,
   onVariationAsset,
+  uploadedSourceSelection,
   workspaces,
 }: ImageWorkspaceShellProps) {
   const canvasControllerRef = useRef<CanvasController | null>(null);
+  const consumedUploadSelectionRef = useRef("");
   const [canvasController, setCanvasController] =
     useState<CanvasController | null>(null);
   const [localEditOverlayState, setLocalEditOverlayState] =
@@ -128,6 +133,42 @@ export function ImageWorkspaceShell({
   } = useSelectedImageAsset(activeWorkspace);
   const activeTask =
     activeWorkspace?.tasks.find((task) => isActiveImageTask(task)) ?? null;
+
+  useEffect(() => {
+    const uploadSelectionKey = [
+      uploadedSourceSelection?.assetId ?? "",
+      uploadedSourceSelection?.objectId ?? "",
+      uploadedSourceSelection?.selectedVersionId ?? "",
+    ].join(":");
+    if (
+      !uploadedSourceSelection?.assetId ||
+      !uploadedSourceSelection.objectId ||
+      !uploadedSourceSelection.selectedVersionId ||
+      !activeWorkspace ||
+      consumedUploadSelectionRef.current === uploadSelectionKey
+    ) {
+      return;
+    }
+
+    const objectExists = activeWorkspace.objects.some((object) => {
+      return (
+        object.id === uploadedSourceSelection.objectId &&
+        object.assetId === uploadedSourceSelection.assetId
+      );
+    });
+    const versionExists = activeWorkspace.assets.some((asset) => {
+      return (
+        asset.id === uploadedSourceSelection.assetId &&
+        asset.versions.some(
+          (version) => version.id === uploadedSourceSelection.selectedVersionId,
+        )
+      );
+    });
+    if (!objectExists || !versionExists) return;
+
+    selectAsset(uploadedSourceSelection);
+    consumedUploadSelectionRef.current = uploadSelectionKey;
+  }, [activeWorkspace, selectAsset, uploadedSourceSelection]);
 
   useEffect(() => {
     if (!canvasController) {

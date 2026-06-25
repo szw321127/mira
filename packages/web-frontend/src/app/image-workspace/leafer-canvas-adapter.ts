@@ -66,6 +66,7 @@ type LocalEditPoint = {
 
 type LocalEditStroke = {
   assetId: string;
+  brushSize: number;
   points: LocalEditPoint[];
   versionId: string;
 };
@@ -102,6 +103,7 @@ type ParsedExpandAspectRatio = { width: number; height: number };
 type LocalEditOverlaySnapshot = {
   activeMaskAssetId: string | null;
   activeMaskVersionId: string | null;
+  brushSize: number;
   currentMaskStroke: LocalEditPoint[] | null;
   marker: LocalEditMarker | null;
   markerRadius: number;
@@ -114,7 +116,9 @@ const DEFAULT_EXPAND_PERCENT = 0.25;
 const EXPAND_HANDLE_SIZE = 10;
 const EXPAND_PROMPT_DEFAULTS = "自然扩展图片画面，保持原图主体、风格和光照一致";
 const DEFAULT_MARKER_RADIUS = 96;
-const MASK_BRUSH_RADIUS = 17;
+const DEFAULT_MASK_BRUSH_SIZE = 34;
+const MIN_MASK_BRUSH_SIZE = 6;
+const MAX_MASK_BRUSH_SIZE = 96;
 const MAX_MARKER_RADIUS = 260;
 const MAX_EXPAND_PADDING = 8192;
 const MIN_EXPAND_PERCENT = 0.1;
@@ -152,6 +156,7 @@ async function createLoadedLeaferCanvasController({
   let localExpandState: LocalExpandOverlayState = createDefaultLocalExpandState();
   let localExpandDrag: LocalExpandDrag | null = null;
   let marker: LocalEditMarker | null = null;
+  let brushSize = DEFAULT_MASK_BRUSH_SIZE;
   let markerRadius = DEFAULT_MARKER_RADIUS;
   let maskStrokes: LocalEditStroke[] = [];
   let isPanning = false;
@@ -164,6 +169,7 @@ async function createLoadedLeaferCanvasController({
   let currentLocalEditHistorySnapshot: LocalEditOverlaySnapshot = {
     activeMaskAssetId: null,
     activeMaskVersionId: null,
+    brushSize,
     currentMaskStroke: null,
     marker: null,
     markerRadius,
@@ -309,6 +315,7 @@ async function createLoadedLeaferCanvasController({
 
   const cloneLocalEditStroke = (stroke: LocalEditStroke): LocalEditStroke => ({
     assetId: stroke.assetId,
+    brushSize: stroke.brushSize,
     points: stroke.points.map(cloneLocalEditPoint),
     versionId: stroke.versionId,
   });
@@ -333,6 +340,7 @@ async function createLoadedLeaferCanvasController({
     currentMaskStroke: snapshot.currentMaskStroke
       ? snapshot.currentMaskStroke.map(cloneLocalEditPoint)
       : null,
+    brushSize: snapshot.brushSize,
     marker: cloneLocalEditMarker(snapshot.marker),
     markerRadius: snapshot.markerRadius,
     maskStrokes: snapshot.maskStrokes.map(cloneLocalEditStroke),
@@ -344,6 +352,7 @@ async function createLoadedLeaferCanvasController({
     currentMaskStroke: currentMaskStroke
       ? currentMaskStroke.map(cloneLocalEditPoint)
       : null,
+    brushSize,
     marker: cloneLocalEditMarker(marker),
     markerRadius,
     maskStrokes: maskStrokes.map(cloneLocalEditStroke),
@@ -355,6 +364,7 @@ async function createLoadedLeaferCanvasController({
     currentMaskStroke = snapshot.currentMaskStroke
       ? snapshot.currentMaskStroke.map(cloneLocalEditPoint)
       : null;
+    brushSize = snapshot.brushSize;
     marker = cloneLocalEditMarker(snapshot.marker);
     markerRadius = snapshot.markerRadius;
     maskStrokes = snapshot.maskStrokes.map(cloneLocalEditStroke);
@@ -441,6 +451,7 @@ async function createLoadedLeaferCanvasController({
 
     return {
       assetId: activeOverlayAssetId ?? null,
+      brushSize,
       dirty: Boolean(source),
       markerRadius,
       source,
@@ -574,7 +585,7 @@ async function createLoadedLeaferCanvasController({
       ...(currentMaskStroke?.length &&
       activeMaskAssetId === assetId &&
       activeMaskVersionId === versionId
-        ? [{ points: currentMaskStroke }]
+        ? [{ brushSize, points: currentMaskStroke }]
         : []),
     ];
 
@@ -587,7 +598,7 @@ async function createLoadedLeaferCanvasController({
           stroke: "rgba(225, 29, 72, 0.58)",
           strokeCap: "round",
           strokeJoin: "round",
-          strokeWidth: MASK_BRUSH_RADIUS * 2,
+          strokeWidth: stroke.brushSize,
         }) as IPen,
         stroke.points,
         {
@@ -776,6 +787,7 @@ async function createLoadedLeaferCanvasController({
         ...maskStrokes,
         {
           assetId: activeMaskAssetId,
+          brushSize,
           points: currentMaskStroke,
           versionId: activeMaskVersionId,
         },
@@ -1123,6 +1135,7 @@ async function createLoadedLeaferCanvasController({
           ? [
               {
                 assetId: input.assetId,
+                brushSize,
                 points: currentMaskStroke,
                 versionId: input.versionId,
               },
@@ -1189,6 +1202,14 @@ async function createLoadedLeaferCanvasController({
         percent: normalizeExpandPercent(percent),
       };
       activateLocalExpandOverlay(readSelectedNode());
+      emitChange();
+    },
+    setLocalEditBrushSize: (size) => {
+      brushSize = normalizeMaskBrushSize(size);
+      if (currentMaskStroke?.length) {
+        renderMaskOverlay();
+      }
+      currentLocalEditHistorySnapshot = captureLocalEditSnapshot();
       emitChange();
     },
     setLocalEditMarkerRadius: (radius) => {
@@ -1789,16 +1810,18 @@ function drawMaskStrokes(
   strokes: LocalEditStroke[],
 ) {
   const scale = getSourceScale(canvas, node);
-  context.lineWidth = MASK_BRUSH_RADIUS * 2 * Math.max(scale.x, scale.y);
+  const scaleFactor = Math.max(scale.x, scale.y);
 
   for (const stroke of strokes) {
     if (!stroke.points.length) continue;
+    const brushRadius = normalizeMaskBrushSize(stroke.brushSize) / 2;
+    context.lineWidth = brushRadius * 2 * scaleFactor;
     const firstPoint = toSourcePoint(stroke.points[0], scale);
     context.beginPath();
     context.arc(
       firstPoint.x,
       firstPoint.y,
-      (MASK_BRUSH_RADIUS * Math.max(scale.x, scale.y)),
+      brushRadius * scaleFactor,
       0,
       Math.PI * 2,
     );
@@ -1877,6 +1900,16 @@ function normalizeFiniteNumber(value: unknown, fallback: number) {
 
 function normalizePositiveNumber(value: unknown, fallback: number) {
   return Math.max(1, normalizeFiniteNumber(value, fallback));
+}
+
+function normalizeMaskBrushSize(value: unknown) {
+  return Math.round(
+    clamp(
+      normalizeFiniteNumber(value, DEFAULT_MASK_BRUSH_SIZE),
+      MIN_MASK_BRUSH_SIZE,
+      MAX_MASK_BRUSH_SIZE,
+    ),
+  );
 }
 
 function clamp(value: number, min: number, max: number) {

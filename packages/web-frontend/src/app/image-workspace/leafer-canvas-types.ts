@@ -63,6 +63,7 @@ export type LocalEditMaskExportResult = {
 
 export type LocalEditOverlayState = {
   assetId: string | null;
+  brushSize: number;
   dirty: boolean;
   markerRadius: number;
   source: "mask" | "marker" | null;
@@ -98,6 +99,7 @@ export type CanvasController = {
   setLocalExpandMode: (mode: LocalExpandMode) => void;
   setLocalExpandPadding: (padding: Partial<LocalExpandPadding>) => void;
   setLocalExpandPercent: (percent: number) => void;
+  setLocalEditBrushSize: (size: number) => void;
   setLocalEditMarkerRadius: (radius: number) => void;
   setTool: (tool: CanvasTool) => void;
   subscribeChange: (listener: () => void) => () => void;

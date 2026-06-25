@@ -1,8 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
 import { EmailLoginPanel } from "../auth/email-login-panel";
 import { useAuthSession } from "../auth/use-auth-session";
+import type { CanvasAssetSelection } from "./leafer-canvas-types";
 import { useImageWorkspace } from "./use-image-workspace";
 
 const ImageWorkspaceShell = dynamic(
@@ -41,6 +43,15 @@ export default function ImageWorkspacePage() {
 
 function ImageWorkspaceHome() {
   const workspace = useImageWorkspace();
+  const [uploadedSourceSelection, setUploadedSourceSelection] =
+    useState<CanvasAssetSelection | null>(null);
+
+  async function handleUploadSourceAsset(file: File) {
+    const upload = await workspace.uploadSourceAsset(file);
+    if (upload) {
+      setUploadedSourceSelection(upload.selection);
+    }
+  }
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[var(--background)] text-[var(--ink)]">
@@ -66,8 +77,9 @@ function ImageWorkspaceHome() {
         onSelect={workspace.selectWorkspace}
         onUpscaleAsset={workspace.createImageUpscale}
         onUploadMask={workspace.uploadAssetMask}
-        onUploadSourceAsset={workspace.uploadSourceAsset}
+        onUploadSourceAsset={handleUploadSourceAsset}
         onVariationAsset={workspace.createImageVariation}
+        uploadedSourceSelection={uploadedSourceSelection}
         workspaces={workspace.workspaces}
       />
     </main>

@@ -5,6 +5,7 @@ import {
   timingSafeEqual
 } from "node:crypto";
 import { extname } from "node:path";
+import sharp from "sharp";
 import {
   normalizeImageMimeType,
   type ImageMimeType,
@@ -70,6 +71,7 @@ export class S3CompatibleImageStorageService implements ImageStorageService {
   async putImage(input: StoreImageInput): Promise<StoredImageRef> {
     const mimeType = normalizeImageMimeType(input.mimeType);
     const bytes = normalizeBytes(input.bytes);
+    const dimensions = await readImageDimensions(bytes);
     const storageKey = [
       "s3",
       safeSegment(input.userId),
@@ -90,8 +92,8 @@ export class S3CompatibleImageStorageService implements ImageStorageService {
     return {
       storageKey,
       mimeType,
-      width: 0,
-      height: 0,
+      width: dimensions.width,
+      height: dimensions.height,
       sizeBytes: bytes.byteLength
     };
   }
@@ -334,6 +336,18 @@ function normalizeBytes(value: Buffer): Buffer {
     throw new Error("Image storage requires non-empty bytes");
   }
   return value;
+}
+
+async function readImageDimensions(bytes: Buffer) {
+  try {
+    const metadata = await sharp(bytes).metadata();
+    return {
+      width: Math.max(0, Math.round(metadata.width ?? 0)),
+      height: Math.max(0, Math.round(metadata.height ?? 0))
+    };
+  } catch {
+    return { width: 0, height: 0 };
+  }
 }
 
 function safeEqual(left: string, right: string): boolean {

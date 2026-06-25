@@ -40,6 +40,21 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
     () => controller?.getActiveTool() ?? "select",
     () => "select",
   );
+  const canUndo = useSyncExternalStore(
+    controller?.subscribeChange ?? subscribeNoop,
+    () => controller?.getCanUndo() ?? false,
+    () => false,
+  );
+  const canRedo = useSyncExternalStore(
+    controller?.subscribeChange ?? subscribeNoop,
+    () => controller?.getCanRedo() ?? false,
+    () => false,
+  );
+  const brushSize = useSyncExternalStore(
+    controller?.subscribeChange ?? subscribeNoop,
+    () => controller?.getLocalEditOverlayState().brushSize ?? 34,
+    () => 34,
+  );
 
   if (!controller) return null;
 
@@ -68,13 +83,13 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
 
   const actionButtons: ToolbarButton[] = [
     {
-      disabled: !controller.getCanUndo(),
+      disabled: !canUndo,
       icon: Undo2,
       label: "撤销",
       onClick: () => controller.undo(),
     },
     {
-      disabled: !controller.getCanRedo(),
+      disabled: !canRedo,
       icon: Redo2,
       label: "重做",
       onClick: () => controller.redo(),
@@ -133,6 +148,26 @@ export function CanvasToolbar({ controller }: CanvasToolbarProps) {
             </button>
           );
         })}
+        {activeTool === "mask" ? (
+          <>
+            <div className="mx-1 h-6 w-px shrink-0 bg-[var(--border)]" />
+            <label className="flex h-9 shrink-0 items-center gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-raised)] px-2 text-[11px] font-[650] text-[var(--muted-strong)]">
+              <span className="whitespace-nowrap">画笔 {brushSize}</span>
+              <input
+                aria-label="蒙版画笔粗细"
+                className="h-7 w-24 accent-[var(--accent)]"
+                max={96}
+                min={6}
+                onChange={(event) =>
+                  controller.setLocalEditBrushSize(Number(event.target.value))
+                }
+                step={2}
+                type="range"
+                value={brushSize}
+              />
+            </label>
+          </>
+        ) : null}
         <div className="mx-1 h-6 w-px shrink-0 bg-[var(--border)]" />
         {actionButtons.map((button) => {
           const Icon = button.icon;

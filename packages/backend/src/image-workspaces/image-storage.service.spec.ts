@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { jest } from "@jest/globals";
+import sharp from "sharp";
 import {
   ConfiguredImageStorageService,
   type ImageStorageFetch
@@ -49,6 +50,32 @@ describe("image storage service", () => {
       sizeBytes: 9
     });
     await expect(storage.getImage(ref)).resolves.toEqual(Buffer.from("png-bytes"));
+  });
+
+  it("reads stored image dimensions from valid image bytes", async () => {
+    const storage = new LocalImageStorageService({
+      publicBaseUrl: "http://localhost:3001",
+      signingSecret: "test-secret",
+      storageRoot
+    });
+    const bytes = await solidPng(37, 23);
+
+    const ref = await storage.putImage({
+      userId: "user-1",
+      workspaceId: "workspace-1",
+      taskId: "task-1",
+      filename: "source.png",
+      bytes,
+      mimeType: "image/png"
+    });
+
+    expect(ref).toEqual(
+      expect.objectContaining({
+        width: 37,
+        height: 23,
+        sizeBytes: bytes.byteLength
+      })
+    );
   });
 
   it("creates signed preview URLs without exposing raw storage keys", async () => {
@@ -221,6 +248,45 @@ describe("image storage service", () => {
     );
   });
 
+  it("keeps image dimensions when uploading to configured S3-compatible storage", async () => {
+    const local = createLocalStorageDouble();
+    const fetchImage = jest.fn<ImageStorageFetch>(() =>
+      Promise.resolve(new Response(null, { status: 200 }))
+    );
+    const storage = new ConfiguredImageStorageService(
+      createRuntimeSecrets({
+        storageProvider: "oss",
+        storageBucket: "mira-images",
+        storageRegion: "cn-shenzhen",
+        storageEndpoint: "https://s3.oss-cn-shenzhen-internal.aliyuncs.com",
+        storageAccessKey: "access-key",
+        storageSecretKey: "secret-key"
+      }),
+      local,
+      {
+        fetch: fetchImage,
+        now: () => new Date("2026-06-23T12:00:00.000Z"),
+        publicBaseUrl: "https://mira.example",
+        randomBytes: () => Buffer.from("0123456789abcdef", "hex"),
+        signingSecret: "preview-secret"
+      }
+    );
+    const bytes = await solidPng(90, 51);
+
+    const ref = await storage.putImage({
+      ...createStoreInput(),
+      bytes
+    });
+
+    expect(ref).toEqual(
+      expect.objectContaining({
+        width: 90,
+        height: 51,
+        sizeBytes: bytes.byteLength
+      })
+    );
+  });
+
   it("keeps configured storage previews behind signed same-origin tokens", async () => {
     const local = createLocalStorageDouble();
     const fetchImage = jest.fn<ImageStorageFetch>(() =>
@@ -319,6 +385,19 @@ function createStoreInput(): StoreImageInput {
     bytes: Buffer.from("png-bytes"),
     mimeType: "image/png"
   };
+}
+
+function solidPng(width: number, height: number) {
+  return sharp({
+    create: {
+      background: "#d946ef",
+      channels: 4,
+      height,
+      width
+    }
+  })
+    .png()
+    .toBuffer();
 }
 
 function createLocalStorageDouble() {

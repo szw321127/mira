@@ -897,6 +897,22 @@ test("image workspace uploads local source images into the active canvas", () =>
   );
 });
 
+test("source image upload selects the newly added canvas object and version", () => {
+  const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
+  const pageSource = readImageWorkspaceFile("page.tsx");
+  const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
+
+  assert.match(hookSource, /type ImageSourceUploadResult/);
+  assert.match(hookSource, /findUploadedSourceSelection/);
+  assert.match(hookSource, /return \{[\s\S]*selection:\s*findUploadedSourceSelection\(activeWorkspace,\s*workspace\)[\s\S]*workspace[\s\S]*\}/);
+  assert.match(pageSource, /handleUploadSourceAsset/);
+  assert.match(pageSource, /setUploadedSourceSelection\(upload\.selection\)/);
+  assert.match(shellSource, /uploadedSourceSelection/);
+  assert.match(shellSource, /selectAsset\(uploadedSourceSelection\)/);
+  assert.match(shellSource, /uploadedSourceSelection\.objectId/);
+  assert.match(shellSource, /uploadedSourceSelection\.selectedVersionId/);
+});
+
 test("image source upload validates data URLs before calling the workspace asset api", () => {
   const hookSource = readImageWorkspaceFile("use-image-workspace.ts");
 
@@ -967,6 +983,7 @@ test("local edit overlays are cleared and restored through toolbar undo redo", (
   const inspectorSource = readImageWorkspaceFile("components/inspector-panel.tsx");
   const shellSource = readImageWorkspaceFile("image-workspace-shell.tsx");
   const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+  const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
 
   assert.doesNotMatch(panelSource, /Eraser/);
   assert.doesNotMatch(panelSource, /onClearLocalEditOverlay/);
@@ -984,6 +1001,28 @@ test("local edit overlays are cleared and restored through toolbar undo redo", (
   assert.match(adapterSource, /undo:\s*\(\) =>/);
   assert.match(adapterSource, /redo:\s*\(\) =>/);
   assert.match(adapterSource, /currentLocalEditHistorySnapshot/);
+  assert.match(toolbarSource, /useSyncExternalStore/);
+  assert.match(toolbarSource, /canUndo/);
+  assert.match(toolbarSource, /canRedo/);
+  assert.doesNotMatch(toolbarSource, /disabled:\s*!controller\.getCanUndo\(\)/);
+  assert.doesNotMatch(toolbarSource, /disabled:\s*!controller\.getCanRedo\(\)/);
+});
+
+test("mask brush size is adjustable from the canvas toolbar", () => {
+  const typesSource = readImageWorkspaceFile("leafer-canvas-types.ts");
+  const toolbarSource = readImageWorkspaceFile("components/canvas-toolbar.tsx");
+  const adapterSource = readImageWorkspaceFile("leafer-canvas-adapter.ts");
+
+  assert.match(typesSource, /brushSize:\s*number/);
+  assert.match(typesSource, /setLocalEditBrushSize/);
+  assert.match(toolbarSource, /activeTool === "mask"/);
+  assert.match(toolbarSource, /aria-label="蒙版画笔粗细"/);
+  assert.match(toolbarSource, /controller\.setLocalEditBrushSize/);
+  assert.match(adapterSource, /DEFAULT_MASK_BRUSH_SIZE/);
+  assert.match(adapterSource, /brushSize/);
+  assert.match(adapterSource, /strokeWidth:\s*stroke\.brushSize/);
+  assert.match(adapterSource, /normalizeMaskBrushSize\(stroke\.brushSize\)/);
+  assert.match(adapterSource, /context\.lineWidth = brushRadius \* 2 \* scaleFactor/);
 });
 
 test("image workspace has a focused asset version panel component", () => {
