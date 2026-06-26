@@ -28,6 +28,15 @@ function createRuntimeSecrets(config = imageConfig()) {
 }
 
 describe("ChatImageGenerationService", () => {
+  it("recognizes photography-style image generation wording", () => {
+    const service = new ChatImageGenerationService(
+      createRuntimeSecrets() as never,
+      {}
+    );
+
+    expect(service.shouldHandle("生成一张边牧写真摄影图")).toBe(true);
+  });
+
   it("falls back to direct image generation when the Responses image tool stream errors", async () => {
     const streamText = jest.fn(() => ({
       fullStream: (async function* () {

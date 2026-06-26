@@ -35,7 +35,7 @@ export type ChatImageGenerationDependencies = {
 export const CHAT_IMAGE_GENERATION_DEPS = Symbol("CHAT_IMAGE_GENERATION_DEPS");
 
 const IMAGE_INTENT_PATTERN =
-  /(生成|画|绘制|做|出|设计|create|generate|draw|make).{0,12}(图片|图像|插画|海报|封面|头像|logo|image|picture|poster|illustration)/i;
+  /(生成|画|绘制|做|出|设计|create|generate|draw|make).{0,12}(图片|图像|照片|相片|摄影图|写真|插画|海报|封面|头像|logo|image|picture|photo|poster|illustration)/i;
 
 @Injectable()
 export class ChatImageGenerationService {
