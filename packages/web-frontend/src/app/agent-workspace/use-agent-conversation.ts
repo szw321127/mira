@@ -440,6 +440,10 @@ export function useAgentConversation(user: AuthUser | null) {
                 role: message.role,
                 content: message.content,
                 attachments: message.attachments ?? [],
+                generatedImages: message.generatedImages?.map((image) => ({
+                  ...image,
+                  imageBase64: null,
+                })),
               }),
             ),
           }),

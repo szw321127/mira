@@ -90,6 +90,7 @@ export type AgentChatRequest = {
     role: "user" | "assistant";
     content: string;
     attachments?: ChatImageAttachment[];
+    generatedImages?: ChatGeneratedImage[];
   }>;
 };
 

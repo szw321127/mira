@@ -99,6 +99,15 @@ test("agent workspace supports image attachments from upload drop and paste", ()
   assert.match(hookSource, /attachments: message\.attachments \?\? \[\]/);
 });
 
+test("agent chat requests include generated image summaries for follow-up edits", () => {
+  const typesSource = readWorkspaceFile("types.ts");
+  const hookSource = readWorkspaceFile("use-agent-conversation.ts");
+
+  assert.match(typesSource, /generatedImages\?: ChatGeneratedImage\[\]/);
+  assert.match(hookSource, /generatedImages: message\.generatedImages/);
+  assert.match(hookSource, /imageBase64: null/);
+});
+
 test("agent workspace persists generated images from progressive image events", () => {
   const typesSource = readWorkspaceFile("types.ts");
   const messageEventsSource = readWorkspaceFile("message-events.ts");

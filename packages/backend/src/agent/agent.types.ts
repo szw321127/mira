@@ -2,6 +2,7 @@ export type AgentChatMessage = {
   role: "user" | "assistant";
   content: string;
   attachments?: AgentChatImageAttachment[];
+  generatedImages?: AgentChatGeneratedImage[];
 };
 
 export type AgentChatImageAttachment = {
@@ -11,6 +12,16 @@ export type AgentChatImageAttachment = {
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   dataUrl: string;
   sizeBytes: number;
+};
+
+export type AgentChatGeneratedImage = {
+  id: string;
+  prompt: string;
+  status: "running" | "complete" | "error";
+  imageBase64?: string | null;
+  mimeType?: "image/png" | "image/jpeg" | "image/webp";
+  partialIndex?: number;
+  updatedAt?: string;
 };
 
 export type AgentChatRequest = {
@@ -72,9 +83,17 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest | null {
       return false;
     }
 
-    if (record.attachments === undefined) return true;
-    if (!Array.isArray(record.attachments)) return false;
-    return record.attachments.every(isAgentChatImageAttachment);
+    if (
+      record.attachments !== undefined &&
+      (!Array.isArray(record.attachments) ||
+        !record.attachments.every(isAgentChatImageAttachment))
+    ) {
+      return false;
+    }
+
+    if (record.generatedImages === undefined) return true;
+    if (!Array.isArray(record.generatedImages)) return false;
+    return record.generatedImages.every(isAgentChatGeneratedImage);
   });
 
   if (!validMessages) return null;
@@ -83,6 +102,21 @@ export function parseAgentChatRequest(value: unknown): AgentChatRequest | null {
     conversationId: request.conversationId,
     messages: request.messages as AgentChatMessage[]
   };
+}
+
+function isAgentChatGeneratedImage(
+  value: unknown
+): value is AgentChatGeneratedImage {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.id === "string" &&
+    typeof record.prompt === "string" &&
+    (record.status === "running" ||
+      record.status === "complete" ||
+      record.status === "error")
+  );
 }
 
 function isAgentChatImageAttachment(

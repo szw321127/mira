@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { LanguageModel, ModelMessage, UserContent } from "ai";
-import type { ToolRegistry } from "@rednote/agent";
+import type { ToolDefinition, ToolRegistry } from "@rednote/agent";
 import {
   RuntimeSecretsService,
   type RuntimeImageConfig,
@@ -10,6 +10,7 @@ import {
 import { ChatImageGenerationService } from "./chat-image-generation.service.js";
 import type {
   AgentChatImageAttachment,
+  AgentChatMessage,
   AgentChatRequest,
   AgentStreamEvent
 } from "./agent.types.js";
@@ -31,6 +32,13 @@ type AgentServiceDependencies = {
   createImageStream?: (
     input: { prompt: string; config: RuntimeImageConfig }
   ) => AsyncGenerator<AgentStreamEvent, void, void>;
+};
+
+type AsyncEventQueue<T> = AsyncIterable<T> & {
+  push(value: T): void;
+  shift(): T | undefined;
+  close(): void;
+  fail(error: unknown): void;
 };
 
 type RuntimeSecretsReader = {
@@ -78,37 +86,14 @@ export class AgentService {
       throw new Error("Message is required.");
     }
 
-    const imagePrompt = readTextPrompt(lastUserMessage);
-    if (imagePrompt && this.shouldGenerateImage(imagePrompt)) {
-      const imageConfig = await this.getImageConfig();
-      const imageStream =
-        this.createImageStream?.({ prompt: imagePrompt, config: imageConfig }) ??
-        this.chatImageGeneration?.streamWithConfig({
-          prompt: imagePrompt,
-          config: imageConfig
-        });
-
-      if (!imageStream) {
-        throw new Error("Image generation is not available.");
-      }
-
-      let failed = false;
-      for await (const event of imageStream) {
-        if (event.type === "error") failed = true;
-        yield event;
-      }
-      if (!failed) {
-        yield { type: "stop", reason: "done" };
-      }
-      return;
-    }
-
     const [modelConfig, searchConfig] = await Promise.all([
       this.getModelConfig(),
       this.getSearchConfig()
     ]);
     const model = this.createModel(modelConfig);
     const registry = this.createRegistry(searchConfig);
+    const imageEvents = createAsyncEventQueue<AgentStreamEvent>();
+    this.registerImageGenerationTool(registry, imageEvents);
     const harness = this.createHarness({
       model,
       registry,
@@ -117,15 +102,10 @@ export class AgentService {
       maxSteps: Number(process.env.AGENT_MAX_STEPS ?? 30)
     });
 
-    let eventIndex = 0;
-
-    for await (const event of harness.runEvents(
-      this.toUserContent(lastUserMessage)
-    )) {
-      const normalized = normalizeAgentEvent(event, eventIndex);
-      eventIndex += 1;
-      yield normalized;
-    }
+    yield* mergeAgentAndImageEvents(
+      harness.runEvents(this.toUserContent(lastUserMessage)),
+      imageEvents
+    );
   }
 
   private getHistoryBeforeMessage(
@@ -143,13 +123,13 @@ export class AgentService {
 
       return {
         role: message.role,
-        content: message.content
+        content: this.toAssistantContent(message)
       };
     });
   }
 
   private toUserContent(
-    message: AgentChatRequest["messages"][number]
+    message: AgentChatMessage
   ): UserContent {
     const attachments = message.attachments ?? [];
     if (attachments.length === 0) return message.content;
@@ -158,6 +138,12 @@ export class AgentService {
       { type: "text", text: message.content },
       ...attachments.map((attachment) => this.toImagePart(attachment))
     ];
+  }
+
+  private toAssistantContent(message: AgentChatMessage) {
+    const imageSummaries = summarizeGeneratedImages(message);
+    if (!imageSummaries) return message.content;
+    return [message.content.trim(), imageSummaries].filter(Boolean).join("\n\n");
   }
 
   private toImagePart(attachment: AgentChatImageAttachment) {
@@ -200,9 +186,66 @@ export class AgentService {
     };
   }
 
-  private shouldGenerateImage(prompt: string) {
-    if (this.createImageStream) return isImageGenerationPrompt(prompt);
-    return this.chatImageGeneration?.shouldHandle(prompt) ?? false;
+  private registerImageGenerationTool(
+    registry: ToolRegistry,
+    imageEvents: AsyncEventQueue<AgentStreamEvent>
+  ) {
+    registry.register(this.createImageGenerationTool(imageEvents));
+  }
+
+  private createImageGenerationTool(
+    imageEvents: AsyncEventQueue<AgentStreamEvent>
+  ): ToolDefinition {
+    return {
+      name: "generate_image",
+      description:
+        "Generate an image for the user. Use this for new image requests and follow-up edits to previously generated images; rewrite the full prompt using conversation context before calling.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description:
+              "Complete image prompt to generate, including context from the conversation and requested changes."
+          }
+        },
+        required: ["prompt"],
+        additionalProperties: false
+      },
+      maxResultChars: 800,
+      execute: async (input: { prompt?: unknown }) => {
+        const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+        if (!prompt) {
+          throw new Error("Image prompt is required.");
+        }
+        const imageConfig = await this.getImageConfig();
+        const imageStream =
+          this.createImageStream?.({ prompt, config: imageConfig }) ??
+          this.chatImageGeneration?.streamWithConfig({
+            prompt,
+            config: imageConfig
+          });
+
+        if (!imageStream) {
+          throw new Error("Image generation is not available.");
+        }
+
+        let completed = false;
+        let failedMessage = "";
+        for await (const event of imageStream) {
+          if (event.type === "image-generation-complete") completed = true;
+          if (event.type === "error") failedMessage = event.message;
+          imageEvents.push(event);
+        }
+
+        if (failedMessage) {
+          return `Image generation failed: ${failedMessage}`;
+        }
+        return completed
+          ? `Image generated successfully for prompt: ${prompt}`
+          : `Image generation finished without an image for prompt: ${prompt}`;
+      }
+    };
   }
 }
 
@@ -211,13 +254,129 @@ function readBase64DataUrlPayload(dataUrl: string) {
   return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
 }
 
-function readTextPrompt(message: AgentChatRequest["messages"][number]) {
-  if ((message.attachments?.length ?? 0) > 0) return "";
-  return message.content.trim();
+function summarizeGeneratedImages(message: AgentChatMessage) {
+  const completedImages = (message.generatedImages ?? []).filter((image) => {
+    return image.status === "complete" && image.prompt.trim();
+  });
+  if (completedImages.length === 0) return "";
+
+  const lines = completedImages.map((image) => {
+    return `- ${image.id}: ${image.prompt.trim()}`;
+  });
+  return `[已生成图片]\n${lines.join("\n")}`;
 }
 
-function isImageGenerationPrompt(prompt: string) {
-  return /(生成|画|绘制|做|出|设计|create|generate|draw|make).{0,12}(图片|图像|插画|海报|封面|头像|logo|image|picture|poster|illustration)/i.test(
-    prompt
-  );
+function createAsyncEventQueue<T>(): AsyncEventQueue<T> {
+  const values: T[] = [];
+  const waiters: Array<{
+    resolve(value: IteratorResult<T>): void;
+    reject(error: unknown): void;
+  }> = [];
+  let closed = false;
+  let failure: unknown = null;
+
+  return {
+    push(value: T) {
+      if (closed) return;
+      const waiter = waiters.shift();
+      if (waiter) {
+        waiter.resolve({ value, done: false });
+        return;
+      }
+      values.push(value);
+    },
+    shift() {
+      return values.shift();
+    },
+    close() {
+      closed = true;
+      for (const waiter of waiters.splice(0)) {
+        waiter.resolve({ value: undefined, done: true });
+      }
+    },
+    fail(error: unknown) {
+      closed = true;
+      failure = error;
+      for (const waiter of waiters.splice(0)) {
+        waiter.reject(error);
+      }
+    },
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<T>> {
+          if (values.length > 0) {
+            return Promise.resolve({ value: values.shift() as T, done: false });
+          }
+          if (failure) {
+            return Promise.reject(failure);
+          }
+          if (closed) {
+            return Promise.resolve({ value: undefined, done: true });
+          }
+          return new Promise((resolve, reject) => {
+            waiters.push({ resolve, reject });
+          });
+        }
+      };
+    }
+  };
+}
+
+async function* mergeAgentAndImageEvents(
+  agentEvents: AsyncIterable<Parameters<typeof normalizeAgentEvent>[0]>,
+  imageEvents: AsyncEventQueue<AgentStreamEvent>
+): AsyncGenerator<AgentStreamEvent, void, void> {
+  let eventIndex = 0;
+  let agentDone = false;
+  const agentIterator = agentEvents[Symbol.asyncIterator]();
+  const imageIterator = imageEvents[Symbol.asyncIterator]();
+  let nextAgent = agentIterator.next();
+  let nextImage = imageIterator.next();
+
+  try {
+    while (!agentDone) {
+      const result = await Promise.race([
+        nextImage.then((result) => ({ source: "image" as const, result })),
+        nextAgent.then((result) => ({ source: "agent" as const, result }))
+      ]);
+
+      if (result.source === "image") {
+        if (!result.result.done) {
+          nextImage = imageIterator.next();
+          yield result.result.value;
+        } else {
+          nextImage = new Promise<IteratorResult<AgentStreamEvent>>(() => {});
+        }
+        continue;
+      }
+
+      if (result.result.done) {
+        agentDone = true;
+        imageEvents.close();
+        continue;
+      }
+
+      let queuedImageEvent: AgentStreamEvent | undefined;
+      while ((queuedImageEvent = imageEvents.shift())) {
+        yield queuedImageEvent;
+      }
+
+      const normalized = normalizeAgentEvent(result.result.value, eventIndex);
+      eventIndex += 1;
+      if (!(normalized.type === "stop" && normalized.reason === "done")) {
+        yield normalized;
+      }
+      nextAgent = agentIterator.next();
+    }
+
+    let queuedImageEvent: AgentStreamEvent | undefined;
+    while ((queuedImageEvent = imageEvents.shift())) {
+      yield queuedImageEvent;
+    }
+  } catch (error) {
+    imageEvents.fail(error);
+    throw error;
+  } finally {
+    imageEvents.close();
+  }
 }
