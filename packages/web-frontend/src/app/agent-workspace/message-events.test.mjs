@@ -78,3 +78,47 @@ test("appends text deltas and stop events with stable chat event metadata", () =
 
   assert.equal(stopped.status, "complete");
 });
+
+test("updates generated image progress without waiting for a final image", () => {
+  const started = appendAgentEvent(
+    createAssistantMessage({ content: "" }),
+    {
+      type: "image-generation-start",
+      id: "image-1",
+      prompt: "生成一张正在拉雪橇的哈士奇",
+    },
+    metadata,
+  );
+  const progressed = appendAgentEvent(
+    started,
+    {
+      type: "image-generation-progress",
+      id: "image-1",
+      stage: "generating",
+      message: "模型正在生成图像",
+    },
+    { ...metadata, eventId: "event-2" },
+  );
+
+  assert.deepEqual(progressed.generatedImages, [
+    {
+      id: "image-1",
+      prompt: "生成一张正在拉雪橇的哈士奇",
+      status: "running",
+      imageBase64: null,
+      mimeType: "image/png",
+      partialIndex: 0,
+      progressStage: "generating",
+      progressMessage: "模型正在生成图像",
+      updatedAt: metadata.createdAt,
+    },
+  ]);
+  assert.deepEqual(progressed.events.at(-1), {
+    type: "image-generation-progress",
+    id: "image-1",
+    stage: "generating",
+    message: "模型正在生成图像",
+    eventId: "event-2",
+    createdAt: metadata.createdAt,
+  });
+});

@@ -167,11 +167,107 @@ describe("AgentService", () => {
           {
             role: "assistant",
             content:
-              "[已生成图片]\n- image-1: 一张边牧写真摄影图，草地背景"
+              "[已生成图片，可作为后续改图/重生图的参考设定；续改时应保留主体身份、数量、空间关系、动作、构图和风格，除非用户明确要求改变]\n- image-1: 一张边牧写真摄影图，草地背景"
           }
         ]
       })
     );
+  });
+
+  it("describes the image tool as preserving subject identity and relationships across follow-up edits", async () => {
+    const registry = new ToolRegistry();
+    const runEvents = jest.fn(async function* () {
+      await Promise.resolve();
+      const tool = registry.get("generate_image");
+      if (!tool) throw new Error("generate_image tool was not registered");
+      yield { type: "text-delta" as const, text: tool.description };
+    });
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => registry),
+        createHarness: jest.fn(() => ({ runEvents }))
+      },
+      createRuntimeSecrets()
+    );
+
+    const events = [];
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [{ role: "user", content: "生成一张哈士奇图片" }]
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "text-delta",
+        text: expect.stringContaining("preserve")
+      })
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "text-delta",
+        text: expect.stringContaining("relationship")
+      })
+    );
+  });
+
+  it("passes the latest generated image to the model as a visual reference for follow-up edits", async () => {
+    const runEvents = jest.fn(async function* () {
+      await Promise.resolve();
+      yield { type: "stop", reason: "done" };
+    });
+    const createHarness = jest.fn(() => ({ runEvents }));
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => new ToolRegistry()),
+        createHarness
+      },
+      createRuntimeSecrets()
+    );
+
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [
+        { role: "user", content: "生成一张正在拉雪橇的哈士奇" },
+        {
+          role: "assistant",
+          content: "",
+          generatedImages: [
+            {
+              id: "image-1",
+              prompt: "哈士奇拉着木制雪橇穿过雪地",
+              status: "complete",
+              imageBase64: "cmVmZXJlbmNlLWltYWdl",
+              mimeType: "image/png",
+              partialIndex: 0,
+              updatedAt: "2026-06-27T00:00:00.000Z"
+            }
+          ]
+        },
+        { role: "user", content: "人要坐在雪橇车上" }
+      ]
+    })) {
+      expect(event).toBeDefined();
+    }
+
+    expect(runEvents).toHaveBeenCalledWith([
+      {
+        type: "text",
+        text: expect.stringContaining("人要坐在雪橇车上")
+      },
+      {
+        type: "text",
+        text: expect.stringContaining("上一张生成图参考")
+      },
+      {
+        type: "image",
+        image: "cmVmZXJlbmNlLWltYWdl",
+        mediaType: "image/png"
+      }
+    ]);
   });
 
   it("does not read model or search keys from process.env", async () => {

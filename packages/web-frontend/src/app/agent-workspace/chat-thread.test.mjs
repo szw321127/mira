@@ -36,6 +36,8 @@ test("chat thread renders progressive generated image cards", () => {
   assert.match(chatThreadSource, /message\.generatedImages\?\.length/);
   assert.match(chatThreadSource, /image\.imageBase64/);
   assert.match(chatThreadSource, /正在生成图片/);
+  assert.match(chatThreadSource, /image\.progressMessage/);
+  assert.match(chatThreadSource, /progressStage/);
 });
 
 test("context dock remains responsible for agent event rows", () => {

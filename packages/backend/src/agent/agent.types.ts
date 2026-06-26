@@ -35,6 +35,12 @@ export type AgentStreamEvent =
   | { type: "tool-result"; id: string; toolName: string; outputPreview: string }
   | { type: "image-generation-start"; id: string; prompt: string }
   | {
+      type: "image-generation-progress";
+      id: string;
+      stage: "queued" | "generating" | "finalizing";
+      message: string;
+    }
+  | {
       type: "image-generation-partial";
       id: string;
       imageBase64: string;
@@ -115,7 +121,11 @@ function isAgentChatGeneratedImage(
     typeof record.prompt === "string" &&
     (record.status === "running" ||
       record.status === "complete" ||
-      record.status === "error")
+      record.status === "error") &&
+    (record.imageBase64 === undefined ||
+      typeof record.imageBase64 === "string" ||
+      record.imageBase64 === null) &&
+    (record.mimeType === undefined || isSupportedImageMimeType(record.mimeType))
   );
 }
 

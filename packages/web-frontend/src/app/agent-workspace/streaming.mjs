@@ -53,6 +53,12 @@ export function isAgentStreamEvent(value) {
       );
     case "image-generation-start":
       return typeof value.id === "string" && typeof value.prompt === "string";
+    case "image-generation-progress":
+      return (
+        typeof value.id === "string" &&
+        isImageProgressStage(value.stage) &&
+        typeof value.message === "string"
+      );
     case "image-generation-partial":
       return (
         typeof value.id === "string" &&
@@ -102,4 +108,8 @@ function isImageMimeType(value) {
     value === "image/jpeg" ||
     value === "image/webp"
   );
+}
+
+function isImageProgressStage(value) {
+  return value === "queued" || value === "generating" || value === "finalizing";
 }

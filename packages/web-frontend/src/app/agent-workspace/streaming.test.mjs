@@ -31,6 +31,17 @@ test("parseAgentStreamEvent accepts known event shapes", () => {
 test("parseAgentStreamEvent accepts progressive image generation events", () => {
   assert.deepEqual(
     parseAgentStreamEvent(
+      '{"type":"image-generation-progress","id":"image-1","stage":"generating","message":"模型正在生成图像"}',
+    ),
+    {
+      type: "image-generation-progress",
+      id: "image-1",
+      stage: "generating",
+      message: "模型正在生成图像",
+    },
+  );
+  assert.deepEqual(
+    parseAgentStreamEvent(
       '{"type":"image-generation-partial","id":"image-1","imageBase64":"abc","mimeType":"image/png","index":1}',
     ),
     {

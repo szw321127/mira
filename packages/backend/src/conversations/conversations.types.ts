@@ -28,6 +28,8 @@ export type PersistedChatGeneratedImage = {
   imageBase64: string | null;
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   partialIndex: number;
+  progressStage?: "queued" | "generating" | "finalizing";
+  progressMessage?: string;
   updatedAt: string;
 };
 
@@ -159,6 +161,12 @@ function isGeneratedImage(value: unknown): value is PersistedChatGeneratedImage 
     typeof record.partialIndex === "number" &&
     Number.isFinite(record.partialIndex) &&
     record.partialIndex >= 0 &&
+    (record.progressStage === undefined ||
+      record.progressStage === "queued" ||
+      record.progressStage === "generating" ||
+      record.progressStage === "finalizing") &&
+    (record.progressMessage === undefined ||
+      typeof record.progressMessage === "string") &&
     typeof record.updatedAt === "string" &&
     isValidDateString(record.updatedAt)
   );

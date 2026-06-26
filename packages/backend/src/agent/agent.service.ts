@@ -34,6 +34,13 @@ type AgentServiceDependencies = {
   ) => AsyncGenerator<AgentStreamEvent, void, void>;
 };
 
+type GeneratedImageReference = {
+  id: string;
+  prompt: string;
+  imageBase64: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+};
+
 type AsyncEventQueue<T> = AsyncIterable<T> & {
   push(value: T): void;
   shift(): T | undefined;
@@ -103,7 +110,12 @@ export class AgentService {
     });
 
     yield* mergeAgentAndImageEvents(
-      harness.runEvents(this.toUserContent(lastUserMessage)),
+      harness.runEvents(
+        this.toUserContent(
+          lastUserMessage,
+          this.findLatestGeneratedImageReference(request.messages, lastUserMessage)
+        )
+      ),
       imageEvents
     );
   }
@@ -129,14 +141,16 @@ export class AgentService {
   }
 
   private toUserContent(
-    message: AgentChatMessage
+    message: AgentChatMessage,
+    referenceImage?: GeneratedImageReference | null
   ): UserContent {
     const attachments = message.attachments ?? [];
-    if (attachments.length === 0) return message.content;
+    if (attachments.length === 0 && !referenceImage) return message.content;
 
     return [
       { type: "text", text: message.content },
-      ...attachments.map((attachment) => this.toImagePart(attachment))
+      ...attachments.map((attachment) => this.toImagePart(attachment)),
+      ...this.toReferenceImageParts(referenceImage)
     ];
   }
 
@@ -152,6 +166,52 @@ export class AgentService {
       image: readBase64DataUrlPayload(attachment.dataUrl),
       mediaType: attachment.mimeType
     };
+  }
+
+  private toReferenceImageParts(referenceImage?: GeneratedImageReference | null) {
+    if (!referenceImage) return [];
+    return [
+      {
+        type: "text" as const,
+        text: `上一张生成图参考（${referenceImage.id}）：${referenceImage.prompt}。续改或重生图时，请保持这张图的主体身份、数量、空间关系、动作、构图和风格，只改变用户刚刚要求改变的部分。`
+      },
+      {
+        type: "image" as const,
+        image: referenceImage.imageBase64,
+        mediaType: referenceImage.mimeType
+      }
+    ];
+  }
+
+  private findLatestGeneratedImageReference(
+    messages: AgentChatRequest["messages"],
+    target: AgentChatRequest["messages"][number]
+  ): GeneratedImageReference | null {
+    if ((target.attachments?.length ?? 0) > 0) return null;
+
+    const index = messages.lastIndexOf(target);
+    const history = index >= 0 ? messages.slice(0, index) : messages;
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      const generatedImages = history[i].generatedImages ?? [];
+      for (let j = generatedImages.length - 1; j >= 0; j -= 1) {
+        const image = generatedImages[j];
+        if (
+          image.status === "complete" &&
+          image.prompt.trim() &&
+          image.imageBase64?.trim() &&
+          image.mimeType
+        ) {
+          return {
+            id: image.id,
+            prompt: image.prompt.trim(),
+            imageBase64: image.imageBase64,
+            mimeType: image.mimeType
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   private async getModelConfig(): Promise<RuntimeModelConfig> {
@@ -199,14 +259,14 @@ export class AgentService {
     return {
       name: "generate_image",
       description:
-        "Generate an image for the user. Use this for new image requests and follow-up edits to previously generated images; rewrite the full prompt using conversation context before calling.",
+        "Generate an image for the user. Use this for new image requests and follow-up edits to previously generated images. Before calling, rewrite a complete prompt from the conversation context. For follow-up edits, preserve the previously generated subject identity, subject count, visual style, composition, action, spatial relationship, and object interaction unless the user explicitly changes them. If the prompt describes multiple subjects, state their relationship clearly in one scene, e.g. who is pulling, who is riding, and how harnesses, ropes, hands, or props connect them.",
       parameters: {
         type: "object",
         properties: {
           prompt: {
             type: "string",
             description:
-              "Complete image prompt to generate, including context from the conversation and requested changes."
+              "Complete image prompt to generate. Include the prior image prompt and only the user's requested changes when this is a follow-up edit; explicitly preserve identities, relationships, action, composition, and style."
           }
         },
         required: ["prompt"],
@@ -263,7 +323,7 @@ function summarizeGeneratedImages(message: AgentChatMessage) {
   const lines = completedImages.map((image) => {
     return `- ${image.id}: ${image.prompt.trim()}`;
   });
-  return `[已生成图片]\n${lines.join("\n")}`;
+  return `[已生成图片，可作为后续改图/重生图的参考设定；续改时应保留主体身份、数量、空间关系、动作、构图和风格，除非用户明确要求改变]\n${lines.join("\n")}`;
 }
 
 function createAsyncEventQueue<T>(): AsyncEventQueue<T> {

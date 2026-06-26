@@ -177,6 +177,18 @@ export class ChatImageGenerationService {
       id,
       prompt
     };
+    yield {
+      type: "image-generation-progress",
+      id,
+      stage: "queued",
+      message: "已提交图像生成请求"
+    };
+    yield {
+      type: "image-generation-progress",
+      id,
+      stage: "generating",
+      message: "模型正在生成图像"
+    };
 
     try {
       const openai = createOpenAI({
@@ -196,6 +208,12 @@ export class ChatImageGenerationService {
           }
         }
       });
+      yield {
+        type: "image-generation-progress",
+        id,
+        stage: "finalizing",
+        message: "正在整理图像结果"
+      };
       yield {
         type: "image-generation-complete",
         id,

@@ -19,6 +19,27 @@ export function appendAgentEvent(message, event, metadata) {
         imageBase64: null,
         mimeType: "image/png",
         partialIndex: 0,
+        progressStage: "queued",
+        progressMessage: "准备生成图像",
+        updatedAt: metadata.createdAt,
+      }),
+      events: [...message.events, chatEvent],
+    };
+  }
+
+  if (event.type === "image-generation-progress") {
+    const current = findGeneratedImage(message, event.id);
+    return {
+      ...message,
+      generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
+        id: event.id,
+        prompt: current?.prompt ?? "生成图片",
+        status: "running",
+        imageBase64: current?.imageBase64 ?? null,
+        mimeType: current?.mimeType ?? "image/png",
+        partialIndex: current?.partialIndex ?? 0,
+        progressStage: event.stage,
+        progressMessage: event.message,
         updatedAt: metadata.createdAt,
       }),
       events: [...message.events, chatEvent],
@@ -26,17 +47,18 @@ export function appendAgentEvent(message, event, metadata) {
   }
 
   if (event.type === "image-generation-partial") {
+    const current = findGeneratedImage(message, event.id);
     return {
       ...message,
       generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
         id: event.id,
-        prompt:
-          message.generatedImages?.find((image) => image.id === event.id)
-            ?.prompt ?? "生成图片",
+        prompt: current?.prompt ?? "生成图片",
         status: "running",
         imageBase64: event.imageBase64,
         mimeType: event.mimeType,
         partialIndex: event.index,
+        progressStage: "generating",
+        progressMessage: `正在生成预览 ${event.index}`,
         updatedAt: metadata.createdAt,
       }),
       events: [...message.events, chatEvent],
@@ -44,19 +66,18 @@ export function appendAgentEvent(message, event, metadata) {
   }
 
   if (event.type === "image-generation-complete") {
+    const current = findGeneratedImage(message, event.id);
     return {
       ...message,
       generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
         id: event.id,
-        prompt:
-          message.generatedImages?.find((image) => image.id === event.id)
-            ?.prompt ?? "生成图片",
+        prompt: current?.prompt ?? "生成图片",
         status: "complete",
         imageBase64: event.imageBase64,
         mimeType: event.mimeType,
-        partialIndex:
-          message.generatedImages?.find((image) => image.id === event.id)
-            ?.partialIndex ?? 0,
+        partialIndex: current?.partialIndex ?? 0,
+        progressStage: "finalizing",
+        progressMessage: "图像已生成",
         updatedAt: metadata.createdAt,
       }),
       events: [...message.events, chatEvent],
@@ -121,6 +142,10 @@ function upsertGeneratedImage(images, next) {
   return currentImages.map((image) => {
     return image.id === next.id ? { ...image, ...next } : image;
   });
+}
+
+function findGeneratedImage(message, id) {
+  return message.generatedImages?.find((image) => image.id === id);
 }
 
 export function finalizeStreamingAssistantMessage(message, metadata) {

@@ -88,6 +88,24 @@ describe("ChatImageGenerationService", () => {
         prompt: "生成一张图片"
       },
       {
+        type: "image-generation-progress",
+        id: expect.stringMatching(/^image-/),
+        stage: "queued",
+        message: "已提交图像生成请求"
+      },
+      {
+        type: "image-generation-progress",
+        id: expect.stringMatching(/^image-/),
+        stage: "generating",
+        message: "模型正在生成图像"
+      },
+      {
+        type: "image-generation-progress",
+        id: expect.stringMatching(/^image-/),
+        stage: "finalizing",
+        message: "正在整理图像结果"
+      },
+      {
         type: "image-generation-complete",
         id: expect.stringMatching(/^image-/),
         imageBase64: "ZmluYWw=",
@@ -127,6 +145,18 @@ describe("ChatImageGenerationService", () => {
         type: "image-generation-start",
         id: expect.stringMatching(/^image-/),
         prompt: "生成一张图片"
+      },
+      {
+        type: "image-generation-progress",
+        id: expect.stringMatching(/^image-/),
+        stage: "queued",
+        message: "已提交图像生成请求"
+      },
+      {
+        type: "image-generation-progress",
+        id: expect.stringMatching(/^image-/),
+        stage: "generating",
+        message: "模型正在生成图像"
       },
       {
         type: "error",

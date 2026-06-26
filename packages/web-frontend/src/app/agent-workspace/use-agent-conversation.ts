@@ -113,6 +113,35 @@ function replaceConversation(
   };
 }
 
+function findLatestCompletedGeneratedImageId(messages: ChatMessage[]) {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const images = messages[messageIndex].generatedImages ?? [];
+    for (let imageIndex = images.length - 1; imageIndex >= 0; imageIndex -= 1) {
+      const image = images[imageIndex];
+      if (image.status === "complete" && image.imageBase64) {
+        return image.id;
+      }
+    }
+  }
+
+  return null;
+}
+
+function toAgentRequestMessages(messages: ChatMessage[]) {
+  const latestGeneratedImageId = findLatestCompletedGeneratedImageId(messages);
+
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    attachments: message.attachments ?? [],
+    generatedImages: message.generatedImages?.map((image) => ({
+      ...image,
+      imageBase64:
+        image.id === latestGeneratedImageId ? image.imageBase64 : null,
+    })),
+  }));
+}
+
 export function useAgentConversation(user: AuthUser | null) {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => {
     return SSR_WORKSPACE_STATE;
@@ -435,17 +464,10 @@ export function useAgentConversation(user: AuthUser | null) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversationId: remoteConversationId,
-            messages: [...activeConversation.messages, userMessage].map(
-              (message) => ({
-                role: message.role,
-                content: message.content,
-                attachments: message.attachments ?? [],
-                generatedImages: message.generatedImages?.map((image) => ({
-                  ...image,
-                  imageBase64: null,
-                })),
-              }),
-            ),
+            messages: toAgentRequestMessages([
+              ...activeConversation.messages,
+              userMessage,
+            ]),
           }),
           signal: controller.signal,
         });

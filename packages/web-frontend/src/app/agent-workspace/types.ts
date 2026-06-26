@@ -4,6 +4,12 @@ export type AgentStreamEvent =
   | { type: "tool-result"; id: string; toolName: string; outputPreview: string }
   | { type: "image-generation-start"; id: string; prompt: string }
   | {
+      type: "image-generation-progress";
+      id: string;
+      stage: "queued" | "generating" | "finalizing";
+      message: string;
+    }
+  | {
       type: "image-generation-partial";
       id: string;
       imageBase64: string;
@@ -55,6 +61,8 @@ export type ChatGeneratedImage = {
   imageBase64: string | null;
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   partialIndex: number;
+  progressStage?: "queued" | "generating" | "finalizing";
+  progressMessage?: string;
   updatedAt: string;
 };
 

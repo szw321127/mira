@@ -20,9 +20,27 @@ function generatedImageSource(image: ChatGeneratedImage) {
   return `data:${image.mimeType};base64,${image.imageBase64}`;
 }
 
+function imageProgressLabel(image: ChatGeneratedImage) {
+  if (image.status === "complete") return "完成";
+  if (image.partialIndex > 0) return `预览 ${image.partialIndex}`;
+  if (image.progressStage === "queued") return "已提交";
+  if (image.progressStage === "finalizing") return "整理中";
+  return "生成中";
+}
+
+function imageProgressWidth(progressStage: ChatGeneratedImage["progressStage"]) {
+  if (progressStage === "finalizing") return "w-[82%]";
+  if (progressStage === "generating") return "w-[56%]";
+  return "w-[28%]";
+}
+
 function GeneratedImageCard({ image }: { image: ChatGeneratedImage }) {
   const src = generatedImageSource(image);
   const isComplete = image.status === "complete";
+  const progressStage = image.progressStage ?? "queued";
+  const progressMessage =
+    image.progressMessage ??
+    (image.partialIndex > 0 ? `正在生成预览 ${image.partialIndex}` : "模型正在生成图像");
 
   return (
     <figure className="mt-2 overflow-hidden rounded-[10px] border border-[var(--border)] bg-[var(--surface-raised)]">
@@ -37,7 +55,7 @@ function GeneratedImageCard({ image }: { image: ChatGeneratedImage }) {
               isComplete ? "bg-[var(--success)]" : "bg-[var(--accent)]",
             )}
           />
-          {isComplete ? "完成" : `预览 ${image.partialIndex || 1}`}
+          {imageProgressLabel(image)}
         </span>
       </div>
       <div className="bg-[var(--surface-muted)] p-2">
@@ -51,8 +69,20 @@ function GeneratedImageCard({ image }: { image: ChatGeneratedImage }) {
             src={src}
           />
         ) : (
-          <div className="flex aspect-[4/3] items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[13px] text-[var(--muted-strong)]">
-            正在生成图片
+          <div className="flex aspect-[4/3] flex-col items-center justify-center gap-3 rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 text-center text-[13px] text-[var(--muted-strong)]">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--accent)]" />
+            <div className="space-y-1">
+              <p className="font-[650] text-[var(--text)]">正在生成图片</p>
+              <p>{progressMessage}</p>
+            </div>
+            <div className="h-1 w-full max-w-[180px] overflow-hidden rounded-full bg-[var(--border)]">
+              <div
+                className={cn(
+                  "h-full rounded-full bg-[var(--accent)] transition-all duration-500",
+                  imageProgressWidth(progressStage),
+                )}
+              />
+            </div>
           </div>
         )}
       </div>
