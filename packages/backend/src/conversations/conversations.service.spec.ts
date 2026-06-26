@@ -20,6 +20,7 @@ type MessageRow = {
   role: "user" | "assistant";
   content: string;
   attachments: unknown;
+  generatedImages: unknown;
   status: "complete" | "streaming" | "stopped" | "error" | null;
   events: unknown;
   createdAt: Date;
@@ -185,6 +186,7 @@ describe("ConversationsService", () => {
               role: "user",
               content: "hi",
               attachments: [],
+              generatedImages: [],
               status: "complete",
               events: [{ type: "sent" }],
               createdAt: "2026-06-22T09:01:00.000Z"
@@ -194,6 +196,7 @@ describe("ConversationsService", () => {
               role: "assistant",
               content: "there",
               attachments: [],
+              generatedImages: [],
               events: [],
               createdAt: "2026-06-22T09:02:00.000Z"
             }
@@ -245,6 +248,17 @@ describe("ConversationsService", () => {
         role: "assistant",
         content: "new answer",
         attachments: [],
+        generatedImages: [
+          {
+            id: "image-call-1",
+            prompt: "生成橙色猫图片",
+            status: "complete",
+            imageBase64: "ZmluYWw=",
+            mimeType: "image/png",
+            partialIndex: 2,
+            updatedAt: "2026-06-22T10:02:20.000Z"
+          }
+        ],
         status: "stopped",
         events: [{ type: "stop", reason: "manual" }],
         createdAt: "2026-06-22T10:02:00.000Z"
@@ -370,6 +384,7 @@ function message(
     role,
     content,
     attachments: [],
+    generatedImages: [],
     status: "complete",
     events: [],
     createdAt: new Date(createdAt),

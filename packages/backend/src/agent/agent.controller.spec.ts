@@ -1,5 +1,5 @@
 import { Test } from "@nestjs/testing";
-import { UnauthorizedException } from "@nestjs/common";
+import { ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import request from "supertest";
 import type { Server } from "node:http";
@@ -97,6 +97,27 @@ describe("AgentController", () => {
       .expect(503);
 
     expect(response.body).toEqual({ message: "需要配置模型后才能运行 agent。" });
+  });
+
+  it("returns setup guidance when image generation is not configured", async () => {
+    streamChat.mockImplementationOnce(async function* () {
+      await Promise.resolve();
+      throw new ServiceUnavailableException("图像生成服务未配置，请联系管理员");
+      yield { type: "error", message: "unreachable" };
+    });
+
+    const response = await request(server)
+      .post("/agent/chat")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({
+        conversationId: "c1",
+        messages: [{ role: "user", content: "生成一张图片" }]
+      })
+      .expect(503);
+
+    expect(response.body).toEqual({
+      message: "图像生成服务未配置，请联系管理员"
+    });
   });
 
   it("streams newline-delimited agent events", async () => {

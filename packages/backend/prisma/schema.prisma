@@ -100,6 +100,7 @@ model Message {
   role           MessageRole
   content        String
   attachments    Json          @default("[]")
+  generatedImages Json         @default("[]")
   status         MessageStatus?
   events         Json          @default("[]")
   createdAt      DateTime      @default(now())

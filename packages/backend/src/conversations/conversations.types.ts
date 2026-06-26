@@ -6,6 +6,7 @@ export type PersistedChatMessage = {
   role: ChatMessageRole;
   content: string;
   attachments?: PersistedChatImageAttachment[];
+  generatedImages?: PersistedChatGeneratedImage[];
   status?: ChatMessageStatus;
   events?: unknown[];
   createdAt?: string;
@@ -18,6 +19,16 @@ export type PersistedChatImageAttachment = {
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   dataUrl: string;
   sizeBytes: number;
+};
+
+export type PersistedChatGeneratedImage = {
+  id: string;
+  prompt: string;
+  status: "running" | "complete" | "error";
+  imageBase64: string | null;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  partialIndex: number;
+  updatedAt: string;
 };
 
 export function parseTitle(body: unknown): string | null {
@@ -61,6 +72,13 @@ export function parseMessages(body: unknown): PersistedChatMessage[] | null {
     }
 
     if (
+      raw.generatedImages !== undefined &&
+      !isGeneratedImages(raw.generatedImages)
+    ) {
+      return null;
+    }
+
+    if (
       raw.createdAt !== undefined &&
       (typeof raw.createdAt !== "string" || !isValidDateString(raw.createdAt))
     ) {
@@ -72,6 +90,9 @@ export function parseMessages(body: unknown): PersistedChatMessage[] | null {
       role: raw.role,
       content: raw.content,
       attachments: isMessageAttachments(raw.attachments) ? raw.attachments : [],
+      generatedImages: isGeneratedImages(raw.generatedImages)
+        ? raw.generatedImages
+        : [],
       ...(isMessageStatus(raw.status) ? { status: raw.status } : {}),
       events: Array.isArray(raw.events) ? raw.events : [],
       ...(typeof raw.createdAt === "string" ? { createdAt: raw.createdAt } : {})
@@ -116,6 +137,37 @@ function isMessageAttachment(value: unknown): value is PersistedChatImageAttachm
     Number.isFinite(record.sizeBytes) &&
     record.sizeBytes >= 0
   );
+}
+
+function isGeneratedImages(
+  value: unknown
+): value is PersistedChatGeneratedImage[] {
+  if (value === undefined) return false;
+  if (!Array.isArray(value)) return false;
+  return value.every(isGeneratedImage);
+}
+
+function isGeneratedImage(value: unknown): value is PersistedChatGeneratedImage {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.prompt === "string" &&
+    isGeneratedImageStatus(record.status) &&
+    (typeof record.imageBase64 === "string" || record.imageBase64 === null) &&
+    isSupportedImageMimeType(record.mimeType) &&
+    typeof record.partialIndex === "number" &&
+    Number.isFinite(record.partialIndex) &&
+    record.partialIndex >= 0 &&
+    typeof record.updatedAt === "string" &&
+    isValidDateString(record.updatedAt)
+  );
+}
+
+function isGeneratedImageStatus(
+  value: unknown
+): value is PersistedChatGeneratedImage["status"] {
+  return value === "running" || value === "complete" || value === "error";
 }
 
 function isSupportedImageMimeType(

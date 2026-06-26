@@ -5,7 +5,7 @@ import { EmptyState } from "./empty-state";
 import { formatTime } from "./format";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { shouldRenderMarkdown } from "./message-rendering";
-import type { ChatMessage, Conversation } from "./types";
+import type { ChatGeneratedImage, ChatMessage, Conversation } from "./types";
 
 function getLatestErrorDetail(message: ChatMessage) {
   const errorEvent = [...message.events].reverse().find((event) => {
@@ -15,12 +15,61 @@ function getLatestErrorDetail(message: ChatMessage) {
   return errorEvent?.message.trim() ?? "";
 }
 
+function generatedImageSource(image: ChatGeneratedImage) {
+  if (!image.imageBase64) return "";
+  return `data:${image.mimeType};base64,${image.imageBase64}`;
+}
+
+function GeneratedImageCard({ image }: { image: ChatGeneratedImage }) {
+  const src = generatedImageSource(image);
+  const isComplete = image.status === "complete";
+
+  return (
+    <figure className="mt-2 overflow-hidden rounded-[10px] border border-[var(--border)] bg-[var(--surface-raised)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2">
+        <figcaption className="min-w-0 truncate text-[13px] font-[650]">
+          {isComplete ? "图片已生成" : "正在生成图片"}
+        </figcaption>
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-[var(--muted-strong)]">
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              isComplete ? "bg-[var(--success)]" : "bg-[var(--accent)]",
+            )}
+          />
+          {isComplete ? "完成" : `预览 ${image.partialIndex || 1}`}
+        </span>
+      </div>
+      <div className="bg-[var(--surface-muted)] p-2">
+        {src ? (
+          <img
+            alt={image.prompt || "Mira 生成的图片"}
+            className={cn(
+              "max-h-[420px] w-full rounded-[8px] object-contain transition-opacity duration-200",
+              isComplete ? "opacity-100" : "opacity-90",
+            )}
+            src={src}
+          />
+        ) : (
+          <div className="flex aspect-[4/3] items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[13px] text-[var(--muted-strong)]">
+            正在生成图片
+          </div>
+        )}
+      </div>
+      <div className="line-clamp-2 px-3 py-2 text-xs leading-5 text-[var(--muted-strong)]">
+        {image.prompt}
+      </div>
+    </figure>
+  );
+}
+
 function MessageBlock({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   const renderMarkdown = shouldRenderMarkdown(message.role);
   const latestErrorDetail = getLatestErrorDetail(message);
+  const hasGeneratedImages = (message.generatedImages?.length ?? 0) > 0;
   const fallback =
-    message.status === "streaming"
+    message.status === "streaming" && !hasGeneratedImages
       ? "正在组织回答..."
       : message.status === "error"
         ? "运行失败"
@@ -67,6 +116,13 @@ function MessageBlock({ message }: { message: ChatMessage }) {
             {message.content}
           </p>
         )
+      ) : null}
+      {hasGeneratedImages ? (
+        <div className="space-y-2">
+          {message.generatedImages?.map((image) => (
+            <GeneratedImageCard image={image} key={image.id} />
+          ))}
+        </div>
       ) : null}
       {!message.content && fallback ? (
         <p className="text-[13px] leading-6 text-[var(--muted-strong)]">

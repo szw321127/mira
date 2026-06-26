@@ -51,6 +51,22 @@ export function isAgentStreamEvent(value) {
         typeof value.toolName === "string" &&
         typeof value.outputPreview === "string"
       );
+    case "image-generation-start":
+      return typeof value.id === "string" && typeof value.prompt === "string";
+    case "image-generation-partial":
+      return (
+        typeof value.id === "string" &&
+        typeof value.imageBase64 === "string" &&
+        isImageMimeType(value.mimeType) &&
+        typeof value.index === "number" &&
+        Number.isFinite(value.index)
+      );
+    case "image-generation-complete":
+      return (
+        typeof value.id === "string" &&
+        typeof value.imageBase64 === "string" &&
+        isImageMimeType(value.mimeType)
+      );
     case "retry":
       return (
         typeof value.attempt === "number" &&
@@ -78,4 +94,12 @@ export function isAgentStreamEvent(value) {
     default:
       return false;
   }
+}
+
+function isImageMimeType(value) {
+  return (
+    value === "image/png" ||
+    value === "image/jpeg" ||
+    value === "image/webp"
+  );
 }

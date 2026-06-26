@@ -1,4 +1,12 @@
-import { Body, Controller, HttpStatus, Post, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+  ServiceUnavailableException
+} from "@nestjs/common";
 import type { Request, Response } from "express";
 import { readUserSessionToken } from "../auth/auth-session.js";
 import { UserSessionService } from "../auth/user-session.service.js";
@@ -56,6 +64,12 @@ export class AgentController {
 
       const message = error instanceof Error ? error.message : String(error);
 
+      if (error instanceof ServiceUnavailableException && !response.headersSent) {
+        return response
+          .status(HttpStatus.SERVICE_UNAVAILABLE)
+          .json({ message: readHttpExceptionMessage(error) });
+      }
+
       if (!response.headersSent) {
         return response.status(HttpStatus.BAD_REQUEST).json({ message });
       }
@@ -64,4 +78,18 @@ export class AgentController {
       response.end();
     }
   }
+}
+
+function readHttpExceptionMessage(error: ServiceUnavailableException) {
+  const body = error.getResponse();
+  if (typeof body === "string") return body;
+  if (!body || typeof body !== "object") return error.message;
+
+  const message = (body as { message?: unknown }).message;
+  if (typeof message === "string") return message;
+  if (Array.isArray(message)) {
+    return message.filter((item) => typeof item === "string").join("\n");
+  }
+
+  return error.message;
 }

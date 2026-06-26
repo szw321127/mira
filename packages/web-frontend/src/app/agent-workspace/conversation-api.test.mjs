@@ -99,6 +99,18 @@ test("agent workspace supports image attachments from upload drop and paste", ()
   assert.match(hookSource, /attachments: message\.attachments \?\? \[\]/);
 });
 
+test("agent workspace persists generated images from progressive image events", () => {
+  const typesSource = readWorkspaceFile("types.ts");
+  const messageEventsSource = readWorkspaceFile("message-events.ts");
+
+  assert.match(typesSource, /export type ChatGeneratedImage/);
+  assert.match(typesSource, /generatedImages\?: ChatGeneratedImage\[\]/);
+  assert.match(messageEventsSource, /image-generation-partial/);
+  assert.match(messageEventsSource, /image-generation-complete/);
+  assert.match(messageEventsSource, /generatedImages/);
+  assert.match(messageEventsSource, /createPersistedChatEvent/);
+});
+
 test("workspace hook serializes remote message saves to avoid stale stream snapshots", () => {
   const hookSource = readWorkspaceFile("use-agent-conversation.ts");
 

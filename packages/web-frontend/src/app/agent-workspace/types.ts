@@ -2,6 +2,20 @@ export type AgentStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call"; id: string; toolName: string; inputPreview: string }
   | { type: "tool-result"; id: string; toolName: string; outputPreview: string }
+  | { type: "image-generation-start"; id: string; prompt: string }
+  | {
+      type: "image-generation-partial";
+      id: string;
+      imageBase64: string;
+      mimeType: "image/png" | "image/jpeg" | "image/webp";
+      index: number;
+    }
+  | {
+      type: "image-generation-complete";
+      id: string;
+      imageBase64: string;
+      mimeType: "image/png" | "image/jpeg" | "image/webp";
+    }
   | {
       type: "retry";
       attempt: number;
@@ -34,11 +48,22 @@ export type ChatImageAttachment = {
   sizeBytes: number;
 };
 
+export type ChatGeneratedImage = {
+  id: string;
+  prompt: string;
+  status: "running" | "complete" | "error";
+  imageBase64: string | null;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  partialIndex: number;
+  updatedAt: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   attachments?: ChatImageAttachment[];
+  generatedImages?: ChatGeneratedImage[];
   createdAt: string;
   status?: "streaming" | "complete" | "error" | "stopped";
   events: ChatEvent[];

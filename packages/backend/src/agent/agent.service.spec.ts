@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import { AgentService } from "./agent.service.js";
 import type {
+  RuntimeImageConfig,
   RuntimeModelConfig,
   RuntimeSearchConfig
 } from "../admin/runtime-secrets.service.js";
@@ -162,12 +163,99 @@ describe("AgentService", () => {
       process.env = originalEnv;
     }
   });
+
+  it("streams progressive chat image generation events when the user asks for an image", async () => {
+    const createImageStream = jest.fn(async function* () {
+      await Promise.resolve();
+      yield {
+        type: "image-generation-start",
+        id: "image-call-1",
+        prompt: "一只橙色猫在写小红书文案"
+      };
+      yield {
+        type: "image-generation-partial",
+        id: "image-call-1",
+        imageBase64: "cGFydGlhbA==",
+        mimeType: "image/png",
+        index: 1
+      };
+      yield {
+        type: "image-generation-complete",
+        id: "image-call-1",
+        imageBase64: "ZmluYWw=",
+        mimeType: "image/png"
+      };
+    });
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => "registry"),
+        createHarness: jest.fn(),
+        createImageStream
+      },
+      createRuntimeSecrets({
+        image: {
+          provider: "openai",
+          openaiApiKey: "image-secret",
+          openaiBaseURL: "https://image.example/v1",
+          openaiModel: "gpt-image-1",
+          storageProvider: "local",
+          storageBucket: "",
+          storageRegion: "",
+          storageEndpoint: "",
+          storageAccessKey: "",
+          storageSecretKey: "",
+          maxDailyTasksPerUser: "50",
+          maxImageSizeMb: "20",
+          defaultQuality: "auto"
+        }
+      })
+    );
+
+    const events = [];
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [{ role: "user", content: "生成一张橙色猫写文案的图片" }]
+    })) {
+      events.push(event);
+    }
+
+    expect(createImageStream).toHaveBeenCalledWith({
+      prompt: "生成一张橙色猫写文案的图片",
+      config: expect.objectContaining({
+        openaiApiKey: "image-secret",
+        openaiModel: "gpt-image-1"
+      })
+    });
+    expect(events).toEqual([
+      {
+        type: "image-generation-start",
+        id: "image-call-1",
+        prompt: "一只橙色猫在写小红书文案"
+      },
+      {
+        type: "image-generation-partial",
+        id: "image-call-1",
+        imageBase64: "cGFydGlhbA==",
+        mimeType: "image/png",
+        index: 1
+      },
+      {
+        type: "image-generation-complete",
+        id: "image-call-1",
+        imageBase64: "ZmluYWw=",
+        mimeType: "image/png"
+      },
+      { type: "stop", reason: "done" }
+    ]);
+  });
 });
 
 function createRuntimeSecrets(
   data: {
     model?: RuntimeModelConfig;
     search?: RuntimeSearchConfig;
+    image?: RuntimeImageConfig;
   } = {}
 ) {
   return {
@@ -182,6 +270,25 @@ function createRuntimeSecrets(
     ),
     getSearchConfig: jest.fn(() =>
       Promise.resolve(data.search ?? { tavilyApiKey: "" })
+    ),
+    getImageConfig: jest.fn(() =>
+      Promise.resolve(
+        data.image ?? {
+          provider: "disabled",
+          openaiApiKey: "",
+          openaiBaseURL: "",
+          openaiModel: "gpt-image-1",
+          storageProvider: "local",
+          storageBucket: "",
+          storageRegion: "",
+          storageEndpoint: "",
+          storageAccessKey: "",
+          storageSecretKey: "",
+          maxDailyTasksPerUser: "50",
+          maxImageSizeMb: "20",
+          defaultQuality: "auto"
+        }
+      )
     )
   };
 }

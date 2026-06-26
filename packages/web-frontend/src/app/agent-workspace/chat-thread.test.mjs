@@ -31,6 +31,13 @@ test("chat thread renders user image attachments as thumbnails", () => {
   assert.match(chatThreadSource, /alt=\{attachment\.name/);
 });
 
+test("chat thread renders progressive generated image cards", () => {
+  assert.match(chatThreadSource, /GeneratedImageCard/);
+  assert.match(chatThreadSource, /message\.generatedImages\?\.length/);
+  assert.match(chatThreadSource, /image\.imageBase64/);
+  assert.match(chatThreadSource, /正在生成图片/);
+});
+
 test("context dock remains responsible for agent event rows", () => {
   assert.match(contextDockSource, /\bAgentEventRow\b/);
   assert.match(contextDockSource, /event\.type !== "text-delta"/);

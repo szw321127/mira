@@ -26,6 +26,10 @@ function eventLabel(event: ChatEvent) {
       return `已停止：${event.reason}`;
     case "error":
       return "运行失败";
+    case "image-generation-start":
+    case "image-generation-partial":
+    case "image-generation-complete":
+      return "";
     case "text-delta":
       return "";
   }
@@ -44,6 +48,7 @@ function EventIcon({ event }: { event: ChatEvent }) {
 
 export function AgentEventRow({ event }: { event: ChatEvent }) {
   if (event.type === "text-delta") return null;
+  if (event.type.startsWith("image-generation-")) return null;
 
   const detail =
     event.type === "tool-call"
@@ -60,7 +65,7 @@ export function AgentEventRow({ event }: { event: ChatEvent }) {
                 ? `${event.totalTokens}/${event.tokenBudget}`
                 : event.type === "error"
                   ? event.message
-                  : event.message ?? "";
+                  : "";
 
   return (
     <div

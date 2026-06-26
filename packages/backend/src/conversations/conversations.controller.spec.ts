@@ -133,6 +133,7 @@ describe("ConversationsController", () => {
         role: "user",
         content: "hello",
         attachments: [],
+        generatedImages: [],
         status: "complete",
         events: [{ type: "submitted" }],
         createdAt: "2026-06-22T10:01:00.000Z"
@@ -174,6 +175,75 @@ describe("ConversationsController", () => {
             role: "user",
             content: "hello",
             createdAt: "not-a-date"
+          }
+        ]
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({ message: "Invalid messages." });
+    expect(replaceMessages).not.toHaveBeenCalled();
+  });
+
+  it("validates generated images on persisted messages", async () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: "",
+        generatedImages: [
+          {
+            id: "image-call-1",
+            prompt: "生成图片",
+            status: "complete",
+            imageBase64: "ZmluYWw=",
+            mimeType: "image/png",
+            partialIndex: 1,
+            updatedAt: "2026-06-22T10:01:00.000Z"
+          }
+        ]
+      }
+    ];
+
+    await request(server)
+      .post("/conversations/conversation-1/messages")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({ messages })
+      .expect(201);
+
+    expect(replaceMessages).toHaveBeenCalledWith(
+      "user-1",
+      "conversation-1",
+      [
+        {
+          role: "assistant",
+          content: "",
+          attachments: [],
+          generatedImages: [
+            {
+              id: "image-call-1",
+              prompt: "生成图片",
+              status: "complete",
+              imageBase64: "ZmluYWw=",
+              mimeType: "image/png",
+              partialIndex: 1,
+              updatedAt: "2026-06-22T10:01:00.000Z"
+            }
+          ],
+          events: []
+        }
+      ]
+    );
+  });
+
+  it("rejects generated images with invalid shapes", async () => {
+    const response = await request(server)
+      .post("/conversations/conversation-1/messages")
+      .set("Cookie", "mira_user_session=session-token")
+      .send({
+        messages: [
+          {
+            role: "assistant",
+            content: "",
+            generatedImages: [{ id: "bad", imageBase64: 1 }]
           }
         ]
       })

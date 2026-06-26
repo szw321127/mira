@@ -7,15 +7,66 @@ export function appendAgentEvent(
   event: AgentStreamEvent,
   metadata: ChatEventMetadata,
 ): ChatMessage {
-  const chatEvent: ChatEvent = {
-    ...event,
-    ...metadata,
-  };
+  const chatEvent = createPersistedChatEvent(event, metadata);
 
   if (event.type === "text-delta") {
     return {
       ...message,
       content: `${message.content}${event.text}`,
+      events: [...message.events, chatEvent],
+    };
+  }
+
+  if (event.type === "image-generation-start") {
+    return {
+      ...message,
+      generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
+        id: event.id,
+        prompt: event.prompt,
+        status: "running",
+        imageBase64: null,
+        mimeType: "image/png",
+        partialIndex: 0,
+        updatedAt: metadata.createdAt,
+      }),
+      events: [...message.events, chatEvent],
+    };
+  }
+
+  if (event.type === "image-generation-partial") {
+    return {
+      ...message,
+      generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
+        id: event.id,
+        prompt:
+          message.generatedImages?.find((image) => image.id === event.id)
+            ?.prompt ?? "生成图片",
+        status: "running",
+        imageBase64: event.imageBase64,
+        mimeType: event.mimeType,
+        partialIndex: event.index,
+        updatedAt: metadata.createdAt,
+      }),
+      events: [...message.events, chatEvent],
+    };
+  }
+
+  if (event.type === "image-generation-complete") {
+    return {
+      ...message,
+      generatedImages: upsertGeneratedImage(message.generatedImages ?? [], {
+        id: event.id,
+        prompt:
+          message.generatedImages?.find((image) => image.id === event.id)
+            ?.prompt ?? "生成图片",
+        status: "complete",
+        imageBase64: event.imageBase64,
+        mimeType: event.mimeType,
+        partialIndex:
+          message.generatedImages?.find((image) => image.id === event.id)
+            ?.partialIndex ?? 0,
+        updatedAt: metadata.createdAt,
+      }),
       events: [...message.events, chatEvent],
     };
   }
@@ -40,6 +91,50 @@ export function appendAgentEvent(
     ...message,
     events: [...message.events, chatEvent],
   };
+}
+
+function createPersistedChatEvent(
+  event: AgentStreamEvent,
+  metadata: ChatEventMetadata,
+): ChatEvent {
+  if (event.type === "image-generation-partial") {
+    return {
+      type: "image-generation-partial",
+      id: event.id,
+      imageBase64: "",
+      mimeType: event.mimeType,
+      index: event.index,
+      ...metadata,
+    };
+  }
+
+  if (event.type === "image-generation-complete") {
+    return {
+      type: "image-generation-complete",
+      id: event.id,
+      imageBase64: "",
+      mimeType: event.mimeType,
+      ...metadata,
+    };
+  }
+
+  return {
+    ...event,
+    ...metadata,
+  };
+}
+
+function upsertGeneratedImage(
+  images: ChatMessage["generatedImages"],
+  next: NonNullable<ChatMessage["generatedImages"]>[number],
+) {
+  const currentImages = images ?? [];
+  const found = currentImages.some((image) => image.id === next.id);
+  if (!found) return [...currentImages, next];
+
+  return currentImages.map((image) => {
+    return image.id === next.id ? { ...image, ...next } : image;
+  });
 }
 
 export function finalizeStreamingAssistantMessage(

@@ -22,6 +22,20 @@ export type AgentStreamEvent =
   | { type: "text-delta"; text: string }
   | { type: "tool-call"; id: string; toolName: string; inputPreview: string }
   | { type: "tool-result"; id: string; toolName: string; outputPreview: string }
+  | { type: "image-generation-start"; id: string; prompt: string }
+  | {
+      type: "image-generation-partial";
+      id: string;
+      imageBase64: string;
+      mimeType: "image/png" | "image/jpeg" | "image/webp";
+      index: number;
+    }
+  | {
+      type: "image-generation-complete";
+      id: string;
+      imageBase64: string;
+      mimeType: "image/png" | "image/jpeg" | "image/webp";
+    }
   | {
       type: "retry";
       attempt: number;

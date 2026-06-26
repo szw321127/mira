@@ -28,6 +28,32 @@ test("parseAgentStreamEvent accepts known event shapes", () => {
   });
 });
 
+test("parseAgentStreamEvent accepts progressive image generation events", () => {
+  assert.deepEqual(
+    parseAgentStreamEvent(
+      '{"type":"image-generation-partial","id":"image-1","imageBase64":"abc","mimeType":"image/png","index":1}',
+    ),
+    {
+      type: "image-generation-partial",
+      id: "image-1",
+      imageBase64: "abc",
+      mimeType: "image/png",
+      index: 1,
+    },
+  );
+  assert.deepEqual(
+    parseAgentStreamEvent(
+      '{"type":"image-generation-complete","id":"image-1","imageBase64":"final","mimeType":"image/png"}',
+    ),
+    {
+      type: "image-generation-complete",
+      id: "image-1",
+      imageBase64: "final",
+      mimeType: "image/png",
+    },
+  );
+});
+
 test("parseAgentStreamEvent turns unknown shapes into diagnostic errors", () => {
   const event = parseAgentStreamEvent('{"type":"unknown","value":1}');
 
