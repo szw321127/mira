@@ -105,6 +105,18 @@ function createPrisma(conversations: ConversationRow[]) {
       })
     },
     message: {
+      findMany: jest.fn(({ where, orderBy }: Record<string, unknown>) => {
+        const typedWhere = where as { conversationId: string };
+        const rows =
+          conversations.find((row) => row.id === typedWhere.conversationId)?.messages ?? [];
+        return Promise.resolve(
+          [...rows].sort((left, right) => {
+            const typedOrderBy = orderBy as { createdAt: "asc" } | undefined;
+            if (typedOrderBy?.createdAt !== "asc") return 0;
+            return left.createdAt.getTime() - right.createdAt.getTime();
+          })
+        );
+      }),
       deleteMany: jest.fn(({ where }: { where: { conversationId: string } }) => {
         const conversation = conversations.find((row) => row.id === where.conversationId);
         if (conversation) conversation.messages = [];
@@ -261,6 +273,65 @@ describe("ConversationsService", () => {
       data: expect.objectContaining({
         updatedAt: expect.any(Date)
       })
+    });
+  });
+
+  it("keeps a newer assistant message when a stale streaming snapshot arrives later", async () => {
+    const prisma = createPrisma([
+      conversation("c-owned", "user-1", "Owned", "2026-06-22T09:00:00.000Z", [
+        message("client-user-message", "c-owned", "user", "prompt", "2026-06-22T10:01:00.000Z"),
+        message("client-assistant-message", "c-owned", "assistant", "full answer", "2026-06-22T10:02:00.000Z", {
+          status: "complete",
+          events: [
+            { type: "text-delta", text: "full" },
+            { type: "text-delta", text: " answer" },
+            { type: "stop", reason: "done" }
+          ]
+        })
+      ])
+    ]);
+    const service = new ConversationsService(prisma);
+    const staleSnapshot: PersistedChatMessage[] = [
+      {
+        id: "client-user-message",
+        role: "user",
+        content: "prompt",
+        createdAt: "2026-06-22T10:01:00.000Z"
+      },
+      {
+        id: "client-assistant-message",
+        role: "assistant",
+        content: "full",
+        status: "streaming",
+        events: [{ type: "text-delta", text: "full" }],
+        createdAt: "2026-06-22T10:02:00.000Z"
+      }
+    ];
+
+    await expect(service.replaceMessages("user-1", "c-owned", staleSnapshot)).resolves.toEqual({
+      ok: true
+    });
+
+    await expect(service.list("user-1")).resolves.toMatchObject({
+      conversations: [
+        {
+          id: "c-owned",
+          messages: [
+            staleSnapshot[0],
+            {
+              id: "client-assistant-message",
+              role: "assistant",
+              content: "full answer",
+              status: "complete",
+              events: [
+                { type: "text-delta", text: "full" },
+                { type: "text-delta", text: " answer" },
+                { type: "stop", reason: "done" }
+              ]
+            }
+          ]
+        }
+      ]
     });
   });
 });

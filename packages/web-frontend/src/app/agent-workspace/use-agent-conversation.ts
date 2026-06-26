@@ -15,6 +15,11 @@ import {
   saveRemoteMessages,
 } from "./conversation-api";
 import {
+  appendAgentEvent,
+  finalizeStreamingAssistantMessage,
+} from "./message-events";
+import { MessageSaveQueue } from "./message-save-queue";
+import {
   createEmptyConversation,
   createInitialWorkspaceState,
   hasMigratedLegacyConversations,
@@ -26,7 +31,6 @@ import { createId, parseAgentStreamEvent, parseStreamLines } from "./streaming";
 import type {
   AgentStreamEvent,
   ChatImageAttachment,
-  ChatEvent,
   ChatMessage,
   Conversation,
   SendState,
@@ -61,43 +65,6 @@ function workspaceFromConversations(conversations: Conversation[]): WorkspaceSta
   return {
     activeConversationId: fallback[0].id,
     conversations: fallback,
-  };
-}
-
-function appendEvent(message: ChatMessage, event: AgentStreamEvent): ChatMessage {
-  const chatEvent: ChatEvent = {
-    ...event,
-    eventId: createId("event"),
-    createdAt: now(),
-  };
-
-  if (event.type === "text-delta") {
-    return {
-      ...message,
-      content: `${message.content}${event.text}`,
-      events: [...message.events, chatEvent],
-    };
-  }
-
-  if (event.type === "stop") {
-    return {
-      ...message,
-      status: event.reason === "done" ? "complete" : "stopped",
-      events: [...message.events, chatEvent],
-    };
-  }
-
-  if (event.type === "error") {
-    return {
-      ...message,
-      status: "error",
-      events: [...message.events, chatEvent],
-    };
-  }
-
-  return {
-    ...message,
-    events: [...message.events, chatEvent],
   };
 }
 
@@ -166,6 +133,14 @@ export function useAgentConversation(user: AuthUser | null) {
   const reportSyncError = useCallback((error: unknown, fallback: string) => {
     setStorageWarning(error instanceof Error ? error.message : fallback);
   }, []);
+
+  const messageSaveQueue = useMemo(() => {
+    return new MessageSaveQueue(async (id, messages) => {
+      await saveRemoteMessages(id, messages).catch((error: unknown) => {
+        reportSyncError(error, "对话消息保存失败");
+      });
+    });
+  }, [reportSyncError]);
 
   const queueMessageSave = useCallback((id: string) => {
     if (!user) return;
@@ -243,11 +218,9 @@ export function useAgentConversation(user: AuthUser | null) {
       const conversation = workspace.conversations.find((item) => item.id === id);
       if (!conversation) continue;
 
-      void saveRemoteMessages(id, conversation.messages).catch((error: unknown) => {
-        reportSyncError(error, "对话消息保存失败");
-      });
+      messageSaveQueue.queue(id, conversation.messages);
     }
-  }, [reportSyncError, resolveConversationId, user, workspace]);
+  }, [messageSaveQueue, resolveConversationId, user, workspace]);
 
   const activeConversation = useMemo(() => {
     return (
@@ -504,7 +477,10 @@ export function useAgentConversation(user: AuthUser | null) {
                   updatedAt: now(),
                   messages: conversation.messages.map((message) => {
                     return message.id === assistantMessage.id
-                      ? appendEvent(message, event)
+                      ? appendAgentEvent(message, event, {
+                          eventId: createId("event"),
+                          createdAt: now(),
+                        })
                       : message;
                   }),
                 }),
@@ -525,13 +501,36 @@ export function useAgentConversation(user: AuthUser | null) {
                 updatedAt: now(),
                 messages: conversation.messages.map((message) => {
                   return message.id === assistantMessage.id
-                    ? appendEvent(message, event)
+                    ? appendAgentEvent(message, event, {
+                        eventId: createId("event"),
+                        createdAt: now(),
+                      })
                     : message;
                 }),
               }),
             );
           });
         }
+
+        queueMessageSave(requestConversationId);
+        setWorkspace((current) => {
+          return updateConversation(
+            current,
+            resolveConversationId(requestConversationId),
+            (conversation) => ({
+              ...conversation,
+              updatedAt: now(),
+              messages: conversation.messages.map((message) => {
+                return message.id === assistantMessage.id
+                  ? finalizeStreamingAssistantMessage(message, {
+                      eventId: createId("event"),
+                      createdAt: now(),
+                    })
+                  : message;
+              }),
+            }),
+          );
+        });
       } catch (error) {
         const event: AgentStreamEvent = {
           type: "error",
@@ -553,7 +552,10 @@ export function useAgentConversation(user: AuthUser | null) {
               updatedAt: now(),
               messages: conversation.messages.map((message) => {
                 return message.id === assistantMessage.id
-                  ? appendEvent(message, event)
+                  ? appendAgentEvent(message, event, {
+                      eventId: createId("event"),
+                      createdAt: now(),
+                    })
                   : message;
               }),
             }),

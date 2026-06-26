@@ -123,15 +123,28 @@ export class ConversationsService {
         throw new NotFoundException("Conversation not found.");
       }
 
+      const existingMessages = await tx.message.findMany({
+        where: {
+          conversationId: id
+        },
+        orderBy: {
+          createdAt: "asc"
+        }
+      });
+      const messagesToPersist = preserveNewerAssistantMessages(
+        messages,
+        existingMessages.map(serializeMessage)
+      );
+
       await tx.message.deleteMany({
         where: {
           conversationId: id
         }
       });
 
-      if (messages.length > 0) {
+      if (messagesToPersist.length > 0) {
         await tx.message.createMany({
-          data: messages.map((message) => {
+          data: messagesToPersist.map((message) => {
             return {
               ...(message.id ? { id: message.id } : {}),
               conversationId: id,
@@ -196,6 +209,45 @@ function serializeConversation(conversation: ConversationWithMessages) {
     updatedAt: conversation.updatedAt.toISOString(),
     messages: conversation.messages.map(serializeMessage)
   };
+}
+
+function preserveNewerAssistantMessages(
+  incomingMessages: PersistedChatMessage[],
+  existingMessages: PersistedChatMessage[]
+) {
+  const existingById = new Map(
+    existingMessages.flatMap((message) => {
+      return message.id ? [[message.id, message]] : [];
+    })
+  );
+
+  return incomingMessages.map((incoming) => {
+    const existing = incoming.id ? existingById.get(incoming.id) : undefined;
+    if (!existing || !isStaleAssistantSnapshot(incoming, existing)) {
+      return incoming;
+    }
+
+    return existing;
+  });
+}
+
+function isStaleAssistantSnapshot(
+  incoming: PersistedChatMessage,
+  existing: PersistedChatMessage
+) {
+  if (incoming.role !== "assistant" || existing.role !== "assistant") {
+    return false;
+  }
+  if (incoming.status !== "streaming") return false;
+  if (existing.status === "streaming") {
+    return existing.content.length > incoming.content.length;
+  }
+
+  return isTerminalStatus(existing.status);
+}
+
+function isTerminalStatus(status: PersistedChatMessage["status"]) {
+  return status === "complete" || status === "stopped" || status === "error";
 }
 
 function serializeMessage(message: MessageRecord): PersistedChatMessage {

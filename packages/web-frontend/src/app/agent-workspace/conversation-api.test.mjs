@@ -98,3 +98,15 @@ test("agent workspace supports image attachments from upload drop and paste", ()
   assert.match(hookSource, /attachments,\s*createdAt/);
   assert.match(hookSource, /attachments: message\.attachments \?\? \[\]/);
 });
+
+test("workspace hook serializes remote message saves to avoid stale stream snapshots", () => {
+  const hookSource = readWorkspaceFile("use-agent-conversation.ts");
+
+  assert.match(hookSource, /MessageSaveQueue/);
+  assert.match(hookSource, /new MessageSaveQueue/);
+  assert.match(hookSource, /messageSaveQueue\.queue\(id, conversation\.messages\)/);
+  assert.doesNotMatch(
+    hookSource,
+    /void saveRemoteMessages\(id, conversation\.messages\)\.catch/,
+  );
+});
