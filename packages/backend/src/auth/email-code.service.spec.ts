@@ -9,6 +9,7 @@ type CodeRow = {
   codeHash: string;
   expiresAt: Date;
   usedAt: Date | null;
+  failedAt: Date | null;
   attempts: number;
   requestIp: string | null;
   createdAt: Date;
@@ -34,6 +35,7 @@ function createPrisma() {
             if (where.requestIp && row.requestIp !== where.requestIp) {
               return false;
             }
+            if (where.failedAt === null && row.failedAt !== null) return false;
             if (where.createdAt?.gte && row.createdAt < where.createdAt.gte) {
               return false;
             }
@@ -56,6 +58,7 @@ function createPrisma() {
           ...data,
           id: `code-${nextId++}`,
           usedAt: null,
+          failedAt: null,
           attempts: 0,
           createdAt: new Date()
         };
@@ -111,9 +114,11 @@ function createPrisma() {
           attempts?: { lt: number };
           expiresAt?: { gt: Date };
           codeHash?: string;
+          failedAt?: null;
         };
         data: {
           usedAt?: Date;
+          failedAt?: Date;
           attempts?: { increment: number };
         };
       }) => {
@@ -130,7 +135,9 @@ function createPrisma() {
           if (where.attempts && row.attempts >= where.attempts.lt) continue;
           if (where.expiresAt && row.expiresAt <= where.expiresAt.gt) continue;
           if (where.codeHash && row.codeHash !== where.codeHash) continue;
+          if (where.failedAt === null && row.failedAt !== null) continue;
           if (data.usedAt) row.usedAt = data.usedAt;
+          if (data.failedAt) row.failedAt = data.failedAt;
           if (data.attempts) row.attempts += data.attempts.increment;
           count++;
         }
@@ -170,6 +177,7 @@ function createPrisma() {
 type CountWhere = {
   email?: string;
   requestIp?: string;
+  failedAt?: null;
   createdAt?: { gte?: Date; lt?: Date };
 };
 
@@ -303,6 +311,18 @@ describe("EmailCodeService", () => {
 
     expect(rows[0].usedAt).toBeNull();
     expect(rows[1].usedAt).toBeInstanceOf(Date);
+  });
+
+  it("does not count invalidated codes toward the resend limit", async () => {
+    const { prisma } = createPrisma();
+    const service = new EmailCodeService(prisma);
+
+    await service.createCode("user@example.com", "203.0.113.10");
+    await service.invalidateLatestUnused("user@example.com");
+
+    await expect(
+      service.createCode("user@example.com", "203.0.113.10")
+    ).resolves.toMatch(/^\d{6}$/);
   });
 
   it("allows exactly one atomic consume of a verification code", async () => {

@@ -28,6 +28,7 @@ type EmailVerificationCodeDelegate = {
     where: {
       email?: string;
       requestIp?: string;
+      failedAt?: null;
       createdAt?: { gte: Date };
     };
   }): Promise<number>;
@@ -50,6 +51,7 @@ type EmailVerificationCodeDelegate = {
     };
     data: {
       usedAt?: Date;
+      failedAt?: Date;
       attempts?: { increment: number };
     };
   }): Promise<{ count: number }>;
@@ -171,13 +173,15 @@ export class EmailCodeService {
 
     if (!row) return;
 
+    const now = new Date();
     await this.prisma.emailVerificationCode.updateMany({
       where: {
         id: row.id,
         usedAt: null
       },
       data: {
-        usedAt: new Date()
+        usedAt: now,
+        failedAt: now
       }
     });
   }
@@ -194,6 +198,7 @@ export class EmailCodeService {
     const recentEmailCount = await client.emailVerificationCode.count({
       where: {
         email,
+        failedAt: null,
         createdAt: {
           gte: minuteAgo
         }
@@ -204,6 +209,7 @@ export class EmailCodeService {
     const hourlyEmailCount = await client.emailVerificationCode.count({
       where: {
         email,
+        failedAt: null,
         createdAt: {
           gte: hourAgo
         }
@@ -216,6 +222,7 @@ export class EmailCodeService {
     const hourlyIpCount = await client.emailVerificationCode.count({
       where: {
         requestIp,
+        failedAt: null,
         createdAt: {
           gte: hourAgo
         }

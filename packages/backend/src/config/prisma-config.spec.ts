@@ -41,12 +41,19 @@ describe("prisma.config", () => {
       ),
       "utf8",
     );
+    const failedEmailCodeMigration = readFileSync(
+      resolve(
+        "prisma/migrations/20260626000100_add_email_code_failed_at/migration.sql",
+      ),
+      "utf8",
+    );
 
     expect(schema).toContain("enum UserStatus");
     expect(schema).toContain("enum MessageRole");
     expect(schema).toContain("enum MessageStatus");
     expect(schema).toContain("model User");
     expect(schema).toContain("model EmailVerificationCode");
+    expect(schema).toMatch(/failedAt\s+DateTime\?/);
     expect(schema).toContain("model UserSession");
     expect(schema).toContain("model Conversation");
     expect(schema).toContain("model Message");
@@ -59,5 +66,8 @@ describe("prisma.config", () => {
     expect(migration).toContain('CREATE TABLE "conversations"');
     expect(migration).toContain('CREATE TABLE "messages"');
     expect(attachmentMigration).toContain('ALTER TABLE "messages" ADD COLUMN "attachments"');
+    expect(failedEmailCodeMigration).toContain(
+      'ALTER TABLE "email_verification_codes" ADD COLUMN "failedAt"',
+    );
   });
 });

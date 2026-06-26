@@ -56,6 +56,7 @@ model EmailVerificationCode {
   codeHash  String
   expiresAt DateTime
   usedAt    DateTime?
+  failedAt  DateTime?
   attempts  Int       @default(0)
   requestIp String?
   createdAt DateTime  @default(now())
