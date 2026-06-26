@@ -61,7 +61,7 @@ export class ChatImageGenerationService {
             ? { baseURL: config.openaiBaseURL.trim() }
             : {})
         });
-        return openai.responses(resolveResponsesModel(config));
+        return openai.responses(resolveResponsesModel());
       });
   }
 
