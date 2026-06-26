@@ -92,10 +92,14 @@ export class AgentService {
         throw new Error("Image generation is not available.");
       }
 
+      let failed = false;
       for await (const event of imageStream) {
+        if (event.type === "error") failed = true;
         yield event;
       }
-      yield { type: "stop", reason: "done" };
+      if (!failed) {
+        yield { type: "stop", reason: "done" };
+      }
       return;
     }
 

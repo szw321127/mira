@@ -249,6 +249,66 @@ describe("AgentService", () => {
       { type: "stop", reason: "done" }
     ]);
   });
+
+  it("does not append a done stop event after a failed chat image generation stream", async () => {
+    const createImageStream = jest.fn(async function* () {
+      await Promise.resolve();
+      yield {
+        type: "image-generation-start",
+        id: "image-call-1",
+        prompt: "生成图片"
+      };
+      yield {
+        type: "error",
+        message: "图像模型通道暂不可用，请稍后重试或在后台切换模型"
+      };
+    });
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => "registry"),
+        createHarness: jest.fn(),
+        createImageStream
+      },
+      createRuntimeSecrets({
+        image: {
+          provider: "openai",
+          openaiApiKey: "image-secret",
+          openaiBaseURL: "https://image.example/v1",
+          openaiModel: "gpt-image-1",
+          storageProvider: "local",
+          storageBucket: "",
+          storageRegion: "",
+          storageEndpoint: "",
+          storageAccessKey: "",
+          storageSecretKey: "",
+          maxDailyTasksPerUser: "50",
+          maxImageSizeMb: "20",
+          defaultQuality: "auto"
+        }
+      })
+    );
+
+    const events = [];
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [{ role: "user", content: "生成一张图片" }]
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      {
+        type: "image-generation-start",
+        id: "image-call-1",
+        prompt: "生成图片"
+      },
+      {
+        type: "error",
+        message: "图像模型通道暂不可用，请稍后重试或在后台切换模型"
+      }
+    ]);
+  });
 });
 
 function createRuntimeSecrets(
