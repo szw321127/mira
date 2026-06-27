@@ -1,5 +1,8 @@
 import { jest } from "@jest/globals";
-import type { RuntimeImageConfig } from "../admin/runtime-secrets.service.js";
+import type {
+  RuntimeImageConfig,
+  RuntimeModelConfig
+} from "../admin/runtime-secrets.service.js";
 import { ChatImageGenerationService } from "./chat-image-generation.service.js";
 
 function imageConfig(overrides: Partial<RuntimeImageConfig> = {}): RuntimeImageConfig {
@@ -21,9 +24,24 @@ function imageConfig(overrides: Partial<RuntimeImageConfig> = {}): RuntimeImageC
   };
 }
 
-function createRuntimeSecrets(config = imageConfig()) {
+function createRuntimeSecrets(
+  config = imageConfig(),
+  model = modelConfig()
+) {
   return {
-    getImageConfig: jest.fn(() => Promise.resolve(config))
+    getImageConfig: jest.fn(() => Promise.resolve(config)),
+    getModelConfig: jest.fn(() => Promise.resolve(model))
+  };
+}
+
+function modelConfig(
+  overrides: Partial<RuntimeModelConfig> = {}
+): RuntimeModelConfig {
+  return {
+    baseURL: "https://model.example/v1",
+    apiKey: "model-secret",
+    modelName: "configured-text-model",
+    ...overrides
   };
 }
 
@@ -37,13 +55,76 @@ describe("ChatImageGenerationService", () => {
     expect(service.shouldHandle("生成一张边牧写真摄影图")).toBe(true);
   });
 
+  it("uses the configured text model for the Responses image tool and the configured image model for image generation", async () => {
+    const createModel = jest.fn(() => "responses-model" as never);
+    const streamText = jest.fn(() => ({
+      fullStream: (async function* () {
+        await Promise.resolve();
+        yield {
+          type: "tool-call",
+          toolName: "image_generation",
+          toolCallId: "image-call-1"
+        };
+        yield {
+          type: "tool-result",
+          toolName: "image_generation",
+          toolCallId: "image-call-1",
+          output: { result: "ZmluYWw=" }
+        };
+      })()
+    }));
+    const service = new ChatImageGenerationService(
+      createRuntimeSecrets() as never,
+      {
+        createModel,
+        streamText: streamText as never
+      }
+    );
+
+    const events = [];
+    for await (const event of service.streamWithConfig({
+      prompt: "生成一张图片",
+      config: {
+        image: imageConfig({ openaiModel: "configured-image-model" }),
+        model: modelConfig({ modelName: "configured-text-model" })
+      }
+    })) {
+      events.push(event);
+    }
+
+    expect(createModel).toHaveBeenCalledWith({
+      image: expect.objectContaining({ openaiModel: "configured-image-model" }),
+      model: expect.objectContaining({ modelName: "configured-text-model" })
+    });
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "responses-model",
+        tools: {
+          image_generation: expect.objectContaining({
+            args: expect.objectContaining({
+              model: "configured-image-model"
+            })
+          })
+        }
+      })
+    );
+    expect(events).toContainEqual({
+      type: "image-generation-complete",
+      id: "image-call-1",
+      imageBase64: "ZmluYWw=",
+      mimeType: "image/png"
+    });
+  });
+
   it("falls back to direct image generation when the Responses image tool stream errors", async () => {
     const streamText = jest.fn(() => ({
       fullStream: (async function* () {
         await Promise.resolve();
         yield {
           type: "error",
-          error: new Error("分组 sora 下模型 gpt-5 无可用渠道（distributor）")
+          error: new Error(
+            "分组 sora 下模型 configured-text-model 无可用渠道（distributor）"
+          )
         };
       })()
     }));

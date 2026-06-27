@@ -14,7 +14,8 @@ import {
 } from "ai";
 import {
   RuntimeSecretsService,
-  type RuntimeImageConfig
+  type RuntimeImageConfig,
+  type RuntimeModelConfig
 } from "../admin/runtime-secrets.service.js";
 import type { AgentStreamEvent } from "./agent.types.js";
 
@@ -23,13 +24,18 @@ type GenerateImage = typeof generateImage;
 
 export type ChatImageGenerationInput = {
   prompt: string;
-  config: RuntimeImageConfig;
+  config: ChatImageGenerationConfig;
+};
+
+export type ChatImageGenerationConfig = {
+  image: RuntimeImageConfig;
+  model: RuntimeModelConfig;
 };
 
 export type ChatImageGenerationDependencies = {
   generateImage?: GenerateImage;
   streamText?: StreamText;
-  createModel?: (config: RuntimeImageConfig) => LanguageModel;
+  createModel?: (config: ChatImageGenerationConfig) => LanguageModel;
 };
 
 export const CHAT_IMAGE_GENERATION_DEPS = Symbol("CHAT_IMAGE_GENERATION_DEPS");
@@ -42,7 +48,7 @@ export class ChatImageGenerationService {
   private readonly generateImageFn: GenerateImage;
   private readonly logger = new Logger(ChatImageGenerationService.name);
   private readonly streamTextFn: StreamText;
-  private readonly createModel: (config: RuntimeImageConfig) => LanguageModel;
+  private readonly createModel: (config: ChatImageGenerationConfig) => LanguageModel;
 
   constructor(
     private readonly runtimeSecrets: RuntimeSecretsService,
@@ -56,12 +62,12 @@ export class ChatImageGenerationService {
       dependencies.createModel ??
       ((config) => {
         const openai = createOpenAI({
-          apiKey: config.openaiApiKey,
-          ...(config.openaiBaseURL.trim()
-            ? { baseURL: config.openaiBaseURL.trim() }
+          apiKey: config.model.apiKey,
+          ...(config.model.baseURL.trim()
+            ? { baseURL: config.model.baseURL.trim() }
             : {})
         });
-        return openai.responses(resolveResponsesModel());
+        return openai.responses(config.model.modelName.trim());
       });
   }
 
@@ -71,7 +77,8 @@ export class ChatImageGenerationService {
 
   async *streamFromPrompt(prompt: string): AsyncGenerator<AgentStreamEvent> {
     const config = await this.requireImageConfig();
-    yield* this.streamWithConfig({ prompt, config });
+    const model = await this.runtimeSecrets.getModelConfig();
+    yield* this.streamWithConfig({ prompt, config: { image: config, model } });
   }
 
   async *streamWithConfig({
@@ -94,13 +101,14 @@ export class ChatImageGenerationService {
     config
   }: ChatImageGenerationInput): AsyncGenerator<AgentStreamEvent> {
     const model = this.createModel(config);
+    const imageConfig = config.image;
     const openai = createOpenAI({
-      apiKey: config.openaiApiKey,
-      ...(config.openaiBaseURL.trim()
-        ? { baseURL: config.openaiBaseURL.trim() }
+      apiKey: imageConfig.openaiApiKey,
+      ...(imageConfig.openaiBaseURL.trim()
+        ? { baseURL: imageConfig.openaiBaseURL.trim() }
         : {})
     });
-    const imageModel = config.openaiModel.trim() || "gpt-image-1";
+    const imageModel = imageConfig.openaiModel.trim() || "gpt-image-1";
     const result = this.streamTextFn({
       model,
       prompt,
@@ -109,7 +117,7 @@ export class ChatImageGenerationService {
           model: imageModel,
           partialImages: 3,
           outputFormat: "png",
-          quality: normalizeImageQuality(config.defaultQuality)
+          quality: normalizeImageQuality(imageConfig.defaultQuality)
         })
       },
       toolChoice: {
@@ -171,6 +179,7 @@ export class ChatImageGenerationService {
     prompt,
     config
   }: ChatImageGenerationInput): AsyncGenerator<AgentStreamEvent> {
+    const imageConfig = config.image;
     const id = `image-${Date.now().toString(36)}`;
     yield {
       type: "image-generation-start",
@@ -192,19 +201,19 @@ export class ChatImageGenerationService {
 
     try {
       const openai = createOpenAI({
-        apiKey: config.openaiApiKey,
-        ...(config.openaiBaseURL.trim()
-          ? { baseURL: config.openaiBaseURL.trim() }
+        apiKey: imageConfig.openaiApiKey,
+        ...(imageConfig.openaiBaseURL.trim()
+          ? { baseURL: imageConfig.openaiBaseURL.trim() }
           : {})
       });
       const result = await this.generateImageFn({
-        model: openai.image(config.openaiModel.trim() || "gpt-image-1"),
+        model: openai.image(imageConfig.openaiModel.trim() || "gpt-image-1"),
         prompt,
         n: 1,
         providerOptions: {
           openai: {
             outputFormat: "png",
-            quality: normalizeImageQuality(config.defaultQuality)
+            quality: normalizeImageQuality(imageConfig.defaultQuality)
           }
         }
       });
@@ -257,10 +266,6 @@ function readImageGenerationResult(output: unknown) {
       : undefined;
   const result = typeof direct === "string" ? direct : nested;
   return typeof result === "string" && result.trim() ? result : null;
-}
-
-function resolveResponsesModel() {
-  return "gpt-5";
 }
 
 function normalizeImageQuality(value: string) {

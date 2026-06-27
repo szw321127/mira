@@ -394,10 +394,15 @@ describe("AgentService", () => {
 
     expect(createImageStream).toHaveBeenCalledWith({
       prompt: "一只橙色猫在写小红书文案",
-      config: expect.objectContaining({
-        openaiApiKey: "image-secret",
-        openaiModel: "gpt-image-1"
-      })
+      config: {
+        image: expect.objectContaining({
+          openaiApiKey: "image-secret",
+          openaiModel: "gpt-image-1"
+        }),
+        model: expect.objectContaining({
+          modelName: ""
+        })
+      }
     });
     expect(events).toEqual(
       expect.arrayContaining([
@@ -434,6 +439,84 @@ describe("AgentService", () => {
       outputPreview: "generated image"
     });
     expect(events).not.toContainEqual({ type: "stop", reason: "done" });
+  });
+
+  it("passes configured text and image model settings to chat image generation", async () => {
+    const registry = new ToolRegistry();
+    const createImageStream = jest.fn(async function* () {
+      await Promise.resolve();
+      yield {
+        type: "image-generation-start",
+        id: "image-call-1",
+        prompt: "生成图片"
+      };
+      yield {
+        type: "image-generation-complete",
+        id: "image-call-1",
+        imageBase64: "ZmluYWw=",
+        mimeType: "image/png"
+      };
+    });
+    const runEvents = jest.fn(async function* () {
+      await Promise.resolve();
+      const tool = registry.get("generate_image");
+      if (!tool) throw new Error("generate_image tool was not registered");
+      await tool.execute({ prompt: "生成图片" });
+      yield { type: "stop" as const, reason: "done" as const };
+    });
+    const service = new AgentService(
+      {
+        createModel: jest.fn(() => "model"),
+        createRegistry: jest.fn(() => registry),
+        createHarness: jest.fn(() => ({ runEvents })),
+        createImageStream
+      },
+      createRuntimeSecrets({
+        model: {
+          baseURL: "https://configured-text.example/v1",
+          apiKey: "configured-text-secret",
+          modelName: "configured-text-model"
+        },
+        image: {
+          provider: "openai",
+          openaiApiKey: "configured-image-secret",
+          openaiBaseURL: "https://configured-image.example/v1",
+          openaiModel: "configured-image-model",
+          storageProvider: "local",
+          storageBucket: "",
+          storageRegion: "",
+          storageEndpoint: "",
+          storageAccessKey: "",
+          storageSecretKey: "",
+          maxDailyTasksPerUser: "50",
+          maxImageSizeMb: "20",
+          defaultQuality: "auto"
+        }
+      })
+    );
+
+    for await (const event of service.streamChat({
+      conversationId: "conversation-1",
+      messages: [{ role: "user", content: "生成一张图片" }]
+    })) {
+      expect(event).toBeDefined();
+    }
+
+    expect(createImageStream).toHaveBeenCalledWith({
+      prompt: "生成图片",
+      config: {
+        model: {
+          baseURL: "https://configured-text.example/v1",
+          apiKey: "configured-text-secret",
+          modelName: "configured-text-model"
+        },
+        image: expect.objectContaining({
+          openaiApiKey: "configured-image-secret",
+          openaiBaseURL: "https://configured-image.example/v1",
+          openaiModel: "configured-image-model"
+        })
+      }
+    });
   });
 
   it("does not append a done stop event after a failed chat image generation stream", async () => {

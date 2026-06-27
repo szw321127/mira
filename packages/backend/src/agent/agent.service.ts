@@ -8,6 +8,7 @@ import {
   type RuntimeSearchConfig
 } from "../admin/runtime-secrets.service.js";
 import { ChatImageGenerationService } from "./chat-image-generation.service.js";
+import type { ChatImageGenerationConfig } from "./chat-image-generation.service.js";
 import type {
   AgentChatImageAttachment,
   AgentChatMessage,
@@ -30,7 +31,7 @@ type AgentServiceDependencies = {
   createRegistry?: RegistryFactory;
   createHarness?: AgentHarnessFactory;
   createImageStream?: (
-    input: { prompt: string; config: RuntimeImageConfig }
+    input: { prompt: string; config: ChatImageGenerationConfig }
   ) => AsyncGenerator<AgentStreamEvent, void, void>;
 };
 
@@ -278,12 +279,19 @@ export class AgentService {
         if (!prompt) {
           throw new Error("Image prompt is required.");
         }
-        const imageConfig = await this.getImageConfig();
+        const [imageConfig, modelConfig] = await Promise.all([
+          this.getImageConfig(),
+          this.getModelConfig()
+        ]);
+        const imageGenerationConfig = {
+          image: imageConfig,
+          model: modelConfig
+        };
         const imageStream =
-          this.createImageStream?.({ prompt, config: imageConfig }) ??
+          this.createImageStream?.({ prompt, config: imageGenerationConfig }) ??
           this.chatImageGeneration?.streamWithConfig({
             prompt,
-            config: imageConfig
+            config: imageGenerationConfig
           });
 
         if (!imageStream) {
