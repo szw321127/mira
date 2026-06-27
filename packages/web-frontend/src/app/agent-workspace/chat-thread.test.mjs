@@ -40,6 +40,13 @@ test("chat thread renders progressive generated image cards", () => {
   assert.match(chatThreadSource, /progressStage/);
 });
 
+test("generated image prompt text wraps below the image instead of being clipped", () => {
+  assert.doesNotMatch(chatThreadSource, /line-clamp-2/);
+  assert.match(chatThreadSource, /break-words/);
+  assert.match(chatThreadSource, /whitespace-pre-wrap/);
+  assert.match(chatThreadSource, /border-t border-\[var\(--border\)\]/);
+});
+
 test("context dock remains responsible for agent event rows", () => {
   assert.match(contextDockSource, /\bAgentEventRow\b/);
   assert.match(contextDockSource, /event\.type !== "text-delta"/);

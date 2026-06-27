@@ -86,8 +86,8 @@ function GeneratedImageCard({ image }: { image: ChatGeneratedImage }) {
           </div>
         )}
       </div>
-      <div className="line-clamp-2 px-3 py-2 text-xs leading-5 text-[var(--muted-strong)]">
-        {image.prompt}
+      <div className="border-t border-[var(--border)] px-3 py-2 text-xs leading-5 text-[var(--muted-strong)]">
+        <p className="whitespace-pre-wrap break-words">{image.prompt}</p>
       </div>
     </figure>
   );
